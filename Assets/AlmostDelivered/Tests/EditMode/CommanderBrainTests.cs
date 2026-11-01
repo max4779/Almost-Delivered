@@ -127,6 +127,59 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(brain.Telegraph.IsVisible, Is.False);
         }
 
+        [Test] public void RequiredRoleDeath_InvalidActiveTacticCannotBlockLowerScoringReplacement()
+        {
+            first.RequiredRoles = new[] { new RoleRequirement(MonsterRole.Shield, 1) };
+            firstScore.Value = .95f; secondScore.Value = .3f;
+            squad.TryCompleteAlert(1); brain.Tick(0); brain.Tick(1);
+            executors[0].GetComponent<ActorHealth>().ApplyDamage(100);
+            brain.Tick(9);
+            Assert.That(brain.EvaluationHistory.Last(result => result.TacticId == first.TacticId).IsValid, Is.False);
+            Assert.That(brain.PendingEvaluation, Is.Not.Null);
+            Assert.That(brain.PendingEvaluation.TacticId, Is.EqualTo(second.TacticId));
+            Assert.That(brain.ActiveEvaluation.IsValid, Is.False);
+            brain.Tick(10);
+            Assert.That(brain.ActiveEvaluation.TacticId, Is.EqualTo(second.TacticId));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void MemberJoiningDuringTelegraph_FallbackCanExecuteAndSurvivesNextCycle(bool advanceToNextCycle)
+        {
+            squad.TryCompleteAlert(1);
+            squad.Report(new ObservationSample(50, Vector3.zero, Vector3.zero, 0, 1, ObservedCombatTag.None, 1));
+            brain.Tick(0); AddMember(3, MonsterRole.Shield);
+            // Match normal runtime Awake while leaving allocator/knowledge attachment to the brain.
+            typeof(MonsterOrderExecutor).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(executors[2], null);
+            brain.Tick(1);
+            Assert.That(executors[2].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.AttackObservedTarget));
+            if (advanceToNextCycle) brain.Tick(3);
+            typeof(MonsterOrderExecutor).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(executors[2], null);
+            Assert.That(executors[2].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.AttackObservedTarget));
+            Assert.That(executors[2].CurrentOrder.TargetActorId, Is.EqualTo(50));
+            Assert.That(brain.PendingEvaluation, Is.Null);
+        }
+
+        [Test] public void MemberJoiningRetainedActiveTactic_ReceivesExecutableFallbackWithoutResettingOtherOrders()
+        {
+            squad.TryCompleteAlert(1);
+            squad.Report(new ObservationSample(50, Vector3.zero, Vector3.zero, 0, 1, ObservedCombatTag.None, 1));
+            brain.Tick(0); brain.Tick(1);
+            AddMember(3, MonsterRole.Shield);
+            typeof(MonsterOrderExecutor).GetMethod("Awake", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(executors[2], null);
+            var originalAnchor = executors[0].CurrentOrder.Anchor;
+            brain.Tick(3);
+            Assert.That(brain.PendingEvaluation, Is.Null);
+            Assert.That(brain.ActiveEvaluation.TacticId, Is.EqualTo(first.TacticId));
+            Assert.That(executors[2].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.AttackObservedTarget));
+            typeof(MonsterOrderExecutor).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(executors[2], null);
+            Assert.That(executors[2].CurrentOrder.TargetActorId, Is.EqualTo(50));
+            Assert.That(executors[0].CurrentOrder.Anchor, Is.EqualTo(originalAnchor));
+            Assert.That(allocator.ReservationCount, Is.EqualTo(2));
+            brain.Tick(6);
+            Assert.That(executors[2].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.AttackObservedTarget));
+        }
+
         [Test] public void Context_ContainsOnlySquadSnapshotAndNeverLiveActorReferences()
         {
             squad.TryCompleteAlert(1);

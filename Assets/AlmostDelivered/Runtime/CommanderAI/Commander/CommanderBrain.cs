@@ -96,16 +96,24 @@ namespace AlmostDelivered.CommanderAI.Commander
                     (result.TotalScore == best.TotalScore && string.CompareOrdinal(result.TacticId, best.TacticId) < 0))
                 { best = result; winner = tactic; }
             }
+            // Keep invalidation visible rather than retaining a stale winning score.
+            if (ActiveEvaluation != null) ActiveEvaluation = current;
             if (PendingEvaluation != null) return;
-            if (ActiveEvaluation != null && current != null && current.IsValid) ActiveEvaluation = current;
             if (best == null)
             {
                 ActiveEvaluation = null; allocator.ReleaseAll();
                 foreach (var member in squad.LivingMembers) AssignFallback(member, in context);
                 return;
             }
-            if (!TacticSwitchPolicy.ShouldSwitch(ActiveEvaluation, best, context.TacticAge, winner.MinimumActivationScore,
-                profile.MinimumHoldTime, profile.SwitchMargin)) return;
+            var currentForSwitch = ActiveEvaluation != null && ActiveEvaluation.IsValid ? ActiveEvaluation : null;
+            if (!TacticSwitchPolicy.ShouldSwitch(currentForSwitch, best, context.TacticAge, winner.MinimumActivationScore,
+                profile.MinimumHoldTime, profile.SwitchMargin))
+            {
+                // A newly available member must get an executable order even when the tactic is retained.
+                foreach (var member in squad.LivingMembers)
+                    if (member.Executor.CurrentOrder.Type == MonsterOrderType.None) AssignFallback(member, in context);
+                return;
+            }
             PendingEvaluation = best; pendingTactic = winner; pendingContext = context;
             Telegraph.Begin(best.TacticId, now, profile.TelegraphDuration);
         }
@@ -149,6 +157,8 @@ namespace AlmostDelivered.CommanderAI.Commander
 
         private void Activate(float now)
         {
+            // Members may register between command cycles while the telegraph is visible.
+            ConfigureMembers();
             allocationFailures.Clear();
             allocator.ReleaseAll();
             foreach (var member in squad.LivingMembers) member.Executor.Cancel();
