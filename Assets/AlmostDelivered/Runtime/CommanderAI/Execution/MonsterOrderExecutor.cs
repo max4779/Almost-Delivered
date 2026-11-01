@@ -13,6 +13,7 @@ namespace AlmostDelivered.CommanderAI.Execution
         [SerializeField, Min(.01f)] private float attackRange = 1.5f;
         [SerializeField, Min(.01f)] private float attackCooldown = .5f;
         [SerializeField, Min(0)] private float attackDamage = 10;
+        [SerializeField, Min(.1f)] private float confusionSightRange = 12f;
         private NavMeshAgent agent;
         private ActorHealth health;
         private TacticalSlotAllocator allocator;
@@ -21,13 +22,20 @@ namespace AlmostDelivered.CommanderAI.Execution
         private bool reassignmentRequested;
         private float nextAttackTime;
         private NavMeshPath path;
+        private bool confused;
+        private Vector3 confusionPosition;
 
         public MonsterOrder CurrentOrder { get; private set; }
+        public ConfusionTendency Tendency { get; private set; }
         public event Action<int> ReassignmentRequested;
         public event Action<int> LocalAttack;
 
         private void Awake() { agent = GetComponent<NavMeshAgent>(); health = GetComponent<ActorHealth>(); path = new NavMeshPath(); }
-        private void OnEnable() => health.Died += Cancel;
+        private void OnEnable()
+        {
+            health.Died += Cancel;
+            if (confused && !health.IsDead) CurrentOrder = new MonsterOrder(MonsterOrderType.ConfusedCombat, position: confusionPosition);
+        }
         private void OnDisable() { Cancel(); health.Died -= Cancel; }
 
         public void Configure(int id, TacticalSlotAllocator slots, SquadKnowledge squadKnowledge)
@@ -35,11 +43,14 @@ namespace AlmostDelivered.CommanderAI.Execution
             if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
             if (slots == null) throw new ArgumentNullException(nameof(slots));
             if (squadKnowledge == null) throw new ArgumentNullException(nameof(squadKnowledge));
+            if (health == null) Awake();
             Cancel(); memberId = id; allocator = slots; knowledge = squadKnowledge;
+            if (confused && !health.IsDead) CurrentOrder = new MonsterOrder(MonsterOrderType.ConfusedCombat, position: confusionPosition);
         }
 
         public void Assign(in MonsterOrder order)
         {
+            if (confused) return;
             Stop();
             if (health.IsDead || !isActiveAndEnabled) { Cancel(); return; }
             // Preserve a pending retry across a synchronous reassignment callback.
@@ -54,12 +65,32 @@ namespace AlmostDelivered.CommanderAI.Execution
             Stop(); allocator?.Release(memberId); CurrentOrder = default; reassignmentRequested = false;
         }
 
+        public void EnterConfused(ConfusionTendency tendency)
+        {
+            if (confused) return;
+            if (health == null) Awake();
+            Cancel(); confused = true; Tendency = tendency;
+            confusionPosition = transform.position;
+            if (tendency == ConfusionTendency.SearchLastKnownPosition && knowledge != null)
+            {
+                var distance = float.PositiveInfinity;
+                foreach (var memory in knowledge.Snapshot)
+                {
+                    var candidate = (memory.LastKnownPosition - transform.position).sqrMagnitude;
+                    if (memory.Confidence <= 0 || candidate >= distance) continue;
+                    distance = candidate; confusionPosition = memory.LastKnownPosition;
+                }
+            }
+            if (!health.IsDead) CurrentOrder = new MonsterOrder(MonsterOrderType.ConfusedCombat, position: confusionPosition);
+        }
+
         private void Update()
         {
             if (health.IsDead) { Cancel(); return; }
             switch (CurrentOrder.Type)
             {
                 case MonsterOrderType.None: return;
+                case MonsterOrderType.ConfusedCombat: ExecuteConfused(); return;
                 case MonsterOrderType.MoveToSlot:
                     if (!ValidAnchor()) { RequestOrFallback(); return; }
                     ExecuteMove(CurrentOrder.Anchor.transform.position, true);
@@ -90,6 +121,48 @@ namespace AlmostDelivered.CommanderAI.Execution
             }
         }
 
+        private void ExecuteConfused()
+        {
+            var target = NearestVisibleTarget();
+            if (Tendency == ConfusionTendency.RetreatWhenWounded && health.CurrentHealth / health.MaxHealth <= .35f && target != null)
+            {
+                var away = transform.position - target.transform.position; away.y = 0;
+                if (Move(transform.position + away.normalized * 4) < 0) Stop();
+                return;
+            }
+            if (target != null && TryLocalAttack(target.ActorId)) { Stop(); return; }
+            var destination = Tendency == ConfusionTendency.NearestVisibleTarget && target != null
+                ? target.transform.position : confusionPosition;
+            // Autonomous failures hold locally; they never ask the dead command structure for new orders.
+            if (Move(destination) < 0) Stop();
+        }
+
+        private ObservableActor NearestVisibleTarget()
+        {
+            ObservableActor nearest = null;
+            var best = float.PositiveInfinity;
+            foreach (var hit in Physics.OverlapSphere(transform.position, confusionSightRange))
+            {
+                var actor = hit.GetComponentInParent<ObservableActor>();
+                if (actor == null || !actor.isActiveAndEnabled || actor.gameObject == gameObject) continue;
+                var targetHealth = actor.GetComponent<ActorHealth>();
+                if (targetHealth == null || targetHealth.IsDead) continue;
+                var delta = actor.transform.position - transform.position;
+                var distance = delta.sqrMagnitude;
+                if (distance > best || (distance == best && nearest != null && actor.ActorId >= nearest.ActorId)) continue;
+                var visible = true;
+                foreach (var obstruction in Physics.RaycastAll(transform.position + Vector3.up * .4f, delta.normalized,
+                    delta.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                {
+                    if (obstruction.collider.transform.IsChildOf(transform) ||
+                        obstruction.collider.GetComponentInParent<ObservableActor>() == actor) continue;
+                    visible = false; break;
+                }
+                if (visible) { nearest = actor; best = distance; }
+            }
+            return nearest;
+        }
+
         private bool ValidAnchor() => CurrentOrder.Anchor != null && CurrentOrder.Anchor.isActiveAndEnabled;
 
         private void ExecuteMove(Vector3 destination, bool holdOnArrival)
@@ -98,7 +171,15 @@ namespace AlmostDelivered.CommanderAI.Execution
             if (result < 0) { RequestOrFallback(); return; }
             reassignmentRequested = false;
             if (result == 1 && holdOnArrival)
-                CurrentOrder = new MonsterOrder(MonsterOrderType.HoldSlot, CurrentOrder.Anchor, destination);
+            {
+                if (CurrentOrder.TargetActorId > 0)
+                {
+                    var targetId = CurrentOrder.TargetActorId;
+                    allocator?.Release(memberId);
+                    CurrentOrder = new MonsterOrder(MonsterOrderType.AttackObservedTarget, targetActorId: targetId);
+                }
+                else CurrentOrder = new MonsterOrder(MonsterOrderType.HoldSlot, CurrentOrder.Anchor, destination);
+            }
         }
 
         // -1 = unreachable, 0 = moving, 1 = arrived.

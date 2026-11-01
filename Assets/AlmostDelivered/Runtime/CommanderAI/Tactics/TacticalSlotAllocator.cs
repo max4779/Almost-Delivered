@@ -34,10 +34,20 @@ namespace AlmostDelivered.CommanderAI.Tactics
         public void ReleaseAll() => reservations.Clear();
 
         public bool TryAllocate(int memberId, MonsterRole role, in TacticalSlotRequest request, out TacticalAnchor anchor)
+            => TryAllocate(memberId, role, in request, out anchor, out _);
+
+        public bool CanUseAnchor(int memberId, MonsterRole role, TacticalAnchor anchor) =>
+            members.TryGetValue(memberId, out var member) && member.IsLiving && member.Role == role &&
+            anchor != null && anchor.isActiveAndEnabled && anchor.Allows(role) &&
+            reachability.CanReach(member.Health.transform.position, anchor.transform.position);
+
+        public bool TryAllocate(int memberId, MonsterRole role, in TacticalSlotRequest request, out TacticalAnchor anchor,
+            out string failureReason)
         {
-            anchor = null;
+            anchor = null; failureReason = null;
             CleanUp();
-            if (!members.TryGetValue(memberId, out var member) || !member.IsLiving || member.Role != role) return false;
+            if (!members.TryGetValue(memberId, out var member) || !member.IsLiving || member.Role != role)
+            { failureReason = "Member unavailable or role mismatch."; return false; }
             if (reservations.TryGetValue(memberId, out var previous))
             {
                 if (Eligible(previous, role, in request) && reachability.CanReach(member.Health.transform.position, previous.transform.position))
@@ -46,15 +56,26 @@ namespace AlmostDelivered.CommanderAI.Tactics
             }
 
             var bestScore = float.PositiveInfinity;
+            var hasTag = false; var hasRole = false; var hasCapacity = false;
             foreach (var candidate in anchors)
             {
-                if (!Eligible(candidate, role, in request) || Occupancy(candidate) >= candidate.Capacity ||
-                    !reachability.CanReach(member.Health.transform.position, candidate.transform.position)) continue;
+                if (candidate == null || !candidate.isActiveAndEnabled || candidate.Tag != request.Tag) continue;
+                hasTag = true;
+                if (!candidate.Allows(role)) continue;
+                hasRole = true;
+                if (Occupancy(candidate) >= candidate.Capacity) continue;
+                hasCapacity = true;
+                if (!reachability.CanReach(member.Health.transform.position, candidate.transform.position)) continue;
                 var score = (candidate.transform.position - request.Position).sqrMagnitude;
                 if (score < bestScore || (score == bestScore && (anchor == null || candidate.GetInstanceID() < anchor.GetInstanceID())))
                 { anchor = candidate; bestScore = score; }
             }
-            if (anchor == null) return false;
+            if (anchor == null)
+            {
+                failureReason = !hasTag ? "Anchor missing or disabled." : !hasRole ? "Role-incompatible anchors." :
+                    !hasCapacity ? "Anchor capacity full." : "All eligible anchors unreachable.";
+                return false;
+            }
             reservations.Add(memberId, anchor);
             return true;
         }
