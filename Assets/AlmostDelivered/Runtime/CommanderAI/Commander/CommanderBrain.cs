@@ -4,11 +4,14 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.CommanderAI.Domain;
 using AlmostDelivered.CommanderAI.Tactics;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Commander
 {
     public sealed class CommanderBrain : MonoBehaviour
     {
+        private static readonly ProfilerMarker TickMarker = new ProfilerMarker("CommanderAI.CommandTick");
+        [SerializeField, Min(.01f)] private float memorySecondsToZero = 10f;
         private SquadController squad;
         private ActorHealth commander;
         private CommanderDifficultyProfile profile;
@@ -74,6 +77,7 @@ namespace AlmostDelivered.CommanderAI.Commander
 
         public void Tick(float now)
         {
+            using var tickSample = TickMarker.Auto();
             if (!TacticalContext.Finite(now) || now < 0 || now < lastTick) throw new ArgumentOutOfRangeException(nameof(now));
             lastTick = now;
             if (squad == null) return;
@@ -86,6 +90,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             }
             if (now < nextCycle) return;
             nextCycle = now + Mathf.Max(.01f, profile.CommandCycleSeconds);
+            squad.Knowledge.Decay(now, memorySecondsToZero);
             ConfigureMembers();
             var context = BuildContext(now);
             UtilityTactic winner = null;

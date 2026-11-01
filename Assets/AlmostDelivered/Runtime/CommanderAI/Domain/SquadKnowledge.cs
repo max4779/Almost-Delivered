@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Domain
 {
     public sealed class SquadKnowledge
     {
+        private static readonly ProfilerMarker MergeMarker = new ProfilerMarker("CommanderAI.KnowledgeMerge");
+        private static readonly ProfilerMarker DecayMarker = new ProfilerMarker("CommanderAI.KnowledgeDecay");
         private readonly Dictionary<int, ObservedTargetMemory> memories =
             new Dictionary<int, ObservedTargetMemory>();
 
@@ -22,6 +25,7 @@ namespace AlmostDelivered.CommanderAI.Domain
 
         public bool Merge(in ObservationSample sample)
         {
+            using var mergeSample = MergeMarker.Auto();
             Validate(in sample);
             if (!memories.TryGetValue(sample.ActorId, out var current))
             {
@@ -42,6 +46,7 @@ namespace AlmostDelivered.CommanderAI.Domain
 
         public void Decay(float now, float secondsToZero)
         {
+            using var decaySample = DecayMarker.Auto();
             if (!IsFinite(now) || now < 0f)
                 throw new ArgumentOutOfRangeException(nameof(now));
             if (!IsFinite(secondsToZero) || secondsToZero <= 0f)

@@ -4,12 +4,15 @@ using AlmostDelivered.CommanderAI.Domain;
 using AlmostDelivered.CommanderAI.Tactics;
 using UnityEngine;
 using UnityEngine.AI;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Execution
 {
     [RequireComponent(typeof(NavMeshAgent), typeof(ActorHealth))]
     public sealed class MonsterOrderExecutor : MonoBehaviour
     {
+        private static readonly ProfilerMarker AssignmentMarker = new ProfilerMarker("CommanderAI.OrderReassignment");
+        private static readonly ProfilerMarker PathMarker = new ProfilerMarker("CommanderAI.MovementPathRequest");
         [SerializeField, Min(.01f)] private float attackRange = 1.5f;
         [SerializeField, Min(.01f)] private float attackCooldown = .5f;
         [SerializeField, Min(0)] private float attackDamage = 10;
@@ -50,6 +53,7 @@ namespace AlmostDelivered.CommanderAI.Execution
 
         public void Assign(in MonsterOrder order)
         {
+            using var assignmentSample = AssignmentMarker.Auto();
             if (confused) return;
             Stop();
             if (health.IsDead || !isActiveAndEnabled) { Cancel(); return; }
@@ -188,6 +192,7 @@ namespace AlmostDelivered.CommanderAI.Execution
             if (Vector3.Distance(transform.position, destination) <= Mathf.Max(.2f, agent.stoppingDistance + .05f))
             { Stop(); return 1; }
             if (!agent.enabled || !agent.isOnNavMesh) return -1;
+            using var pathSample = PathMarker.Auto();
             if (!agent.CalculatePath(destination, path) || path.status != NavMeshPathStatus.PathComplete) return -1;
             agent.isStopped = false;
             return agent.SetDestination(destination) ? 0 : -1;

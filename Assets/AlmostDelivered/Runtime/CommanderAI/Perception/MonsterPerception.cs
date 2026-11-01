@@ -4,12 +4,14 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.CommanderAI.Commander;
 using AlmostDelivered.CommanderAI.Domain;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Perception
 {
     [RequireComponent(typeof(ActorHealth), typeof(StunState))]
     public sealed class MonsterPerception : MonoBehaviour
     {
+        private static readonly ProfilerMarker BatchMarker = new ProfilerMarker("CommanderAI.PerceptionBatch");
         [SerializeField, Min(0f)] private float sightRadius = 12f;
         [SerializeField, Range(0f, 360f)] private float fieldOfViewAngle = 120f;
         [SerializeField] private LayerMask obstructionMask = ~0;
@@ -55,6 +57,7 @@ namespace AlmostDelivered.CommanderAI.Perception
         {
             if (!CanReport() || squad.State == SquadAlertState.Confused)
                 return;
+            using var batchSample = BatchMarker.Auto();
             sensedActors.Clear();
             foreach (var collider in Physics.OverlapSphere(transform.position, sightRadius,
                          targetMask, QueryTriggerInteraction.Collide))

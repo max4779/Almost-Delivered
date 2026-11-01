@@ -194,6 +194,44 @@ namespace AlmostDelivered.Tests.EditMode
                 Assert.That(method.GetParameters().Any(parameter => parameter.ParameterType == typeof(ObservableActor)), Is.False);
         }
 
+        [Test] public void CommandCycle_DecaysStaleConfidenceWithoutMovingLastKnownFacts()
+        {
+            squad.TryCompleteAlert(1);
+            squad.Report(new ObservationSample(50, Vector3.right * 4, Vector3.forward, 0, 1, ObservedCombatTag.Healing, 1));
+            Assert.That(squad.Knowledge.Snapshot.Single().Confidence, Is.EqualTo(1), "sharing is immediate");
+            brain.Tick(0); brain.Tick(2.99f);
+            Assert.That(squad.Knowledge.Snapshot.Single().Confidence, Is.EqualTo(1), "no per-frame decay");
+            brain.Tick(3);
+            Assert.That(firstScore.LastContext.Knowledge.Single().Confidence, Is.EqualTo(.7f).Within(.00001f));
+            brain.Tick(12);
+            var stale = squad.Knowledge.Snapshot.Single();
+            Assert.That(stale.Confidence, Is.Zero);
+            Assert.That(firstScore.LastContext.Knowledge.Single().Confidence, Is.Zero);
+            Assert.That(stale.LastKnownPosition, Is.EqualTo(Vector3.right * 4));
+            Assert.That(stale.LastKnownVelocity, Is.EqualTo(Vector3.forward));
+            Assert.That(stale.LastObservedTime, Is.Zero);
+            Assert.That(stale.Tags, Is.EqualTo(ObservedCombatTag.Healing));
+        }
+
+        [Test] public void MemoryLifetime_IsConfigurableAndFreshReportsRestoreConfidenceImmediately()
+        {
+            var setting = typeof(CommanderBrain).GetField("memorySecondsToZero", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.That(setting, Is.Not.Null, "memory lifetime is independent of difficulty and serializable");
+            Assert.That(setting.GetCustomAttribute<SerializeField>(), Is.Not.Null);
+            setting.SetValue(brain, 6f);
+            squad.TryCompleteAlert(1);
+            squad.Report(new ObservationSample(50, Vector3.right * 4, Vector3.zero, 0, 1, ObservedCombatTag.None, 1));
+            brain.Tick(0); brain.Tick(3);
+            Assert.That(firstScore.LastContext.Knowledge.Single().Confidence, Is.EqualTo(.5f).Within(.00001f));
+            squad.Report(new ObservationSample(50, Vector3.right * 6, Vector3.zero, 4, 1, ObservedCombatTag.Healing, 1));
+            Assert.That(squad.Knowledge.Snapshot.Single().Confidence, Is.EqualTo(1));
+            brain.Tick(6);
+            Assert.That(firstScore.LastContext.Knowledge.Single().Confidence, Is.EqualTo(2f / 3f).Within(.00001f));
+            brain.Tick(12);
+            Assert.That(squad.Knowledge.Snapshot.Single().Confidence, Is.Zero);
+            Assert.That(squad.Knowledge.Snapshot.Single().LastKnownPosition, Is.EqualTo(Vector3.right * 6));
+        }
+
         [Test] public void Difficulty_FiltersTacticsWithoutChangingKnowledge()
         {
             var easy = CommanderDifficultyProfile.Create(CommanderDifficulty.Easy); assets.Add(easy);

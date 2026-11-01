@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AlmostDelivered.CommanderAI.Domain;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Tactics
 {
@@ -25,6 +26,7 @@ namespace AlmostDelivered.CommanderAI.Tactics
     [CreateAssetMenu(menuName = "Almost Delivered/Commander AI/Utility Tactic")]
     public sealed class UtilityTactic : ScriptableObject
     {
+        private static readonly ProfilerMarker EvaluationMarker = new ProfilerMarker("CommanderAI.UtilityEvaluation");
         [SerializeField] private string tacticId;
         [SerializeField] private RoleRequirement[] requiredRoles = Array.Empty<RoleRequirement>();
         [SerializeField] private UtilityConsideration[] considerations = Array.Empty<UtilityConsideration>();
@@ -42,6 +44,7 @@ namespace AlmostDelivered.CommanderAI.Tactics
 
         public TacticEvaluation Evaluate(in TacticalContext context)
         {
+            using var evaluationSample = EvaluationMarker.Auto();
             var scores = new Dictionary<string, float>(StringComparer.Ordinal);
             if (string.IsNullOrWhiteSpace(tacticId)) return Reject("Missing tactic ID.", scores);
             foreach (var requirement in requiredRoles)

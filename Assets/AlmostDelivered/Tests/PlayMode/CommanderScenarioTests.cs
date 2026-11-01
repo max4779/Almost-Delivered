@@ -30,7 +30,7 @@ namespace AlmostDelivered.Tests.PlayMode
                 perception.Configure(arena.Squad, System.Array.IndexOf(arena.Members, member) + 1);
                 member.GetComponent<AlertSignal>().Cancel();
             }
-            now = Time.unscaledTime + 10;
+            now = Time.unscaledTime;
             Assert.That(arena.Squad.State, Is.EqualTo(SquadAlertState.Unaware));
         }
         [UnityTearDown] public IEnumerator Cleanup()

@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using AlmostDelivered.Combat;
 using AlmostDelivered.CommanderAI.Domain;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace AlmostDelivered.CommanderAI.Tactics
 {
     public sealed class TacticalSlotAllocator
     {
+        private static readonly ProfilerMarker AllocationMarker = new ProfilerMarker("CommanderAI.TacticalAllocation");
         private readonly IEnumerable<TacticalAnchor> anchors;
         private readonly ITacticalReachability reachability;
         private readonly Dictionary<int, Member> members = new Dictionary<int, Member>();
@@ -44,6 +46,7 @@ namespace AlmostDelivered.CommanderAI.Tactics
         public bool TryAllocate(int memberId, MonsterRole role, in TacticalSlotRequest request, out TacticalAnchor anchor,
             out string failureReason)
         {
+            using var allocationSample = AllocationMarker.Auto();
             anchor = null; failureReason = null;
             CleanUp();
             if (!members.TryGetValue(memberId, out var member) || !member.IsLiving || member.Role != role)
