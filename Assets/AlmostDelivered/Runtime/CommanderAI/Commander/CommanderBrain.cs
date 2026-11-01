@@ -28,6 +28,8 @@ namespace AlmostDelivered.CommanderAI.Commander
         public IReadOnlyList<TacticEvaluation> EvaluationHistory => history.AsReadOnly();
         public IReadOnlyList<string> AllocationFailures => allocationFailures.AsReadOnly();
         public CommandTelegraph Telegraph { get; private set; }
+        public float NextCommandTime => nextCycle;
+        public string DecisionReason { get; private set; } = "waiting for completed alert";
 
         public void Configure(SquadController squad, ActorHealth commander, CommanderDifficultyProfile profile,
             IEnumerable<UtilityTactic> tactics, IEnumerable<TacticalAnchor> anchors, TacticalSlotAllocator allocator,
@@ -45,6 +47,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             Telegraph = GetComponent<CommandTelegraph>() ?? gameObject.AddComponent<CommandTelegraph>();
             Telegraph.Cancel(); PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
             nextCycle = lastTick = float.NegativeInfinity; history.Clear(); allocationFailures.Clear();
+            DecisionReason = "waiting for completed alert";
             configuredMembers.Clear();
             ConfigureMembers();
             commander.Died += CommanderDied;
@@ -58,6 +61,7 @@ namespace AlmostDelivered.CommanderAI.Commander
         {
             PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
             Telegraph?.Cancel(); allocator?.ReleaseAll();
+            DecisionReason = "coordination ended permanently";
         }
         private void Unsubscribe()
         {
@@ -98,9 +102,10 @@ namespace AlmostDelivered.CommanderAI.Commander
             }
             // Keep invalidation visible rather than retaining a stale winning score.
             if (ActiveEvaluation != null) ActiveEvaluation = current;
-            if (PendingEvaluation != null) return;
+            if (PendingEvaluation != null) { DecisionReason = "telegraph already in progress"; return; }
             if (best == null)
             {
+                DecisionReason = "no valid tactic above activation threshold; fallback orders";
                 ActiveEvaluation = null; allocator.ReleaseAll();
                 foreach (var member in squad.LivingMembers) AssignFallback(member, in context);
                 return;
@@ -110,11 +115,14 @@ namespace AlmostDelivered.CommanderAI.Commander
                 profile.MinimumHoldTime, profile.SwitchMargin))
             {
                 // A newly available member must get an executable order even when the tactic is retained.
+                DecisionReason = currentForSwitch?.TacticId == best.TacticId ? "current tactic remains the winner" :
+                    context.TacticAge < profile.MinimumHoldTime ? "minimum hold still active" : "candidate does not exceed switch margin";
                 foreach (var member in squad.LivingMembers)
                     if (member.Executor.CurrentOrder.Type == MonsterOrderType.None) AssignFallback(member, in context);
                 return;
             }
             PendingEvaluation = best; pendingTactic = winner; pendingContext = context;
+            DecisionReason = "selected " + best.TacticId + "; awaiting telegraph completion";
             Telegraph.Begin(best.TacticId, now, profile.TelegraphDuration);
         }
 
@@ -185,6 +193,7 @@ namespace AlmostDelivered.CommanderAI.Commander
                 }
             ActiveEvaluation = PendingEvaluation; activatedAt = now;
             PendingEvaluation = null; pendingTactic = null; Telegraph.Cancel();
+            DecisionReason = "activated " + ActiveEvaluation.TacticId + "; holding until next command cycle";
         }
 
         private static void AssignFallback(SquadMember member, in TacticalContext context)

@@ -1,0 +1,2 @@
+# Unity's baked navigation data is binary; do not apply the root *.asset text rule.
+Scenes/CommanderAITest/NavMesh.asset binary
