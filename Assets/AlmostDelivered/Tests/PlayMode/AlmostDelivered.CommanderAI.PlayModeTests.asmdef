@@ -1,0 +1,9 @@
+{
+  "name": "AlmostDelivered.CommanderAI.PlayModeTests",
+  "references": [
+    "AlmostDelivered.Runtime"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

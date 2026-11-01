@@ -1,0 +1,6 @@
+* text=auto
+
+*.meta text
+*.unity text
+*.prefab text
+*.asset text

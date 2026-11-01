@@ -1,0 +1,12 @@
+{
+  "name": "AlmostDelivered.CommanderAI.EditModeTests",
+  "references": [
+    "AlmostDelivered.Runtime"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}
