@@ -18,6 +18,7 @@ namespace AlmostDelivered.CommanderAI.Perception
         private MonsterPerception perception;
         private ObservableActor target;
         private float completesAt;
+        private int dueFrame = -1;
 
         public bool IsSignaling => target != null;
 
@@ -57,9 +58,14 @@ namespace AlmostDelivered.CommanderAI.Perception
                 return;
             target = observedTarget;
             completesAt = Time.unscaledTime + duration;
+            dueFrame = -1;
         }
 
-        public void Cancel() => target = null;
+        public void Cancel()
+        {
+            target = null;
+            dueFrame = -1;
+        }
 
         private void OnStunChanged(bool isStunned)
         {
@@ -83,7 +89,16 @@ namespace AlmostDelivered.CommanderAI.Perception
             if (Time.unscaledTime < completesAt)
                 return;
 
-            // Commit after this frame's Update/coroutine cancellations and normal LateUpdates.
+            // Leave the whole due frame interruptible, including work after LateUpdate.
+            // Revalidate above on the following frame before publishing anything irreversible.
+            if (dueFrame < 0)
+            {
+                dueFrame = Time.frameCount;
+                return;
+            }
+            if (Time.frameCount <= dueFrame)
+                return;
+
             var observedTarget = target;
             Cancel();
             if (squad.TryCompleteAlert(reporterId))

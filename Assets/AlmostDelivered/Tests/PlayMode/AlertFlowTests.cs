@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using AlmostDelivered.Combat;
 using AlmostDelivered.CommanderAI.Commander;
@@ -5,6 +6,7 @@ using AlmostDelivered.CommanderAI.Domain;
 using AlmostDelivered.CommanderAI.Perception;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.LowLevel;
 using UnityEngine.TestTools;
 
 namespace AlmostDelivered.Tests.PlayMode
@@ -47,7 +49,7 @@ namespace AlmostDelivered.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
-            Object.Destroy(root);
+            UnityEngine.Object.Destroy(root);
             yield return null;
         }
 
@@ -106,6 +108,65 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(canceller.DidCancel, Is.True);
             Assert.That(squad.State, Is.EqualTo(SquadAlertState.Unaware));
             Assert.That(squad.Knowledge.Snapshot, Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator AlertSignal_CancelAfterLateUpdateOnCompletionFrame_RemainsUnaware() =>
+            InterruptAfterLateUpdate(() => signal.Cancel());
+
+        [UnityTest]
+        public IEnumerator AlertSignal_StunAfterLateUpdateOnCompletionFrame_RemainsUnaware() =>
+            InterruptAfterLateUpdate(() => stun.Apply(1f, Time.unscaledTime));
+
+        [UnityTest]
+        public IEnumerator AlertSignal_DeathAfterLateUpdateOnCompletionFrame_RemainsUnaware() =>
+            InterruptAfterLateUpdate(() => health.ApplyDamage(100f));
+
+        [UnityTest]
+        public IEnumerator AlertSignal_TargetLossAfterLateUpdateOnCompletionFrame_RemainsUnaware() =>
+            InterruptAfterLateUpdate(() => target.transform.position = Vector3.forward * 100f);
+
+        private IEnumerator InterruptAfterLateUpdate(Action interrupt)
+        {
+            var observations = 0;
+            perception.ObservationProduced += _ => observations++;
+            using (var interruption = new AfterLateUpdateAction(Time.unscaledTime + 0.15f, interrupt))
+            {
+                signal.Begin(target);
+                yield return new WaitForSecondsRealtime(0.25f);
+                Assert.That(interruption.DidInvoke, Is.True, "The due frame must reach PostLateUpdate.");
+                Assert.That(squad.State, Is.EqualTo(SquadAlertState.Unaware));
+                Assert.That(squad.Knowledge.Snapshot, Is.Empty);
+                Assert.That(observations, Is.Zero);
+                Assert.That(signal.IsSignaling, Is.False);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator AlertSignal_DueFrame_PublishesOnlyAfterFrameHasPassed()
+        {
+            var stateOnDueFrame = SquadAlertState.Confused;
+            var memoriesOnDueFrame = -1;
+            var observations = 0;
+            var observationsOnDueFrame = -1;
+            perception.ObservationProduced += _ => observations++;
+            using (var inspection = new AfterLateUpdateAction(Time.unscaledTime + 0.15f, () =>
+                   {
+                       stateOnDueFrame = squad.State;
+                       memoriesOnDueFrame = squad.Knowledge.Snapshot.Count;
+                       observationsOnDueFrame = observations;
+                   }))
+            {
+                signal.Begin(target);
+                yield return new WaitForSecondsRealtime(0.25f);
+                Assert.That(inspection.DidInvoke, Is.True);
+                Assert.That(stateOnDueFrame, Is.EqualTo(SquadAlertState.Unaware));
+                Assert.That(memoriesOnDueFrame, Is.Zero);
+                Assert.That(observationsOnDueFrame, Is.Zero);
+                Assert.That(squad.State, Is.EqualTo(SquadAlertState.Alerted));
+                Assert.That(squad.Knowledge.TryGet(target.ActorId, out _), Is.True);
+                Assert.That(observations, Is.EqualTo(1));
+            }
         }
 
         [UnityTest]
@@ -207,6 +268,47 @@ namespace AlmostDelivered.Tests.PlayMode
             yield return new WaitForSecondsRealtime(0.3f);
             Assert.That(squad.State, Is.EqualTo(SquadAlertState.Alerted));
             Assert.That(squad.Knowledge.TryGet(target.ActorId, out _), Is.True);
+        }
+
+        // A real PostLateUpdate callback runs after all behaviour LateUpdates, including
+        // execution order 32000, without relying on rendered WaitForEndOfFrame in batch mode.
+        private sealed class AfterLateUpdateAction : IDisposable
+        {
+            private readonly PlayerLoopSystem originalLoop;
+            public bool DidInvoke { get; private set; }
+
+            public AfterLateUpdateAction(float deadline, Action action)
+            {
+                originalLoop = PlayerLoop.GetCurrentPlayerLoop();
+                var loop = originalLoop;
+                loop.subSystemList = (PlayerLoopSystem[])originalLoop.subSystemList.Clone();
+                for (var i = 0; i < loop.subSystemList.Length; i++)
+                {
+                    var phase = loop.subSystemList[i];
+                    if (phase.type != typeof(UnityEngine.PlayerLoop.PostLateUpdate))
+                        continue;
+                    var systems = new PlayerLoopSystem[phase.subSystemList.Length + 1];
+                    Array.Copy(phase.subSystemList, systems, phase.subSystemList.Length);
+                    systems[systems.Length - 1] = new PlayerLoopSystem
+                    {
+                        type = typeof(AfterLateUpdateAction),
+                        updateDelegate = () =>
+                        {
+                            if (DidInvoke || Time.unscaledTime < deadline)
+                                return;
+                            DidInvoke = true;
+                            action();
+                        }
+                    };
+                    phase.subSystemList = systems;
+                    loop.subSystemList[i] = phase;
+                    PlayerLoop.SetPlayerLoop(loop);
+                    return;
+                }
+                throw new InvalidOperationException("PostLateUpdate player-loop phase was not found.");
+            }
+
+            public void Dispose() => PlayerLoop.SetPlayerLoop(originalLoop);
         }
     }
 
