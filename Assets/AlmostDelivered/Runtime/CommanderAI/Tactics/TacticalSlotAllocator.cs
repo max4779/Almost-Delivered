@@ -1,0 +1,89 @@
+using System;
+using System.Collections.Generic;
+using AlmostDelivered.Combat;
+using AlmostDelivered.CommanderAI.Domain;
+using UnityEngine;
+
+namespace AlmostDelivered.CommanderAI.Tactics
+{
+    public sealed class TacticalSlotAllocator
+    {
+        private readonly IEnumerable<TacticalAnchor> anchors;
+        private readonly ITacticalReachability reachability;
+        private readonly Dictionary<int, Member> members = new Dictionary<int, Member>();
+        private readonly Dictionary<int, TacticalAnchor> reservations = new Dictionary<int, TacticalAnchor>();
+
+        public TacticalSlotAllocator(IEnumerable<TacticalAnchor> anchors, ITacticalReachability reachability)
+        {
+            this.anchors = anchors ?? throw new ArgumentNullException(nameof(anchors));
+            this.reachability = reachability ?? throw new ArgumentNullException(nameof(reachability));
+        }
+
+        public int ReservationCount { get { CleanUp(); return reservations.Count; } }
+
+        public bool RegisterMember(int memberId, MonsterRole role, ActorHealth health)
+        {
+            if (memberId <= 0 || health == null || health.IsDead) return false;
+            if (members.TryGetValue(memberId, out var existing) && existing.Health != null && existing.Health != health) return false;
+            members[memberId] = new Member(role, health);
+            return true;
+        }
+
+        public void UnregisterMember(int memberId) { Release(memberId); members.Remove(memberId); }
+        public void Release(int memberId) => reservations.Remove(memberId);
+        public void ReleaseAll() => reservations.Clear();
+
+        public bool TryAllocate(int memberId, MonsterRole role, in TacticalSlotRequest request, out TacticalAnchor anchor)
+        {
+            anchor = null;
+            CleanUp();
+            if (!members.TryGetValue(memberId, out var member) || !member.IsLiving || member.Role != role) return false;
+            if (reservations.TryGetValue(memberId, out var previous))
+            {
+                if (Eligible(previous, role, in request) && reachability.CanReach(member.Health.transform.position, previous.transform.position))
+                { anchor = previous; return true; }
+                Release(memberId);
+            }
+
+            var bestScore = float.PositiveInfinity;
+            foreach (var candidate in anchors)
+            {
+                if (!Eligible(candidate, role, in request) || Occupancy(candidate) >= candidate.Capacity ||
+                    !reachability.CanReach(member.Health.transform.position, candidate.transform.position)) continue;
+                var score = (candidate.transform.position - request.Position).sqrMagnitude;
+                if (score < bestScore || (score == bestScore && (anchor == null || candidate.GetInstanceID() < anchor.GetInstanceID())))
+                { anchor = candidate; bestScore = score; }
+            }
+            if (anchor == null) return false;
+            reservations.Add(memberId, anchor);
+            return true;
+        }
+
+        private static bool Eligible(TacticalAnchor anchor, MonsterRole role, in TacticalSlotRequest request) =>
+            anchor != null && anchor.isActiveAndEnabled && anchor.Tag == request.Tag && anchor.Allows(role);
+
+        private int Occupancy(TacticalAnchor anchor)
+        {
+            var count = 0;
+            foreach (var occupied in reservations.Values) if (occupied == anchor) count++;
+            return count;
+        }
+
+        private void CleanUp()
+        {
+            var stale = new List<int>();
+            foreach (var entry in reservations)
+                if (entry.Value == null || !entry.Value.isActiveAndEnabled || !members.TryGetValue(entry.Key, out var member) || !member.IsLiving)
+                    stale.Add(entry.Key);
+            foreach (var id in stale) reservations.Remove(id);
+        }
+
+        private readonly struct Member
+        {
+            public readonly MonsterRole Role;
+            public readonly ActorHealth Health;
+            public bool IsLiving => Health != null && Health.isActiveAndEnabled && !Health.IsDead;
+            public Member(MonsterRole role, ActorHealth health) { Role = role; Health = health; }
+        }
+    }
+}
