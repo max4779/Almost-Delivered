@@ -15,6 +15,7 @@ namespace AlmostDelivered.Tests.EditMode
         private Transform visualRoot;
         private MeshRenderer renderer;
         private Material material;
+        private Mesh clothMesh;
         private LowPolyVisual visual;
 
         [SetUp]
@@ -33,6 +34,7 @@ namespace AlmostDelivered.Tests.EditMode
         {
             UnityEngine.Object.DestroyImmediate(actor);
             UnityEngine.Object.DestroyImmediate(material);
+            if (clothMesh != null) UnityEngine.Object.DestroyImmediate(clothMesh);
         }
 
         [Test]
@@ -61,6 +63,8 @@ namespace AlmostDelivered.Tests.EditMode
         [TestCase(typeof(Rigidbody), true)]
         [TestCase(typeof(BoxCollider2D), true)]
         [TestCase(typeof(Rigidbody2D), true)]
+        [TestCase(typeof(ArticulationBody), true)]
+        [TestCase(typeof(Cloth), true)]
         public void IsGameplayFree_RejectsColliderOrNavMeshAgentAnywhereBelowVisualRoot(Type type, bool inactive)
         {
             AssertRejected(type, inactive);
@@ -93,7 +97,29 @@ namespace AlmostDelivered.Tests.EditMode
             visual.Configure(VisualArchetype.Dummy, visualRoot, new Renderer[] { renderer }, new[] { renderer.transform });
             var nested = Child(Child(visualRoot, "Nested"), "Offender");
             nested.gameObject.SetActive(!inactive);
+            if (type == typeof(Cloth))
+            {
+                // Cloth requires a SkinnedMeshRenderer and a valid mesh, even on an inactive object.
+                clothMesh = new Mesh
+                {
+                    vertices = new[] { Vector3.zero, Vector3.right, Vector3.up },
+                    triangles = new[] { 0, 1, 2 },
+                    bindposes = new[] { Matrix4x4.identity },
+                    boneWeights = new[]
+                    {
+                        new BoneWeight { boneIndex0 = 0, weight0 = 1f },
+                        new BoneWeight { boneIndex0 = 0, weight0 = 1f },
+                        new BoneWeight { boneIndex0 = 0, weight0 = 1f }
+                    }
+                };
+                clothMesh.RecalculateNormals();
+                var skin = nested.gameObject.AddComponent<SkinnedMeshRenderer>();
+                skin.sharedMesh = clothMesh;
+                skin.bones = new[] { nested };
+                skin.rootBone = nested;
+            }
             var offender = nested.gameObject.AddComponent(type);
+            Assert.That(offender, Is.Not.Null, "The real Unity component must be present for this regression.");
             Assert.That(visual.IsGameplayFree(out var reason), Is.False);
             Assert.That(reason, Is.Not.Empty);
             Assert.That(nested.GetComponent(type), Is.SameAs(offender));

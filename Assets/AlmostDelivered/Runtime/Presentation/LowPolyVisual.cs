@@ -58,6 +58,7 @@ namespace AlmostDelivered.Presentation
                 var type = component.GetType();
                 var componentNamespace = type.Namespace ?? string.Empty;
                 if (component is Collider || component is Rigidbody || component is Joint ||
+                    component is ArticulationBody || component is Cloth ||
                     component is Collider2D || component is Rigidbody2D || component is Joint2D ||
                     component is NavMeshAgent || component is NavMeshObstacle ||
                     IsNamespace(componentNamespace, "AlmostDelivered.Combat") ||
