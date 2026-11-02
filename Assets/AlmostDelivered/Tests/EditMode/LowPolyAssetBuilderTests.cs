@@ -37,6 +37,23 @@ namespace AlmostDelivered.Tests.EditMode
         [Test] public void MissingShader_ThrowsBeforeWritingAnyAsset() {
             var paths = AssetDatabase.GetAllAssetPaths(); Assert.Throws<InvalidOperationException>(()=>LowPolyAssetFactory.CreateOrUpdateAll(name=>name == "Unlit/Color" ? null : Shader.Find(name))); CollectionAssert.AreEqual(paths, AssetDatabase.GetAllAssetPaths());
         }
+        [Test] public void GeneratedCharacterArms_PivotAtShouldersWithRelativeGeometry() {
+            LowPolyAssetFactory.CreateOrUpdateAll();
+            foreach (var type in Types.Take(7)) {
+                var body = LowPolyAssetFactory.LoadPrefab(type).transform.Find("BodyPivot");
+                foreach (var pair in new[]{("LeftArmPivot", -.48f), ("RightArmPivot", .48f)}) {
+                    var pivot = body.Find(pair.Item1);
+                    Assert.NotNull(pivot, type + " " + pair.Item1);
+                    Assert.That(pivot.localPosition.x, Is.EqualTo(pair.Item2).Within(.001f));
+                    Assert.That(pivot.localPosition.y, Is.EqualTo(1.3f).Within(.001f));
+                    Assert.Greater(pivot.childCount, 0);
+                    foreach (Transform part in pivot) {
+                        Assert.Less(Mathf.Abs(part.localPosition.y), .8f, type + " " + part.name);
+                        Assert.Less(Mathf.Abs(part.localPosition.x), .8f, type + " " + part.name);
+                    }
+                }
+            }
+        }
         static bool Has(GameObject p,string n) => p.GetComponentsInChildren<Transform>().Any(t=>t.name==n);
         static Vector3 Size(VisualArchetype t) { var rs=LowPolyAssetFactory.LoadPrefab(t).GetComponentsInChildren<Renderer>(); var b=rs[0].bounds; foreach(var r in rs.Skip(1)) b.Encapsulate(r.bounds); return b.size; }
     }

@@ -22,15 +22,22 @@ namespace AlmostDelivered.Presentation.Editor
             Directory.CreateDirectory(Materials);
             Directory.CreateDirectory(Prefabs + "/Characters");
             Directory.CreateDirectory(Prefabs + "/Objectives");
-            AssetDatabase.Refresh();
-            var palette = new[] { Mat("Player", lit, new Color(.05f,.55f,.62f)), Mat("Dummy",lit,Color.gray), Mat("Shield",lit,new Color(.22f,.48f,.23f)), Mat("Ranged",lit,new Color(.95f,.43f,.12f)), Mat("Charger",lit,new Color(.68f,.12f,.1f)), Mat("Support",lit,new Color(.56f,.78f,.18f)), Mat("Commander",lit,new Color(.38f,.2f,.52f)), Mat("Payload",lit,new Color(.8f,.56f,.13f)), Mat("Beacon",lit,new Color(.04f,.52f,.49f)) };
-            var rust = Mat("EnemyRust",lit,new Color(.45f,.23f,.14f));
-            var gold = Mat("Gold",lit,new Color(.94f,.69f,.2f));
-            var glow = Mat("Rune",unlit,new Color(.15f,.9f,.8f));
-            foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype))) { Directory.CreateDirectory(Path.GetDirectoryName(GetPrefabPath(type))); }
-            AssetDatabase.Refresh();
-            foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype))) Build(type, palette[(int)type], rust, gold, glow);
-            AssetDatabase.SaveAssets();
+            foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype)))
+                Directory.CreateDirectory(Path.GetDirectoryName(GetPrefabPath(type)));
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+            AssetDatabase.StartAssetEditing();
+            try {
+                var palette = new[] { Mat("Player", lit, new Color(.05f,.55f,.62f)), Mat("Dummy",lit,Color.gray), Mat("Shield",lit,new Color(.22f,.48f,.23f)), Mat("Ranged",lit,new Color(.95f,.43f,.12f)), Mat("Charger",lit,new Color(.68f,.12f,.1f)), Mat("Support",lit,new Color(.56f,.78f,.18f)), Mat("Commander",lit,new Color(.38f,.2f,.52f)), Mat("Payload",lit,new Color(.8f,.56f,.13f)), Mat("Beacon",lit,new Color(.04f,.52f,.49f)) };
+                var rust = Mat("EnemyRust",lit,new Color(.45f,.23f,.14f));
+                var gold = Mat("Gold",lit,new Color(.94f,.69f,.2f));
+                var glow = Mat("Rune",unlit,new Color(.15f,.9f,.8f));
+                foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype))) Build(type, palette[(int)type], rust, gold, glow);
+                AssetDatabase.SaveAssets();
+            } finally {
+                AssetDatabase.StopAssetEditing();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
         }
         static Material Mat(string name, Shader shader, Color color)
         {
@@ -58,14 +65,15 @@ namespace AlmostDelivered.Presentation.Editor
                     Part(body,"LegLeft",PrimitiveType.Cube,new Vector3(-.2f,.3f,0),new Vector3(.23f,.6f,.3f),rust);
                     Part(body,"LegRight",PrimitiveType.Cube,new Vector3(.2f,.3f,0),new Vector3(.23f,.6f,.3f),rust);
                     left=Child(body,"LeftArmPivot"); right=Child(body,"RightArmPivot");
-                    Part(left,"LeftArm",PrimitiveType.Cube,new Vector3(-.48f,1,0),new Vector3(.22f,.7f,.24f),color);
-                    Part(right,"RightArm",PrimitiveType.Cube,new Vector3(.48f,1,0),new Vector3(.22f,.7f,.24f),color);
-                    Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.62f,.85f,.32f),new Vector3(.12f,.12f,.85f),gold);
+                    left.localPosition = new Vector3(-.48f,1.3f,0); right.localPosition = new Vector3(.48f,1.3f,0);
+                    Part(left,"LeftArm",PrimitiveType.Cube,new Vector3(0,-.3f,0),new Vector3(.22f,.7f,.24f),color);
+                    Part(right,"RightArm",PrimitiveType.Cube,new Vector3(0,-.3f,0),new Vector3(.22f,.7f,.24f),color);
+                    Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
                     switch(type) {
-                        case VisualArchetype.Shield: Part(left,"Shield",PrimitiveType.Cube,new Vector3(-.9f,1,.15f),new Vector3(.7f,1,.15f),color); break;
-                        case VisualArchetype.Ranged: Part(right,"RangedWeapon",PrimitiveType.Cube,new Vector3(.65f,1,.2f),new Vector3(.12f,.8f,.12f),gold); break;
+                        case VisualArchetype.Shield: Part(left,"Shield",PrimitiveType.Cube,new Vector3(-.42f,-.3f,.15f),new Vector3(.7f,1,.15f),color); break;
+                        case VisualArchetype.Ranged: Part(right,"RangedWeapon",PrimitiveType.Cube,new Vector3(.17f,-.3f,.2f),new Vector3(.12f,.8f,.12f),gold); break;
                         case VisualArchetype.Charger: Part(body,"Horns",PrimitiveType.Cube,new Vector3(0,1.65f,.62f),new Vector3(.7f,.16f,.9f),gold); break;
-                        case VisualArchetype.Support: Part(left,"Totem",PrimitiveType.Cylinder,new Vector3(-.7f,1.1f,0),new Vector3(.12f,.75f,.12f),gold); break;
+                        case VisualArchetype.Support: Part(left,"Totem",PrimitiveType.Cylinder,new Vector3(-.22f,-.2f,0),new Vector3(.12f,.75f,.12f),gold); break;
                         case VisualArchetype.Commander:
                             Part(body,"Cape",PrimitiveType.Cube,new Vector3(0,1.1f,-.32f),new Vector3(.8f,1.1f,.08f),color);
                             Part(body,"Banner",PrimitiveType.Cube,new Vector3(.38f,2.35f,-.25f),new Vector3(.6f,.6f,.08f),gold);
