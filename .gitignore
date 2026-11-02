@@ -40,3 +40,13 @@ Desktop.ini
 *.aab
 *.unitypackage
 *.app
+
+# Local third-party sources: redistribution rights are not verified
+/Assets/SimpleNaturePack/
+/Assets/SimpleNaturePack.meta
+/Assets/BrokenVector/
+/Assets/BrokenVector.meta
+/Assets/PixPlays/
+/Assets/PixPlays.meta
+/Assets/ThirdParty/*
+!/Assets/ThirdParty/NOTICE.md
