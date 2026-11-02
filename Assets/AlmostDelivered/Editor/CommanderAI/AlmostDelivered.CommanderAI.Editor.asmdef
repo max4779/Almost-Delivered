@@ -1,5 +1,10 @@
 {
   "name": "AlmostDelivered.CommanderAI.Editor",
-  "references": ["AlmostDelivered.Runtime"],
-  "includePlatforms": ["Editor"]
+  "references": [
+    "AlmostDelivered.Runtime",
+    "AlmostDelivered.Presentation.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
 }
