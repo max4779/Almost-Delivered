@@ -37,6 +37,14 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(UnityEngine.Object.FindObjectsOfType<CommanderBrain>().Length, Is.EqualTo(1));
             Assert.That(GameObject.Find("Commander").GetComponent<ActorHealth>(), Is.Not.Null);
             Assert.That(UnityEngine.Object.FindObjectsOfType<MonsterPerception>().Length, Is.EqualTo(8));
+            foreach (var signal in UnityEngine.Object.FindObjectsOfType<AlertSignal>())
+            {
+                var cue = signal.GetComponentInChildren<TextMesh>(true);
+                Assert.That(cue, Is.Not.Null, "Every reporter has a saved alert cue.");
+                Assert.That(cue.font, Is.Not.Null, "The saved cue requires a font for rendering.");
+                Assert.That(cue.GetComponent<MeshRenderer>().sharedMaterial, Is.EqualTo(cue.font.material));
+                Assert.That(cue.gameObject.activeSelf, Is.False);
+            }
             foreach (var role in new[] { "Shield", "Ranged", "Charger", "Support" })
                 Assert.That(scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>()).Count(t => t.name.StartsWith(role + " ")), Is.EqualTo(2));
             Assert.That(GameObject.Find("Fixed Objective"), Is.Not.Null);

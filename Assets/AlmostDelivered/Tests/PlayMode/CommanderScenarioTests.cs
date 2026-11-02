@@ -65,6 +65,52 @@ namespace AlmostDelivered.Tests.PlayMode
             StringAssert.Contains("Unaware", arena.GetComponent<CommanderDebugView>().Describe(now));
         }
 
+        [UnityTest] public IEnumerator SuccessfulBlockade_KeepsFormationAndDamagesNearbyPlayer() => FormationAttacks(ArenaScenario.Blockade, "objective-blockade");
+        [UnityTest] public IEnumerator SuccessfulPincer_KeepsFormationAndDamagesNearbyPlayer() => FormationAttacks(ArenaScenario.Pincer, "pincer");
+
+        private IEnumerator FormationAttacks(ArenaScenario scenario, string tactic)
+        {
+            arena.Arrange(scenario); yield return Alert();
+            arena.Brain.Tick(now); arena.Brain.Tick(now + 1);
+            Assert.That(arena.Brain.ActiveEvaluation.TacticId, Is.EqualTo(tactic));
+            Assert.That(arena.Brain.AllocationFailures, Is.Empty);
+            var member = arena.Members[0]; var anchor = member.CurrentOrder.Anchor;
+            var player = arena.Players[1]; var health = player.GetComponent<ActorHealth>();
+            player.transform.position = member.transform.position + Vector3.forward * .9f;
+            Physics.SyncTransforms();
+            yield return new WaitForSecondsRealtime(.1f);
+            Assert.That(health.CurrentHealth, Is.EqualTo(90), "Moving formation members also attack locally.");
+            Assert.That(member.CurrentOrder.Type, Is.EqualTo(MonsterOrderType.MoveToSlot));
+            Assert.That(member.CurrentOrder.Anchor, Is.EqualTo(anchor));
+            Assert.That(arena.Allocator.ReservationCount, Is.EqualTo(8));
+            player.transform.position = new Vector3(40, 1, 0); Physics.SyncTransforms();
+            var deadline = Time.realtimeSinceStartup + 10;
+            while (member.CurrentOrder.Type != MonsterOrderType.HoldSlot && Time.realtimeSinceStartup < deadline) yield return null;
+            Assert.That(member.CurrentOrder.Type, Is.EqualTo(MonsterOrderType.HoldSlot));
+            player.transform.position = member.transform.position + Vector3.forward * .9f;
+            Physics.SyncTransforms();
+            var before = health.CurrentHealth;
+            yield return new WaitForSecondsRealtime(.1f);
+            Assert.That(health.CurrentHealth, Is.EqualTo(before - 10));
+            yield return new WaitForSecondsRealtime(.1f);
+            Assert.That(health.CurrentHealth, Is.EqualTo(before - 10), "Local attacks retain their cooldown.");
+            Assert.That(member.CurrentOrder.Type, Is.EqualTo(MonsterOrderType.HoldSlot));
+            Assert.That(member.CurrentOrder.Anchor, Is.EqualTo(anchor));
+            Assert.That(arena.Allocator.ReservationCount, Is.EqualTo(8));
+            Assert.That(arena.Brain.AllocationFailures, Is.Empty);
+            Assert.That(arena.Commander.IsDead, Is.False);
+        }
+
+        [UnityTest] public IEnumerator InvalidReleasedAnchor_IsNotDisplayedAsReservedWhileExecutionIsPaused()
+        {
+            yield return Alert(); arena.Brain.Tick(now); arena.Brain.Tick(now + 1);
+            var anchor = arena.Members[0].CurrentOrder.Anchor;
+            anchor.enabled = false;
+            Assert.That(arena.Allocator.ReservationCount, Is.EqualTo(7));
+            Assert.That(arena.GetComponent<CommanderGizmoDrawer>().Classify(anchor), Is.EqualTo(AnchorDebugState.Unreachable));
+            yield return null;
+        }
+
         [UnityTest] public IEnumerator ControlledConfigurations_ExplainWinnerAndPlaceEveryRole()
         {
             arena.Arrange(ArenaScenario.Blockade);

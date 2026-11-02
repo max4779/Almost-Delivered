@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using AlmostDelivered.Combat;
 using AlmostDelivered.CommanderAI.Domain;
 using AlmostDelivered.CommanderAI.Tactics;
@@ -12,12 +13,18 @@ namespace AlmostDelivered.CommanderAI.Commander
     {
         private static readonly ProfilerMarker TickMarker = new ProfilerMarker("CommanderAI.CommandTick");
         [SerializeField, Min(.01f)] private float memorySecondsToZero = 10f;
+        [SerializeField, Range(0, 128)] private int evaluationHistoryCapacity = 128;
         private SquadController squad;
         private ActorHealth commander;
         private CommanderDifficultyProfile profile;
         private readonly List<UtilityTactic> tactics = new List<UtilityTactic>();
         private readonly List<TacticalAnchor> anchors = new List<TacticalAnchor>();
         private readonly List<TacticEvaluation> history = new List<TacticEvaluation>();
+        private readonly Dictionary<string, TacticEvaluation> latest = new Dictionary<string, TacticEvaluation>();
+        private readonly Dictionary<int, SquadMember> configuredMembers = new Dictionary<int, SquadMember>();
+        private readonly Dictionary<int, Action> memberDeathHandlers = new Dictionary<int, Action>();
+        private readonly Dictionary<int, TacticalRoleRequest> activeRequests = new Dictionary<int, TacticalRoleRequest>();
+        private readonly HashSet<int> retriedMembers = new HashSet<int>();
         private readonly List<string> allocationFailures = new List<string>();
         private TacticalSlotAllocator allocator;
         private Vector3 objective;
@@ -29,6 +36,13 @@ namespace AlmostDelivered.CommanderAI.Commander
         public TacticEvaluation PendingEvaluation { get; private set; }
         public TacticEvaluation ActiveEvaluation { get; private set; }
         public IReadOnlyList<TacticEvaluation> EvaluationHistory => history.AsReadOnly();
+        public IReadOnlyDictionary<string, TacticEvaluation> LatestEvaluations => new ReadOnlyDictionary<string, TacticEvaluation>(latest);
+        public int CommandCycleCount { get; private set; }
+        public int EvaluationHistoryCapacity
+        {
+            get => evaluationHistoryCapacity;
+            set { evaluationHistoryCapacity = Mathf.Clamp(value, 0, 128); TrimHistory(); }
+        }
         public IReadOnlyList<string> AllocationFailures => allocationFailures.AsReadOnly();
         public CommandTelegraph Telegraph { get; private set; }
         public float NextCommandTime => nextCycle;
@@ -49,9 +63,8 @@ namespace AlmostDelivered.CommanderAI.Commander
             objective = objectivePosition;
             Telegraph = GetComponent<CommandTelegraph>() ?? gameObject.AddComponent<CommandTelegraph>();
             Telegraph.Cancel(); PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
-            nextCycle = lastTick = float.NegativeInfinity; history.Clear(); allocationFailures.Clear();
+            nextCycle = lastTick = float.NegativeInfinity; history.Clear(); latest.Clear(); CommandCycleCount = 0; allocationFailures.Clear();
             DecisionReason = "waiting for completed alert";
-            configuredMembers.Clear();
             ConfigureMembers();
             commander.Died += CommanderDied;
             squad.Confused += ClearOrganization;
@@ -64,12 +77,14 @@ namespace AlmostDelivered.CommanderAI.Commander
         {
             PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
             Telegraph?.Cancel(); allocator?.ReleaseAll();
+            DetachMembers();
             DecisionReason = "coordination ended permanently";
         }
         private void Unsubscribe()
         {
             if (commander != null) commander.Died -= CommanderDied;
             if (squad != null) squad.Confused -= ClearOrganization;
+            DetachMembers();
         }
         private void OnDestroy() { Unsubscribe(); ClearOrganization(); }
 
@@ -90,6 +105,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             }
             if (now < nextCycle) return;
             nextCycle = now + Mathf.Max(.01f, profile.CommandCycleSeconds);
+            CommandCycleCount++; latest.Clear();
             squad.Knowledge.Decay(now, memorySecondsToZero);
             ConfigureMembers();
             var context = BuildContext(now);
@@ -98,7 +114,10 @@ namespace AlmostDelivered.CommanderAI.Commander
             foreach (var tactic in tactics)
             {
                 if (tactic == null || !Available(tactic.TacticId)) continue;
-                var result = tactic.Evaluate(in context); history.Add(result);
+                var result = tactic.Evaluate(in context);
+                latest[result.TacticId] = result;
+                if (evaluationHistoryCapacity > 0) history.Add(result);
+                TrimHistory();
                 if (ActiveEvaluation != null && result.TacticId == ActiveEvaluation.TacticId) current = result;
                 if (!result.IsValid || result.TotalScore <= tactic.MinimumActivationScore || tactic.Playbook == null) continue;
                 if (best == null || result.TotalScore > best.TotalScore ||
@@ -112,6 +131,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             {
                 DecisionReason = "no valid tactic above activation threshold; fallback orders";
                 ActiveEvaluation = null; allocator.ReleaseAll();
+                activeRequests.Clear(); retriedMembers.Clear();
                 foreach (var member in squad.LivingMembers) AssignFallback(member, in context);
                 return;
             }
@@ -140,10 +160,65 @@ namespace AlmostDelivered.CommanderAI.Commander
             {
                 allocator.RegisterMember(member.Id, member.Role, member.Health);
                 // Reconfiguration cancels orders, so configure each executor only when first attached to this brain.
-                if (configuredMembers.Add(member.Id)) member.Executor.Configure(member.Id, allocator, squad.Knowledge);
+                if (!configuredMembers.ContainsKey(member.Id))
+                {
+                    member.Executor.Configure(member.Id, allocator, squad.Knowledge);
+                    configuredMembers.Add(member.Id, member);
+                    member.Executor.ReassignmentRequested += ReassignMember;
+                    var id = member.Id;
+                    Action died = () => DetachMember(id);
+                    memberDeathHandlers.Add(id, died); member.Health.Died += died;
+                }
             }
         }
-        private readonly HashSet<int> configuredMembers = new HashSet<int>();
+
+        private void TrimHistory()
+        {
+            var capacity = Mathf.Clamp(evaluationHistoryCapacity, 0, 128);
+            if (history.Count > capacity) history.RemoveRange(0, history.Count - capacity);
+        }
+
+        private void DetachMembers()
+        {
+            foreach (var id in new List<int>(configuredMembers.Keys)) DetachMember(id);
+            activeRequests.Clear(); retriedMembers.Clear();
+        }
+
+        private void DetachMember(int id)
+        {
+            if (!configuredMembers.TryGetValue(id, out var member)) return;
+            if (member.Executor != null)
+            {
+                member.Executor.ReassignmentRequested -= ReassignMember;
+                if (member.Executor.CurrentOrder.Type != MonsterOrderType.ConfusedCombat) member.Executor.Cancel();
+            }
+            if (member.Health != null && memberDeathHandlers.TryGetValue(id, out var died)) member.Health.Died -= died;
+            allocator?.UnregisterMember(id);
+            configuredMembers.Remove(id); memberDeathHandlers.Remove(id);
+            activeRequests.Remove(id); retriedMembers.Remove(id);
+        }
+
+        private void ReassignMember(int id)
+        {
+            if (squad == null || squad.State != SquadAlertState.Alerted || commander == null || commander.IsDead ||
+                !configuredMembers.TryGetValue(id, out var member) || !squad.IsLivingMember(id) ||
+                member.Executor == null || !member.Executor.isActiveAndEnabled) return;
+            if (!activeRequests.TryGetValue(id, out var request)) return;
+            if (retriedMembers.Add(id))
+            {
+                if (allocator.TryAllocate(id, member.Role, request.Slot, out var replacement, out var reason))
+                {
+                    member.Executor.Assign(new MonsterOrder(MonsterOrderType.MoveToSlot, replacement, targetActorId: request.TargetActorId));
+                    return;
+                }
+                allocationFailures.Add("Member " + id + " reassignment / " + request.Slot.Tag + ": " + reason);
+            }
+            // One allocation attempt per active playbook request. A failed replacement
+            // cannot restart a per-frame allocation loop, even if movement later fails.
+            activeRequests.Remove(id);
+            var context = BuildContext(lastTick);
+            AssignFallback(member, in context);
+        }
 
         private TacticalContext BuildContext(float now)
         {
@@ -173,6 +248,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             // Members may register between command cycles while the telegraph is visible.
             ConfigureMembers();
             allocationFailures.Clear();
+            activeRequests.Clear(); retriedMembers.Clear();
             allocator.ReleaseAll();
             foreach (var member in squad.LivingMembers) member.Executor.Cancel();
             var used = new HashSet<int>();
@@ -182,7 +258,10 @@ namespace AlmostDelivered.CommanderAI.Commander
                     if (used.Contains(member.Id) || member.Role != request.Role) continue;
                     used.Add(member.Id);
                     if (allocator.TryAllocate(member.Id, member.Role, request.Slot, out var anchor, out var failureReason))
+                    {
+                        activeRequests[member.Id] = request;
                         member.Executor.Assign(new MonsterOrder(MonsterOrderType.MoveToSlot, anchor, targetActorId: request.TargetActorId));
+                    }
                     else
                     {
                         allocationFailures.Add("Member " + member.Id + " / " + request.Slot.Tag + ": " + failureReason);

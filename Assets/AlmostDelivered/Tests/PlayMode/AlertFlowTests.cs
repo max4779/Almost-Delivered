@@ -139,6 +139,7 @@ namespace AlmostDelivered.Tests.PlayMode
                 Assert.That(squad.Knowledge.Snapshot, Is.Empty);
                 Assert.That(observations, Is.Zero);
                 Assert.That(signal.IsSignaling, Is.False);
+                Assert.That(signal.GetComponentInChildren<TextMesh>(true).text, Does.Contain("cancelled"));
             }
         }
 
@@ -200,6 +201,106 @@ namespace AlmostDelivered.Tests.PlayMode
                 yield return null;
             }
             Assert.That(squad.State, Is.EqualTo(SquadAlertState.Alerted));
+        }
+
+        [Test]
+        public void Perception_UnseenUseThenSighting_DoesNotLearnAbilityHistory()
+        {
+            squad.TryCompleteAlert(ReporterId);
+            target.transform.position = Vector3.back * 3;
+            target.RevealTag(ObservedCombatTag.Healing);
+            target.transform.position = Vector3.forward * 3;
+            Physics.SyncTransforms(); perception.Sense();
+            Assert.That(squad.Knowledge.TryGet(target.ActorId, out var memory), Is.True);
+            Assert.That(memory.Tags, Is.EqualTo(ObservedCombatTag.None));
+        }
+
+        [Test]
+        public void Perception_RepeatedVisibleUse_IsLearnedOnlyByLivingVisibleObservers()
+        {
+            squad.TryCompleteAlert(ReporterId);
+            target.transform.position = Vector3.back * 3;
+            target.RevealTag(ObservedCombatTag.Healing);
+            target.transform.position = Vector3.forward * 3;
+            Physics.SyncTransforms(); perception.Sense();
+            Assert.That(squad.Knowledge.TryGet(target.ActorId, out var before), Is.True);
+            Assert.That(before.Tags, Is.EqualTo(ObservedCombatTag.None));
+            target.RevealTag(ObservedCombatTag.Healing);
+            Assert.That(squad.Knowledge.TryGet(target.ActorId, out var memory), Is.True);
+            Assert.That(memory.Tags, Is.EqualTo(ObservedCombatTag.Healing));
+            health.ApplyDamage(100);
+            target.RevealTag(ObservedCombatTag.Shield);
+            Assert.That(squad.Knowledge.TryGet(target.ActorId, out memory), Is.True);
+            Assert.That(memory.Tags, Is.EqualTo(ObservedCombatTag.Healing));
+        }
+
+        [Test]
+        public void Perception_IndependentSquad_DoesNotInheritAnotherObserversTags()
+        {
+            squad.TryCompleteAlert(ReporterId);
+            var other = new GameObject("Independent observer"); other.transform.SetParent(root.transform);
+            other.transform.position = Vector3.back * 100;
+            var otherSquad = other.AddComponent<SquadController>();
+            var otherHealth = other.AddComponent<ActorHealth>();
+            var otherPerception = other.AddComponent<MonsterPerception>();
+            otherSquad.RegisterMember(1, otherHealth); otherPerception.Configure(otherSquad, 1);
+            otherSquad.TryCompleteAlert(1);
+            target.RevealTag(ObservedCombatTag.Healing);
+            other.transform.position = Vector3.zero;
+            Physics.SyncTransforms(); otherPerception.Sense();
+            Assert.That(otherSquad.Knowledge.TryGet(target.ActorId, out var memory), Is.True);
+            Assert.That(memory.Tags, Is.EqualTo(ObservedCombatTag.None));
+            target.RevealTag(ObservedCombatTag.Healing);
+            otherPerception.Sense();
+            Assert.That(otherSquad.Knowledge.TryGet(target.ActorId, out memory), Is.True);
+            Assert.That(memory.Tags, Is.EqualTo(ObservedCombatTag.Healing));
+        }
+
+        [UnityTest]
+        public IEnumerator AlertCue_StartProgressCompletionAndExpiry()
+        {
+            signal.Begin(target);
+            var cue = signal.GetComponentInChildren<TextMesh>(true);
+            Assert.That(cue, Is.Not.Null, "The reporting member needs a runtime world-space cue.");
+            Assert.That(cue.font, Is.Not.Null, "A cue must have a glyph font, not just lifecycle state.");
+            Assert.That(cue.GetComponent<MeshRenderer>().sharedMaterial, Is.EqualTo(cue.font.material));
+            Assert.That(cue.gameObject.activeSelf, Is.True);
+            var start = cue.text;
+            yield return new WaitForSecondsRealtime(.08f);
+            Assert.That(cue.text, Is.Not.EqualTo(start));
+            yield return new WaitForSecondsRealtime(.2f);
+            Assert.That(cue.text, Does.Contain("alerted"));
+            yield return new WaitForSecondsRealtime(.5f);
+            Assert.That(cue.gameObject.activeSelf, Is.False);
+        }
+
+        [UnityTest] public IEnumerator AlertCue_CancelLifetime() => CueCancellation(() => signal.Cancel());
+        [UnityTest] public IEnumerator AlertCue_StunLifetime() => CueCancellation(() => stun.Apply(1, Time.unscaledTime));
+        [UnityTest] public IEnumerator AlertCue_DeathLifetime() => CueCancellation(() => health.ApplyDamage(100));
+        [UnityTest] public IEnumerator AlertCue_TargetLossLifetime() => CueCancellation(() => target.transform.position = Vector3.back * 100);
+        [UnityTest] public IEnumerator AlertCue_TargetDisabledLifetime() => CueCancellation(() => target.enabled = false);
+        [UnityTest] public IEnumerator AlertCue_TargetDestroyedLifetime() => CueCancellation(() => UnityEngine.Object.Destroy(target.gameObject));
+        [UnityTest] public IEnumerator AlertCue_TargetDeathLifetime() => CueCancellation(() => target.gameObject.AddComponent<ActorHealth>().ApplyDamage(100));
+        [UnityTest] public IEnumerator AlertCue_ReporterUnregisteredLifetime() => CueCancellation(() => squad.UnregisterMember(ReporterId));
+        [UnityTest] public IEnumerator AlertCue_ReconfigurationLifetime() => CueCancellation(() => signal.Configure(squad, ReporterId, .15f));
+        [UnityTest] public IEnumerator AlertCue_CompetingCompletionLifetime() => CueCancellation(() => squad.TryCompleteAlert(ReporterId), expectedAlerted: true);
+        [UnityTest] public IEnumerator AlertCue_PerceptionDisabledLifetime() => CueCancellation(() => perception.enabled = false);
+        [UnityTest] public IEnumerator AlertCue_ConfusionLifetime() => CueCancellation(() => squad.EnterConfused());
+        [UnityTest] public IEnumerator AlertCue_SignalDisabledHidesImmediately() => CueCancellation(() => signal.enabled = false, true);
+        [UnityTest] public IEnumerator AlertCue_ReporterDisabledHidesImmediately() => CueCancellation(() => signal.gameObject.SetActive(false), true);
+
+        private IEnumerator CueCancellation(Action cancel, bool disabled = false, bool expectedAlerted = false)
+        {
+            signal.Begin(target);
+            var cue = signal.GetComponentInChildren<TextMesh>(true);
+            Assert.That(cue, Is.Not.Null);
+            cancel(); yield return null; yield return null;
+            Assert.That(signal.IsSignaling, Is.False);
+            if (!disabled) Assert.That(cue.text, Does.Contain("cancelled"));
+            else Assert.That(cue.gameObject.activeSelf, Is.False);
+            yield return new WaitForSecondsRealtime(.6f);
+            Assert.That(cue.gameObject.activeSelf, Is.False);
+            Assert.That(squad.State == SquadAlertState.Alerted, Is.EqualTo(expectedAlerted));
         }
 
         [Test]

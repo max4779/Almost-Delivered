@@ -31,13 +31,9 @@ namespace AlmostDelivered.CommanderAI.Tactics
         [SerializeField] private RoleRequirement[] requiredRoles = Array.Empty<RoleRequirement>();
         [SerializeField] private UtilityConsideration[] considerations = Array.Empty<UtilityConsideration>();
         [SerializeField, Range(0f, 1f)] private float minimumActivationScore = .2f;
-        [SerializeField, Min(0f)] private float minimumHoldTime = 6f;
-        [SerializeField, Range(0f, 1f)] private float switchMargin = .1f;
         [SerializeField] private TacticalPlaybook playbook;
         public string TacticId { get => tacticId; set => tacticId = value; }
         public float MinimumActivationScore { get => minimumActivationScore; set => minimumActivationScore = value; }
-        public float MinimumHoldTime { get => minimumHoldTime; set => minimumHoldTime = value; }
-        public float SwitchMargin { get => switchMargin; set => switchMargin = value; }
         public TacticalPlaybook Playbook { get => playbook; set => playbook = value; }
         public RoleRequirement[] RequiredRoles { get => (RoleRequirement[])requiredRoles.Clone(); set => requiredRoles = value == null ? Array.Empty<RoleRequirement>() : (RoleRequirement[])value.Clone(); }
         public UtilityConsideration[] Considerations { get => (UtilityConsideration[])considerations.Clone(); set => considerations = value == null ? Array.Empty<UtilityConsideration>() : (UtilityConsideration[])value.Clone(); }

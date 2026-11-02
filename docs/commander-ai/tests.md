@@ -36,3 +36,11 @@ The entrypoint exits explicitly. Inspect `COMMANDER_ARENA_BUILT`, exit 0, and Gi
 If a user-owned editor locks this project, leave it running. Use a fresh temporary project mirror with Assets, Packages, and ProjectSettings; verify source SHA-256 hashes before launch, and retain the XML/log provenance. Never close a user's editor to run these commands. No mirror was needed for the recorded Task 8 baseline.
 
 See [profiling](profiling.md) for the recorded results and [portfolio demo](portfolio-demo.md) for the remaining human presentation check.
+
+## Final review integration verification — 2026-11-02
+
+The final fix wave passed **105/105 EditMode** and **84/84 PlayMode** tests, with zero failed or skipped tests and Unity exit code 0 for both. The final result files are `TestResults/final-fix-final-editmode.xml` and `TestResults/final-fix-final-playmode.xml`; matching logs are under `Logs/`. Explicit arena regeneration also exited 0 and logged `COMMANDER_ARENA_BUILT` in `Logs/final-fix-final-arena-build.log`.
+
+New regressions cover unseen ability uses followed by sight, repeated visible uses and independent squads; local attacks while moving and holding successful Blockade/Pincer formations; reporter cue rendering inputs, progress, completion, cancellation and expiry; production brain/executor replacement allocation, exhausted retry and teardown; paused invalid-anchor diagnostics; and bounded optional history with independent cycle counting. Existing cancellation-frame races, permanent confusion, partial allocation, NavMesh movement and stress tests remain green.
+
+The final stress run completed six Normal command cycles for one squad and eleven Hard cycles for each of five squads over a fixed 15-second simulated interval, with zero incomplete-path samples. These checks do not constitute a new platform performance target. Manual label readability, screenshots and portfolio playthrough approval remain pending.

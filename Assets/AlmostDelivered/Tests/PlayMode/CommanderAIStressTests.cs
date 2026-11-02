@@ -98,11 +98,11 @@ namespace AlmostDelivered.Tests.PlayMode
                     {
                         if (step % 4 == 0)
                             foreach (var member in rig.Members) member.GetComponent<MonsterPerception>().Sense();
-                        var previous = rig.Brain.EvaluationHistory.Count;
+                        var previous = rig.Brain.CommandCycleCount;
                         rig.Brain.Tick(origin + step * .05f);
                         rig.Activated |= rig.Brain.ActiveEvaluation != null;
-                        var delta = rig.Brain.EvaluationHistory.Count - previous;
-                        Assert.That(delta, Is.EqualTo(0).Or.EqualTo(3), "one batch at most per tick");
+                        var delta = rig.Brain.CommandCycleCount - previous;
+                        Assert.That(delta, Is.EqualTo(0).Or.EqualTo(1), "one batch at most per tick");
                         if (delta > 0) rig.Cycles++;
                         Assert.That(rig.Cycles, Is.LessThanOrEqualTo(maximumCycles));
                         AssertSafe(rig);

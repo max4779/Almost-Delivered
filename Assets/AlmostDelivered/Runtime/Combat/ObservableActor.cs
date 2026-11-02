@@ -16,9 +16,14 @@ namespace AlmostDelivered.Combat
         public Vector3 Velocity { get; private set; }
         public ObservedCombatTag ObservedTags { get; private set; }
         public event Action<ObservedCombatTag> TagObserved;
+        // A use is transient evidence. Observers must validate sight at this instant;
+        // ObservedTags remains actor telemetry, never a source of squad knowledge.
+        public static event Action<ObservableActor, ObservedCombatTag> TagUsed;
 
         public void RevealTag(ObservedCombatTag tag)
         {
+            if (tag == ObservedCombatTag.None || !isActiveAndEnabled) return;
+            TagUsed?.Invoke(this, tag);
             var newlyObserved = tag & ~ObservedTags;
             if (newlyObserved == ObservedCombatTag.None)
                 return;

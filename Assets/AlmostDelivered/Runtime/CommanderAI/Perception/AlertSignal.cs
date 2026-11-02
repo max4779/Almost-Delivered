@@ -19,14 +19,18 @@ namespace AlmostDelivered.CommanderAI.Perception
         private ObservableActor target;
         private float completesAt;
         private int dueFrame = -1;
+        private bool signaling;
+        [SerializeField] private TextMesh cue;
+        private float cueExpiresAt;
 
-        public bool IsSignaling => target != null;
+        public bool IsSignaling => signaling;
 
         private void Awake()
         {
             health = GetComponent<ActorHealth>();
             stun = GetComponent<StunState>();
             perception = GetComponent<MonsterPerception>();
+            EnsureCue();
         }
 
         private void OnEnable()
@@ -38,6 +42,7 @@ namespace AlmostDelivered.CommanderAI.Perception
         private void OnDisable()
         {
             Cancel();
+            if (cue != null) cue.gameObject.SetActive(false);
             health.Died -= Cancel;
             stun.StunChanged -= OnStunChanged;
         }
@@ -57,14 +62,37 @@ namespace AlmostDelivered.CommanderAI.Perception
             if (IsSignaling || !CanSignal() || !perception.CanSee(observedTarget))
                 return;
             target = observedTarget;
+            signaling = true;
             completesAt = Time.unscaledTime + duration;
             dueFrame = -1;
+            ShowCue("Alerting 0%", Color.yellow);
         }
 
         public void Cancel()
         {
+            if (signaling) ShowCue("Alert cancelled", new Color(1f, .35f, .25f));
+            signaling = false;
             target = null;
             dueFrame = -1;
+        }
+
+        // Also called by the arena builder so the cue is part of the saved scene wiring.
+        public void EnsureCue()
+        {
+            if (cue != null) return;
+            var label = new GameObject("Alert cue"); label.transform.SetParent(transform, false);
+            label.transform.localPosition = Vector3.up * 2.4f;
+            cue = label.AddComponent<TextMesh>(); cue.anchor = TextAnchor.MiddleCenter;
+            cue.alignment = TextAlignment.Center; cue.fontSize = 64; cue.characterSize = .08f;
+            cue.fontStyle = FontStyle.Bold;
+            label.SetActive(false);
+        }
+
+        private void ShowCue(string text, Color color)
+        {
+            EnsureCue(); cue.text = text; cue.color = color;
+            cue.gameObject.SetActive(isActiveAndEnabled);
+            cueExpiresAt = Time.unscaledTime + .45f;
         }
 
         private void OnStunChanged(bool isStunned)
@@ -79,6 +107,12 @@ namespace AlmostDelivered.CommanderAI.Perception
 
         private void LateUpdate()
         {
+            if (cue != null && cue.gameObject.activeSelf)
+            {
+                var camera = Camera.main;
+                if (camera != null) cue.transform.rotation = camera.transform.rotation;
+                if (!signaling && Time.unscaledTime >= cueExpiresAt) cue.gameObject.SetActive(false);
+            }
             if (!IsSignaling)
                 return;
             if (!CanSignal() || !perception.CanSee(target))
@@ -86,6 +120,7 @@ namespace AlmostDelivered.CommanderAI.Perception
                 Cancel();
                 return;
             }
+            ShowCue("Alerting " + Mathf.Clamp01(duration <= 0 ? 1 : 1 - (completesAt - Time.unscaledTime) / duration).ToString("P0"), Color.yellow);
             if (Time.unscaledTime < completesAt)
                 return;
 
@@ -100,9 +135,13 @@ namespace AlmostDelivered.CommanderAI.Perception
                 return;
 
             var observedTarget = target;
-            Cancel();
+            signaling = false; target = null; dueFrame = -1;
             if (squad.TryCompleteAlert(reporterId))
+            {
+                ShowCue("Squad alerted", Color.green);
                 perception.Observe(observedTarget);
+            }
+            else ShowCue("Alert cancelled", new Color(1f, .35f, .25f));
         }
     }
 }

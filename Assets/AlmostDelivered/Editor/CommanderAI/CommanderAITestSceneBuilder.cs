@@ -62,7 +62,7 @@ namespace AlmostDelivered.Editor.CommanderAI
                 arena.Members[i] = member.AddComponent<MonsterOrderExecutor>();
                 var perception = member.AddComponent<MonsterPerception>();
                 perception.SightRadius = 80; perception.FieldOfViewAngle = 360; perception.TargetMask = 1 << 2; perception.ObstructionMask = 1;
-                member.AddComponent<AlertSignal>();
+                member.AddComponent<AlertSignal>().EnsureCue();
             }
             var anchors = new System.Collections.Generic.List<TacticalAnchor>();
             foreach (TacticalAnchorTag tag in System.Enum.GetValues(typeof(TacticalAnchorTag)))

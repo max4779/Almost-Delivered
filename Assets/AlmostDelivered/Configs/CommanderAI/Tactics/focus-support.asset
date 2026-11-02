@@ -110,6 +110,4 @@ MonoBehaviour:
       m_PostInfinity: 2
       m_RotationOrder: 4
   minimumActivationScore: 0.2
-  minimumHoldTime: 6
-  switchMargin: 0.1
   playbook: {fileID: 11400000, guid: e68e4f3dc6563fc4797a0ab8ae453b22, type: 2}

@@ -32,8 +32,7 @@ namespace AlmostDelivered.CommanderAI.Debugging
                 text.AppendLine("Actor " + memory.ActorId + " last " + memory.LastKnownPosition.ToString("F1") + " confidence " + memory.Confidence.ToString("F2") + " tags " + memory.Tags);
             if (arena.Squad.Knowledge.Snapshot.Count == 0) text.AppendLine("No player knowledge. Complete an uninterrupted alert first.");
             text.AppendLine("LATEST TACTIC SCORES (all components)");
-            var latest = new Dictionary<string, TacticEvaluation>();
-            foreach (var evaluation in arena.Brain.EvaluationHistory) latest[evaluation.TacticId] = evaluation;
+            var latest = arena.Brain.LatestEvaluations;
             foreach (var tactic in arena.Tactics)
             {
                 if (!latest.TryGetValue(tactic.TacticId, out var evaluation))
@@ -45,6 +44,7 @@ namespace AlmostDelivered.CommanderAI.Debugging
                 foreach (var score in evaluation.ComponentScores) text.AppendLine("  " + score.Key + "=" + score.Value.ToString("F2"));
             }
             text.AppendLine("RESERVATIONS " + arena.Allocator.ReservationCount + " | green available / cyan reserved / red unreachable / yellow selected");
+            text.AppendLine("Command cycles: " + arena.Brain.CommandCycleCount);
             foreach (var member in arena.Squad.LivingMembers)
             {
                 var order = member.Executor.CurrentOrder;

@@ -23,6 +23,7 @@ namespace AlmostDelivered.CommanderAI.Perception
         private ActorHealth health;
         private StunState stun;
         private readonly HashSet<int> sensedActors = new HashSet<int>();
+        private readonly Dictionary<int, ObservedCombatTag> learnedTags = new Dictionary<int, ObservedCombatTag>();
 
         public float SightRadius { get => sightRadius; set => sightRadius = Mathf.Max(0f, value); }
         public float FieldOfViewAngle { get => fieldOfViewAngle; set => fieldOfViewAngle = Mathf.Clamp(value, 0f, 360f); }
@@ -37,8 +38,22 @@ namespace AlmostDelivered.CommanderAI.Perception
             stun = GetComponent<StunState>();
         }
 
+        private void OnEnable() => ObservableActor.TagUsed += ObserveTagUse;
+        private void OnDisable() => ObservableActor.TagUsed -= ObserveTagUse;
+
+        private void ObserveTagUse(ObservableActor target, ObservedCombatTag tags)
+        {
+            if (!CanReport() || squad.State == SquadAlertState.Confused ||
+                (targetMask.value & (1 << target.gameObject.layer)) == 0 || !CanSee(target)) return;
+            learnedTags.TryGetValue(target.ActorId, out var previous);
+            learnedTags[target.ActorId] = previous | tags;
+            // Before alert, evidence belongs only to this observer. Completion publishes it.
+            if (squad.State == SquadAlertState.Alerted) Observe(target);
+        }
+
         public void Configure(SquadController controller, int memberId)
         {
+            if (squad != controller || reporterId != memberId) learnedTags.Clear();
             squad = controller;
             reporterId = memberId;
             // A stable phase spreads member queries without a global perception registry.
@@ -102,8 +117,9 @@ namespace AlmostDelivered.CommanderAI.Perception
         {
             if (!CanReport() || squad.State != SquadAlertState.Alerted || !CanSee(target))
                 return;
+            learnedTags.TryGetValue(target.ActorId, out var tags);
             var sample = new ObservationSample(target.ActorId, target.transform.position, target.Velocity,
-                Time.unscaledTime, 1f, target.ObservedTags, reporterId);
+                Time.unscaledTime, 1f, tags, reporterId);
             // This data boundary is the only path from local sight into squad decisions.
             squad.Report(in sample);
             ObservationProduced?.Invoke(sample);

@@ -97,9 +97,11 @@ namespace AlmostDelivered.CommanderAI.Execution
                 case MonsterOrderType.ConfusedCombat: ExecuteConfused(); return;
                 case MonsterOrderType.MoveToSlot:
                     if (!ValidAnchor()) { RequestOrFallback(); return; }
+                    AttackNearbyVisibleTarget();
                     ExecuteMove(CurrentOrder.Anchor.transform.position, true);
                     break;
                 case MonsterOrderType.HoldSlot:
+                    AttackNearbyVisibleTarget();
                     if (!ReferenceEquals(CurrentOrder.Anchor, null))
                     {
                         if (!ValidAnchor()) { RequestOrFallback(); return; }
@@ -127,7 +129,7 @@ namespace AlmostDelivered.CommanderAI.Execution
 
         private void ExecuteConfused()
         {
-            var target = NearestVisibleTarget();
+            var target = NearestVisibleTarget(confusionSightRange);
             if (Tendency == ConfusionTendency.RetreatWhenWounded && health.CurrentHealth / health.MaxHealth <= .35f && target != null)
             {
                 var away = transform.position - target.transform.position; away.y = 0;
@@ -141,11 +143,17 @@ namespace AlmostDelivered.CommanderAI.Execution
             if (Move(destination) < 0) Stop();
         }
 
-        private ObservableActor NearestVisibleTarget()
+        private void AttackNearbyVisibleTarget()
+        {
+            var target = NearestVisibleTarget(attackRange);
+            if (target != null) TryLocalAttack(target.ActorId);
+        }
+
+        private ObservableActor NearestVisibleTarget(float range)
         {
             ObservableActor nearest = null;
             var best = float.PositiveInfinity;
-            foreach (var hit in Physics.OverlapSphere(transform.position, confusionSightRange))
+            foreach (var hit in Physics.OverlapSphere(transform.position, range, ~0, QueryTriggerInteraction.Collide))
             {
                 var actor = hit.GetComponentInParent<ObservableActor>();
                 if (actor == null || !actor.isActiveAndEnabled || actor.gameObject == gameObject) continue;
@@ -154,17 +162,23 @@ namespace AlmostDelivered.CommanderAI.Execution
                 var delta = actor.transform.position - transform.position;
                 var distance = delta.sqrMagnitude;
                 if (distance > best || (distance == best && nearest != null && actor.ActorId >= nearest.ActorId)) continue;
-                var visible = true;
-                foreach (var obstruction in Physics.RaycastAll(transform.position + Vector3.up * .4f, delta.normalized,
-                    delta.magnitude, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-                {
-                    if (obstruction.collider.transform.IsChildOf(transform) ||
-                        obstruction.collider.GetComponentInParent<ObservableActor>() == actor) continue;
-                    visible = false; break;
-                }
-                if (visible) { nearest = actor; best = distance; }
+                if (distance <= range * range && HasLocalSight(actor)) { nearest = actor; best = distance; }
             }
             return nearest;
+        }
+
+        private bool HasLocalSight(ObservableActor actor)
+        {
+            var origin = transform.position + Vector3.up * .4f;
+            var delta = actor.transform.position + Vector3.up * .4f - origin;
+            foreach (var obstruction in Physics.RaycastAll(origin, delta.normalized, delta.magnitude,
+                         Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                if (obstruction.collider.transform.IsChildOf(transform) ||
+                    obstruction.collider.GetComponentInParent<ObservableActor>() == actor) continue;
+                return false;
+            }
+            return true;
         }
 
         private bool ValidAnchor() => CurrentOrder.Anchor != null && CurrentOrder.Anchor.isActiveAndEnabled;
@@ -200,11 +214,11 @@ namespace AlmostDelivered.CommanderAI.Execution
 
         private bool TryLocalAttack(int actorId)
         {
-            foreach (var hit in Physics.OverlapSphere(transform.position, attackRange))
+            foreach (var hit in Physics.OverlapSphere(transform.position, attackRange, ~0, QueryTriggerInteraction.Collide))
             {
                 var actor = hit.GetComponentInParent<ObservableActor>();
                 if (actor == null || !actor.isActiveAndEnabled || actor.ActorId != actorId || actor.gameObject == gameObject ||
-                    Vector3.Distance(transform.position, actor.transform.position) > attackRange) continue;
+                    Vector3.Distance(transform.position, actor.transform.position) > attackRange || !HasLocalSight(actor)) continue;
                 var targetHealth = actor.GetComponent<ActorHealth>();
                 if (targetHealth == null || targetHealth.IsDead) continue;
                 if (Time.unscaledTime >= nextAttackTime)

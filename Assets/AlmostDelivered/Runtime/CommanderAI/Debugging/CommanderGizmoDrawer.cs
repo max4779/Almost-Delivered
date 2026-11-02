@@ -10,8 +10,8 @@ namespace AlmostDelivered.CommanderAI.Debugging
         public AnchorDebugState Classify(TacticalAnchor anchor)
         {
             var arena = GetComponent<CommanderArena>();
-            foreach (var member in arena.Squad.LivingMembers)
-                if (member.Executor.CurrentOrder.Anchor == anchor) return AnchorDebugState.Reserved;
+            if (anchor == null || !anchor.isActiveAndEnabled) return AnchorDebugState.Unreachable;
+            if (arena.Allocator != null && arena.Allocator.IsReserved(anchor)) return AnchorDebugState.Reserved;
             if (arena.Allocator != null)
             {
                 var reachable = false;

@@ -290,6 +290,21 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(executors.All(executor => executor.CurrentOrder.Type == MonsterOrderType.HoldSlot), Is.True);
         }
 
+        [Test] public void LongRunningDiagnostics_BoundsHistoryButRetainsLatestAndCycleCount()
+        {
+            squad.TryCompleteAlert(1);
+            for (var cycle = 0; cycle < 200; cycle++) brain.Tick(cycle * 3);
+            Assert.That(brain.EvaluationHistory.Count, Is.LessThanOrEqualTo(128));
+            Assert.That(brain.CommandCycleCount, Is.EqualTo(200));
+            Assert.That(brain.LatestEvaluations.Count, Is.EqualTo(2));
+            brain.EvaluationHistoryCapacity = 0;
+            secondScore.Value = .95f;
+            brain.Tick(600);
+            Assert.That(brain.EvaluationHistory, Is.Empty);
+            Assert.That(brain.CommandCycleCount, Is.EqualTo(201));
+            Assert.That(brain.LatestEvaluations[second.TacticId].TotalScore, Is.EqualTo(.95f).Within(.00001f));
+        }
+
         private UtilityTactic Tactic(string id, ScoreInput score)
         {
             var playbook = ScriptableObject.CreateInstance<TacticalPlaybook>(); assets.Add(playbook);

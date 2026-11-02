@@ -21,6 +21,7 @@ namespace AlmostDelivered.Tests.PlayMode
         private CommanderDifficultyProfile profile;
         private UtilityTactic tactic;
         private TacticalSlotAllocator allocator;
+        private readonly List<TacticalAnchor> anchors = new List<TacticalAnchor>();
         private readonly List<MonsterOrderExecutor> executors = new List<MonsterOrderExecutor>();
         private NavMeshData data;
         private NavMeshDataInstance mesh;
@@ -41,7 +42,8 @@ namespace AlmostDelivered.Tests.PlayMode
             tactic.Playbook = ScriptableObject.CreateInstance<TacticalPlaybook>();
             tactic.Playbook.RoleSlots = new[] { new PlaybookRoleSlots(MonsterRole.Shield, false, TacticalAnchorTag.ObjectiveFront) };
             var anchor = Child("Front", Vector3.right * 2).AddComponent<TacticalAnchor>(); anchor.Capacity = 2;
-            allocator = new TacticalSlotAllocator(new[] { anchor }, new NavMeshTacticalReachability());
+            anchors.Add(anchor);
+            allocator = new TacticalSlotAllocator(anchors, new NavMeshTacticalReachability());
             AddMember(1); AddMember(2);
             brain.Configure(squad, commander, profile, new[] { tactic }, new[] { anchor }, allocator, Vector3.zero);
         }
@@ -49,7 +51,7 @@ namespace AlmostDelivered.Tests.PlayMode
         [UnityTearDown] public IEnumerator TearDown()
         {
             Object.Destroy(root); Object.Destroy(profile); Object.Destroy(tactic.Playbook); Object.Destroy(tactic);
-            yield return null; mesh.Remove(); Object.Destroy(data); executors.Clear();
+            yield return null; mesh.Remove(); Object.Destroy(data); executors.Clear(); anchors.Clear();
         }
 
         [UnityTest] public IEnumerator CommanderDiesWhileIdle_SurvivorsImmediatelyBecomePermanentlyConfused()
@@ -200,6 +202,54 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(executors[0].CurrentOrder.TargetActorId, Is.EqualTo(target.ActorId));
             Assert.That(target.GetComponent<ActorHealth>().CurrentHealth, Is.LessThan(100));
             Assert.That(allocator.ReservationCount, Is.Zero);
+        }
+
+        [UnityTest] public IEnumerator InvalidAnchor_BrainAllocatesAvailableReplacementOnce()
+        {
+            squad.TryCompleteAlert(1); brain.Tick(0); brain.Tick(1);
+            var replacement = Child("Replacement slot", Vector3.right * 4).AddComponent<TacticalAnchor>();
+            replacement.Capacity = 2; anchors.Add(replacement);
+            var requests = 0; executors[0].ReassignmentRequested += _ => requests++;
+            anchors[0].enabled = false;
+            yield return null; yield return null;
+            Assert.That(executors[0].CurrentOrder.Anchor, Is.EqualTo(replacement));
+            Assert.That(allocator.ReservationCount, Is.EqualTo(2));
+            yield return new WaitForSecondsRealtime(.8f);
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.HoldSlot));
+            Assert.That(requests, Is.EqualTo(1));
+            Assert.That(brain.AllocationFailures, Is.Empty);
+            var third = Child("Must not repeatedly allocate", Vector3.right * 6).AddComponent<TacticalAnchor>();
+            third.Capacity = 2; anchors.Add(third); replacement.enabled = false;
+            for (var frame = 0; frame < 8; frame++) yield return null;
+            Assert.That(executors[0].CurrentOrder.Anchor, Is.Null, "The active playbook permits only one replacement allocation.");
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.HoldSlot));
+            Assert.That(allocator.ReservationCount, Is.Zero);
+            Assert.That(requests, Is.EqualTo(2), "A second invalid anchor may report once, but must not allocate again.");
+        }
+
+        [UnityTest] public IEnumerator InvalidAnchor_NoReplacementRecordsOneFailureAndFallsBack()
+        {
+            squad.TryCompleteAlert(1); brain.Tick(0); brain.Tick(1);
+            var requests = 0; executors[0].ReassignmentRequested += _ => requests++;
+            anchors[0].enabled = false;
+            for (var frame = 0; frame < 8; frame++) yield return null;
+            Assert.That(brain.AllocationFailures.Count, Is.EqualTo(2));
+            Assert.That(brain.AllocationFailures[0], Does.Contain("reassignment").And.Contain("disabled"));
+            Assert.That(requests, Is.EqualTo(1));
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.HoldSlot));
+            Assert.That(executors[0].CurrentOrder.Anchor, Is.Null);
+            Assert.That(allocator.ReservationCount, Is.Zero);
+        }
+
+        [UnityTest] public IEnumerator BrainDestroyed_CancelsOrdersAndDoesNotReassign()
+        {
+            squad.TryCompleteAlert(1); brain.Tick(0); brain.Tick(1);
+            Object.Destroy(brain); yield return null;
+            Assert.That(allocator.ReservationCount, Is.Zero);
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.None));
+            anchors[0].enabled = false;
+            yield return null;
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.None));
         }
 
         private void AssertConfused()

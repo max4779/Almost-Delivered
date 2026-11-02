@@ -22,6 +22,11 @@ namespace AlmostDelivered.CommanderAI.Tactics
         }
 
         public int ReservationCount { get { CleanUp(); return reservations.Count; } }
+        public bool IsReserved(TacticalAnchor anchor)
+        {
+            CleanUp();
+            return anchor != null && anchor.isActiveAndEnabled && reservations.ContainsValue(anchor);
+        }
 
         public bool RegisterMember(int memberId, MonsterRole role, ActorHealth health)
         {
