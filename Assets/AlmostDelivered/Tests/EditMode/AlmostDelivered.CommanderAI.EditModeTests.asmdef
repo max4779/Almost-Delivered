@@ -2,7 +2,9 @@
   "name": "AlmostDelivered.CommanderAI.EditModeTests",
   "references": [
     "AlmostDelivered.Runtime",
-    "AlmostDelivered.Presentation.Editor"
+    "AlmostDelivered.Presentation.Editor",
+    "AlmostDelivered.Frontend.Editor",
+    "Unity.ugui"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

@@ -4,5 +4,14 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/AlmostDelivered/Scenes/Frontend.unity
+    guid: 4fb9c6578978a9843b4b67c25bf55452
+  - enabled: 1
+    path: Assets/AlmostDelivered/Scenes/DepartureHub.unity
+    guid: a311abd0296edcd4abd791b6a8b99773
+  - enabled: 1
+    path: Assets/AlmostDelivered/Scenes/CommanderAITest.unity
+    guid: d240691c9c4e5d444999fa0dc4f9f4d5
   m_configObjects: {}

@@ -1,0 +1,11 @@
+{
+  "name": "AlmostDelivered.Frontend.Editor",
+  "rootNamespace": "AlmostDelivered.Editor.Frontend",
+  "references": [
+    "AlmostDelivered.Runtime",
+    "Unity.ugui"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}
