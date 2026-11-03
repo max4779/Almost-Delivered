@@ -828,6 +828,7 @@ MonoBehaviour:
     position: {x: 0.48, y: 1.3, z: 0}
     rotation: {x: 0, y: 0, z: 0, w: 1}
     scale: {x: 1, y: 1, z: 1}
+  motionSource: {fileID: 0}
 --- !u!114 &7055728709658311447
 MonoBehaviour:
   m_ObjectHideFlags: 0

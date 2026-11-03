@@ -1,5 +1,7 @@
 using System.IO;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Presentation;
+using AlmostDelivered.Presentation.Editor;
 using AlmostDelivered.CommanderAI.Commander;
 using AlmostDelivered.CommanderAI.Debugging;
 using AlmostDelivered.CommanderAI.Domain;
@@ -28,6 +30,7 @@ namespace AlmostDelivered.Editor.CommanderAI
         {
             if (string.IsNullOrWhiteSpace(scenePath) || !scenePath.StartsWith("Assets/AlmostDelivered/") ||
                 !scenePath.EndsWith(".unity") || scenePath.Contains("..")) throw new System.ArgumentException("Use a scene path under Assets/AlmostDelivered.", nameof(scenePath));
+            LowPolyAssetFactory.CreateOrUpdateAll();
             CommanderAIAssetFactory.CreateOrUpdateDefaultConfigs();
             Directory.CreateDirectory(Path.GetDirectoryName(scenePath)); AssetDatabase.Refresh();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -39,6 +42,11 @@ namespace AlmostDelivered.Editor.CommanderAI
             GameObjectUtility.SetStaticEditorFlags(ground, StaticEditorFlags.NavigationStatic);
             var objective = Primitive("Fixed Objective", PrimitiveType.Cylinder, new Vector3(0, .08f, 0), new Vector3(4, .08f, 4), "Objective");
             Object.DestroyImmediate(objective.GetComponent<Collider>());
+            AttachVisual(objective, VisualArchetype.ObjectiveBeacon, 0f);
+            var payload = new GameObject("Payload display");
+            payload.transform.SetParent(objective.transform, false);
+            payload.transform.position = new Vector3(3, 0, 0);
+            AttachVisual(payload, VisualArchetype.Payload, 0f);
             arena.Objective = objective.transform;
             // Fixed objective semantics use the same ground-level point as role anchors and observations.
             var marker = new GameObject("Objective tactical point"); marker.transform.position = new Vector3(0, 1, 0);
@@ -50,9 +58,11 @@ namespace AlmostDelivered.Editor.CommanderAI
                     new Vector3(i == 0 ? 0 : i == 1 ? 30 : -30, 1, 0), Vector3.one, i == 0 ? "Player" : "Dummy");
                 player.layer = 2; player.AddComponent<ActorHealth>(); arena.Players[i] = player.AddComponent<ObservableActor>();
                 if (i == 0) { Object.DestroyImmediate(player.GetComponent<Collider>()); player.AddComponent<CharacterController>(); player.AddComponent<ArenaPlayerController>(); }
+                AttachVisual(player, i == 0 ? VisualArchetype.Player : VisualArchetype.Dummy, -1f);
             }
             var commander = Primitive("Commander", PrimitiveType.Capsule, new Vector3(0, 1, -20), new Vector3(1.5f, 1.5f, 1.5f), "Commander");
             arena.Commander = commander.AddComponent<ActorHealth>(); arena.Brain = commander.AddComponent<CommanderBrain>();
+            AttachVisual(commander, VisualArchetype.Commander, -1f);
             arena.Members = new MonsterOrderExecutor[8];
             for (var i = 0; i < 8; i++)
             {
@@ -63,6 +73,7 @@ namespace AlmostDelivered.Editor.CommanderAI
                 var perception = member.AddComponent<MonsterPerception>();
                 perception.SightRadius = 80; perception.FieldOfViewAngle = 360; perception.TargetMask = 1 << 2; perception.ObstructionMask = 1;
                 member.AddComponent<AlertSignal>().EnsureCue();
+                AttachVisual(member, (VisualArchetype)System.Enum.Parse(typeof(VisualArchetype), role.ToString()), -1f);
             }
             var anchors = new System.Collections.Generic.List<TacticalAnchor>();
             foreach (TacticalAnchorTag tag in System.Enum.GetValues(typeof(TacticalAnchorTag)))
@@ -103,6 +114,15 @@ namespace AlmostDelivered.Editor.CommanderAI
             EditorSceneManager.SaveScene(scene, scenePath); AssetDatabase.SaveAssets();
             // Reload the persisted NavMeshSettings reference; rebakes can replace its data instance.
             return EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
+        }
+        private static void AttachVisual(GameObject root, VisualArchetype type, float worldYOffset)
+        {
+            var renderer = root.GetComponent<Renderer>();
+            if (renderer != null) renderer.enabled = false;
+            var visual = LowPolyAssetFactory.InstantiateVisual(root, type).transform;
+            visual.position = root.transform.position + Vector3.up * worldYOffset;
+            var scale = root.transform.lossyScale;
+            visual.localScale = new Vector3(1f / scale.x, 1f / scale.y, 1f / scale.z);
         }
         private static GameObject Primitive(string name, PrimitiveType type, Vector3 position, Vector3 scale, string material)
         {

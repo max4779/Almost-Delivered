@@ -1,0 +1,13 @@
+# Phase 1 low-poly visual set
+
+The Commander AI arena uses project-owned Unity primitive assemblies generated as replaceable presentation prefabs. Gameplay roots retain their controllers, physics, health, perception and AI; each visual is one direct `VisualRoot` child. The cart is a static display under `Fixed Objective`, separate from the tactical point.
+
+Generated materials live in `Assets/AlmostDelivered/Art/Materials/Generated/`; character prefabs live in `Assets/AlmostDelivered/Prefabs/Generated/Characters/<archetype>/VisualRoot.prefab` and the payload and beacon in `Assets/AlmostDelivered/Prefabs/Generated/Objectives/<archetype>/VisualRoot.prefab`. The palette uses teal for the player and beacon, gray for dummies, green Shield, orange Ranged, red Charger, lime Support, purple Commander, gold payload and accents, rust details, and an unlit teal rune. Materials are shared assets.
+
+To rebuild in Unity, use **Almost Delivered > Art > Build low-poly visual set** and **Almost Delivered > Commander AI > Build deterministic arena**. For command-line builds, invoke Unity 2021.3.45f2 with `-batchmode -projectPath <project> -executeMethod AlmostDelivered.Presentation.Editor.LowPolyAssetBuilder.BuildCommandLine`, followed by `-executeMethod AlmostDelivered.Editor.CommanderAI.CommanderAITestSceneBuilder.BuildFromCommandLine`. Each builder exits after completion.
+
+Replace a generated visual prefab at this boundary while preserving its presentation-only hierarchy and `LowPolyVisual` contract; the root gameplay objects remain authoritative. The current animation is procedural pivot motion driven by root displacement, with simple attack/hit pose triggers; it is not a humanoid rig and is not a full animation set.
+
+Acceptance captures from the fixed orthographic camera and a closer view are local, ignored evidence at `TestResults/task4-formation.png` and `TestResults/task4-close.png`. They do not establish visual approval: at the default camera distance the actors are too small to distinguish reliably without color, and the large purple tactical markers compete with the payload and commander. The commander banner helps in the close view but grayscale silhouette separation remains unverified. The purple markers are the intentional existing Objective material (`0.7, 0.4, 1`), not evidence of a pink missing shader; a visual polish pass and manual playthrough remain needed.
+
+SimpleNaturePack, BrokenVector, and PixPlays source packs remain excluded pending license review; this set uses no third-party art. Cargo movement, durability and control-point gameplay belong to phase 2; icons, production VFX, external animation and audio belong to phase 3.

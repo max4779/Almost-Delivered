@@ -18,3 +18,5 @@ The locally imported SimpleNaturePack, BrokenVector FreeLowPolyPack, and PixPlay
 The initial tactics are Objective Blockade, Pincer, and Focus Support. Shield, Ranged, Charger, and Support currently provide tactical positioning and simple attacks. Multiplayer and full role abilities are future work, alongside cargo/control-point gameplay, progression, production presentation, and coordinated multi-squad strategy.
 
 Automated scene, logic, lifecycle, navigation, and stress verification is recorded in the linked evidence. Manual screenshot/layout review and a human portfolio playthrough remain pending; no visual sign-off is claimed.
+
+- [Phase-1 low-poly visual set and rebuild instructions](docs/art/low-poly-visual-set.md)

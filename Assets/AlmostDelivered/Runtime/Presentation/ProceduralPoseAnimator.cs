@@ -12,7 +12,7 @@ namespace AlmostDelivered.Presentation
         [SerializeField] private NeutralPose body;
         [SerializeField] private NeutralPose leftArm;
         [SerializeField] private NeutralPose rightArm;
-        private Transform motionSource;
+        [SerializeField] private Transform motionSource;
         private Vector3 previousSourcePosition;
         private float movementPhase;
         private float attackRemaining;
@@ -57,7 +57,8 @@ namespace AlmostDelivered.Presentation
                 var current = motionSource.position;
                 var displacement = current - previousSourcePosition;
                 displacement.y = 0f;
-                moving = displacement.sqrMagnitude > .000001f;
+                var minimumDisplacement = .01f * Time.deltaTime;
+                moving = displacement.sqrMagnitude > minimumDisplacement * minimumDisplacement;
                 previousSourcePosition = current;
             }
 

@@ -1,6 +1,10 @@
 using System;
 using System.Linq;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Presentation;
+using AlmostDelivered.Presentation.Editor;
+using AlmostDelivered.CommanderAI.Debugging;
+using AlmostDelivered.CommanderAI.Execution;
 using AlmostDelivered.CommanderAI.Commander;
 using AlmostDelivered.CommanderAI.Perception;
 using AlmostDelivered.CommanderAI.Tactics;
@@ -47,7 +51,31 @@ namespace AlmostDelivered.Tests.EditMode
             }
             foreach (var role in new[] { "Shield", "Ranged", "Charger", "Support" })
                 Assert.That(scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>()).Count(t => t.name.StartsWith(role + " ")), Is.EqualTo(2));
-            Assert.That(GameObject.Find("Fixed Objective"), Is.Not.Null);
+            foreach (var pair in new[] { ("Player", VisualArchetype.Player), ("Dummy A", VisualArchetype.Dummy), ("Dummy B", VisualArchetype.Dummy), ("Commander", VisualArchetype.Commander), ("Shield 1", VisualArchetype.Shield), ("Shield 2", VisualArchetype.Shield), ("Ranged 1", VisualArchetype.Ranged), ("Ranged 2", VisualArchetype.Ranged), ("Charger 1", VisualArchetype.Charger), ("Charger 2", VisualArchetype.Charger), ("Support 1", VisualArchetype.Support), ("Support 2", VisualArchetype.Support) })
+            {
+                var actor = GameObject.Find(pair.Item1);
+                var roots = actor.transform.Cast<Transform>().Where(t => t.name == "VisualRoot").ToArray();
+                Assert.That(roots.Length, Is.EqualTo(1), pair.Item1);
+                var visual = roots[0].GetComponent<LowPolyVisual>();
+                Assert.That(visual.Archetype, Is.EqualTo(pair.Item2));
+                Assert.That(visual.IsGameplayFree(out var reason), Is.True, reason);
+                Assert.That(actor.GetComponent<Renderer>().enabled, Is.False);
+                Assert.That(actor.GetComponent<ActorHealth>(), Is.Not.Null);
+                if (pair.Item1.EndsWith(" 1") || pair.Item1.EndsWith(" 2")) {
+                    Assert.That(actor.GetComponent<NavMeshAgent>(), Is.Not.Null);
+                    Assert.That(actor.GetComponent<MonsterOrderExecutor>(), Is.Not.Null);
+                    Assert.That(actor.GetComponent<MonsterPerception>(), Is.Not.Null);
+                    Assert.That(actor.GetComponent<Collider>(), Is.Not.Null);
+                }
+            }
+            var objective = GameObject.Find("Fixed Objective");
+            Assert.That(objective.transform.Find("VisualRoot").GetComponent<LowPolyVisual>().Archetype, Is.EqualTo(VisualArchetype.ObjectiveBeacon));
+            var beacon = objective.transform.Find("VisualRoot").GetComponent<LowPolyVisual>();
+            var payload = objective.transform.Find("Payload display/VisualRoot").GetComponent<LowPolyVisual>();
+            Assert.That(payload.Archetype, Is.EqualTo(VisualArchetype.Payload));
+            Assert.That(beacon.IsGameplayFree(out var beaconReason), Is.True, beaconReason);
+            Assert.That(payload.IsGameplayFree(out var payloadReason), Is.True, payloadReason);
+            Assert.That(Vector3.Distance(UnityEngine.Object.FindObjectOfType<CommanderArena>().Objective.position, new Vector3(0, 1, 0)), Is.LessThan(.0001f));
             var anchors = UnityEngine.Object.FindObjectsOfType<TacticalAnchor>();
             foreach (TacticalAnchorTag tag in Enum.GetValues(typeof(TacticalAnchorTag)))
                 Assert.That(anchors.Any(anchor => anchor.Tag == tag), Is.True, tag.ToString());
@@ -62,7 +90,14 @@ namespace AlmostDelivered.Tests.EditMode
             Build();
             var guid = AssetDatabase.AssetPathToGUID("Assets/AlmostDelivered/Configs/CommanderAI/Normal.asset");
             var sceneGuid = AssetDatabase.AssetPathToGUID(ScenePath);
+            var paths = Enum.GetValues(typeof(VisualArchetype)).Cast<VisualArchetype>().Select(LowPolyAssetFactory.GetPrefabPath)
+                .Concat(AssetDatabase.FindAssets("t:Material", new[] { "Assets/AlmostDelivered/Art/Materials/Generated" }).Select(AssetDatabase.GUIDToAssetPath)).ToArray();
+            var visualGuids = paths.Select(AssetDatabase.AssetPathToGUID).ToArray();
+            Assert.That(visualGuids.All(value => !string.IsNullOrEmpty(value)), Is.True);
+            var count = UnityEngine.Object.FindObjectsOfType<LowPolyVisual>().Length;
             Build();
+            Assert.That(paths.Select(AssetDatabase.AssetPathToGUID), Is.EqualTo(visualGuids));
+            Assert.That(UnityEngine.Object.FindObjectsOfType<LowPolyVisual>().Length, Is.EqualTo(count));
             Assert.That(AssetDatabase.AssetPathToGUID("Assets/AlmostDelivered/Configs/CommanderAI/Normal.asset"), Is.EqualTo(guid));
             Assert.That(NavMesh.CalculateTriangulation().vertices.Length, Is.GreaterThan(0), "Rebuilding must load the persisted navigation data.");
             Assert.That(AssetDatabase.AssetPathToGUID(ScenePath), Is.EqualTo(sceneGuid));
