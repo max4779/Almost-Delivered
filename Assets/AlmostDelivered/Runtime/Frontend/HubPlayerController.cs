@@ -24,7 +24,7 @@ namespace AlmostDelivered.Frontend
         {
             if (Input.GetKeyDown(KeyCode.Escape))
             {
-                GameSceneFlow.LoadFrontend();
+                ReturnToFrontend();
                 return;
             }
 
@@ -59,6 +59,11 @@ namespace AlmostDelivered.Frontend
             {
                 transform.forward = direction;
             }
+        }
+
+        public void ReturnToFrontend()
+        {
+            GameSceneFlow.LoadFrontend();
         }
 
         private static bool IsFinite(float value)
