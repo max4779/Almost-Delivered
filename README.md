@@ -6,6 +6,8 @@ Open with **Unity 2021.3.45f2** and run [CommanderAITest.unity](Assets/AlmostDel
 
 To open a fresh clone, add the repository root in Unity Hub and select **Unity 2021.3.45f2**. Let Unity restore the packages pinned in `Packages/manifest.json` and `Packages/packages-lock.json`, then open `Assets/AlmostDelivered/Scenes/CommanderAITest.unity` as the first scene and enter Play mode. `ProjectSettings` is tracked; Unity creates `Library` and local editor settings on first open.
 
+Shader Graph and its Render Pipeline Core dependency are pinned to **12.1.15**, matching this Unity 2021.3 editor. The generated phase-1 visuals use Built-in `Standard` and `Unlit/Color` shaders.
+
 The locally imported SimpleNaturePack, BrokenVector FreeLowPolyPack, and PixPlays elemental effects packs are optional and excluded from this public repository while redistribution permission remains unverified. Phase-1 generated visuals require no external art package. See the [third-party notice](Assets/ThirdParty/NOTICE.md) for the inclusion rule.
 
 - [Approved design spec](docs/superpowers/specs/2026-11-01-commander-ai-design.md)

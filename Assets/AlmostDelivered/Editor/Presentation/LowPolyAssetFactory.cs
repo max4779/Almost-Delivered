@@ -54,7 +54,10 @@ namespace AlmostDelivered.Presentation.Editor
                 Transform left = null, right = null;
                 if (type == VisualArchetype.Payload) {
                     Part(body,"Cart",PrimitiveType.Cube,new Vector3(0,.55f,0),new Vector3(1.8f,.5f,2.3f),color);
-                    foreach (var x in new[]{-.95f,.95f}) foreach(var z in new[]{-.75f,.75f}) Part(body,"Wheel",PrimitiveType.Cylinder,new Vector3(x,.35f,z),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
+                    Part(body,"WheelRearLeft",PrimitiveType.Cylinder,new Vector3(-.95f,.35f,-.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
+                    Part(body,"WheelFrontLeft",PrimitiveType.Cylinder,new Vector3(-.95f,.35f,.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
+                    Part(body,"WheelRearRight",PrimitiveType.Cylinder,new Vector3(.95f,.35f,-.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
+                    Part(body,"WheelFrontRight",PrimitiveType.Cylinder,new Vector3(.95f,.35f,.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
                     Part(body,"RuneCore",PrimitiveType.Sphere,new Vector3(0,1.05f,0),Vector3.one*.45f,glow);
                 } else if (type == VisualArchetype.ObjectiveBeacon) {
                     Part(body,"Beacon",PrimitiveType.Cylinder,new Vector3(0,.8f,0),new Vector3(.55f,.8f,.55f),color);

@@ -198,7 +198,7 @@ Create tests named:
 - `InstantiateVisual_ReplacesExistingVisualOnlyAndPreservesRootComponents`
 - `MissingShader_ThrowsBeforeWritingAnyAsset`
 
-Required named parts: Player `Body`, `Head`, `Weapon`; Shield adds `Shield`; Ranged adds `RangedWeapon`; Charger adds `Horns`; Support adds `Totem`; Commander adds `Cape`, `Banner`, `WarHorn`; Payload adds `Cart`, four `Wheel` children, `RuneCore`; ObjectiveBeacon adds `Beacon`, `RuneRing`.
+Required named parts: Player `Body`, `Head`, `Weapon`; Shield adds `Shield`; Ranged adds `RangedWeapon`; Charger adds `Horns`; Support adds `Totem`; Commander adds `Cape`, `Banner`, `WarHorn`; Payload adds `Cart`, four uniquely named `Wheel*` children, `RuneCore`; ObjectiveBeacon adds `Beacon`, `RuneRing`.
 
 Distinct-bounds assertions: Shield width exceeds Ranged by at least 20%; Commander height exceeds every ordinary role; Charger forward depth exceeds Support; Payload has nonzero bounds and exactly four wheels.
 
@@ -325,4 +325,3 @@ git commit -m "feat: apply low-poly visuals to commander arena"
 - [ ] Run the low-poly asset builder and arena builder command-line entrypoints and confirm both log markers and exit 0.
 - [ ] Review the complete branch diff against `docs/superpowers/specs/2026-11-02-basic-game-asset-design.md`, explicitly noting phase-2 and phase-3 items as out of scope rather than missing.
 - [ ] Ask before any GitHub push; local commits require no additional approval.
-
