@@ -166,12 +166,12 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(arena.Brain.PendingEvaluation, Is.Null);
             StringAssert.Contains("minimum hold", arena.GetComponent<CommanderDebugView>().Describe(now + 3));
             Assert.That(arena.Members[0].CurrentOrder.Anchor, Is.SameAs(original));
-            arena.Brain.Tick(now + 7);
+            arena.Brain.Tick(now + 7.1f); // Safely beyond the six-second hold boundary.
             Assert.That(arena.Brain.PendingEvaluation.TacticId, Is.EqualTo("pincer"));
             Assert.That(arena.Brain.ActiveEvaluation.TacticId, Is.EqualTo("objective-blockade"));
-            arena.Brain.Tick(now + 7.9f);
+            arena.Brain.Tick(now + 8f);
             Assert.That(arena.Brain.ActiveEvaluation.TacticId, Is.EqualTo("objective-blockade"));
-            arena.Brain.Tick(now + 8);
+            arena.Brain.Tick(now + 8.2f); // Safely beyond the one-second telegraph boundary.
             Assert.That(arena.Brain.ActiveEvaluation.TacticId, Is.EqualTo("pincer"));
         }
 
