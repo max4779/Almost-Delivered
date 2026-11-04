@@ -13,6 +13,8 @@ namespace AlmostDelivered.Tests.EditMode
 {
     public sealed class FrontendSceneBuilderTests
     {
+        private const string FrontendFontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
+
         [TearDown]
         public void Cleanup()
         {
@@ -62,6 +64,27 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(camera.enabled, Is.True);
             Assert.That(camera.clearFlags, Is.EqualTo(CameraClearFlags.SolidColor));
             Assert.That(Camera.main, Is.EqualTo(camera));
+        }
+
+        [Test]
+        public void FrontendKoreanLabelsUseBundledFontWithRequiredGlyphs()
+        {
+            var bundledFont = AssetDatabase.LoadAssetAtPath<Font>(FrontendFontPath);
+            Assert.That(bundledFont, Is.Not.Null, "A redistributable Korean font must be bundled with the project.");
+
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(FrontendSceneBuilder.FrontendScenePath, OpenSceneMode.Single);
+
+            var koreanLabels = Object.FindObjectsOfType<Text>()
+                .Where(label => label.text.Any(character => character >= '\uac00' && character <= '\ud7a3'))
+                .ToArray();
+            Assert.That(koreanLabels, Is.Not.Empty);
+            Assert.That(koreanLabels.All(label => label.font == bundledFont), Is.True);
+
+            var requiredGlyphs = koreanLabels.SelectMany(label => label.text)
+                .Where(character => character >= '\uac00' && character <= '\ud7a3')
+                .Distinct();
+            Assert.That(requiredGlyphs.All(bundledFont.HasCharacter), Is.True);
         }
 
         [Test]

@@ -30,7 +30,7 @@ In the Unity Editor, choose:
 
 For automation, start Unity with the project path and execute:
 
-`AlmostDelivered.Editor.FrontendSceneBuilder.BuildFromCommandLine`
+`AlmostDelivered.Editor.Frontend.FrontendSceneBuilder.BuildFromCommandLine`
 
 The builder recreates the two generated scenes and their shared materials, then normalizes Build Settings. Repeated generation is covered by EditMode tests.
 
@@ -60,4 +60,4 @@ PlayMode integration tests verify that:
 - the quarter-view camera tracks the player at its configured offset;
 - returning from the hub loads an interactable frontend menu.
 
-The complete Unity Test Runner suites currently contain 140 passing EditMode tests and 100 passing PlayMode tests.
+The complete Unity Test Runner suites currently contain 141 passing EditMode tests and 100 passing PlayMode tests.

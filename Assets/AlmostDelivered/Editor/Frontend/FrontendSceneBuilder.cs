@@ -20,6 +20,7 @@ namespace AlmostDelivered.Editor.Frontend
         public const string DepartureHubScenePath = "Assets/AlmostDelivered/Scenes/DepartureHub.unity";
 
         private const string CommanderScenePath = "Assets/AlmostDelivered/Scenes/CommanderAITest.unity";
+        private const string FrontendFontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
         private const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/Frontend";
 
         private static readonly Color StructureColor = new Color(.075f, .105f, .14f);
@@ -390,13 +391,24 @@ namespace AlmostDelivered.Editor.Frontend
             textObject.transform.SetParent(parent, false);
             var text = textObject.GetComponent<Text>();
             text.text = value;
-            text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            text.font = LoadFrontendFont();
             text.fontSize = fontSize;
             text.color = color;
             text.alignment = alignment;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
             text.verticalOverflow = VerticalWrapMode.Truncate;
             return text;
+        }
+
+        private static Font LoadFrontendFont()
+        {
+            var font = AssetDatabase.LoadAssetAtPath<Font>(FrontendFontPath);
+            if (font == null)
+            {
+                throw new InvalidOperationException("Missing bundled frontend font at " + FrontendFontPath);
+            }
+
+            return font;
         }
 
         private static Button UiButton(string name, Transform parent, string label, Color color, bool interactable)
