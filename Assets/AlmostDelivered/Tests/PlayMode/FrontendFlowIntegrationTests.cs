@@ -51,7 +51,9 @@ namespace AlmostDelivered.Tests.PlayMode
 
             Assert.That(player.transform.position.x, Is.GreaterThan(start.x + 1f));
             Assert.That(follow.Target, Is.EqualTo(player.transform));
-            Assert.That(GameObject.Find("Main Camera").transform.position, Is.EqualTo(player.transform.position + follow.Offset));
+            Assert.That(
+                GameObject.Find("Main Camera").transform.position,
+                Is.EqualTo(player.transform.position + follow.FocusOffset + follow.Offset));
         }
 
         [UnityTest]

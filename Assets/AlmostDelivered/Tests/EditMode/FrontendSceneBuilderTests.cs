@@ -140,6 +140,82 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void HubCameraPersistedSceneUsesCloseActionFraming()
+        {
+            EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+
+            var cameraObject = GameObject.Find("Main Camera");
+            var camera = cameraObject.GetComponent<Camera>();
+            var follow = cameraObject.GetComponent<QuarterViewCamera>();
+            var focusOffset = new SerializedObject(follow).FindProperty("focusOffset");
+
+            Assert.That(camera.orthographicSize, Is.EqualTo(9f).Within(0.001f));
+            Assert.That(focusOffset, Is.Not.Null);
+            Assert.That((focusOffset.vector3Value - new Vector3(0f, 0f, 3f)).sqrMagnitude, Is.LessThan(0.0001f));
+        }
+
+        [TestCase(4f / 3f)]
+        [TestCase(16f / 9f)]
+        [TestCase(21f / 9f)]
+        public void HubCameraFramesPlayerProminentlyBelowCenter(float aspect)
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+
+            var player = GameObject.Find("Player");
+            var camera = GameObject.Find("Main Camera").GetComponent<Camera>();
+            camera.aspect = aspect;
+
+            var playerViewportHeight = ViewportHeight(camera, player.GetComponent<Renderer>().bounds);
+            var playerViewportY = camera.WorldToViewportPoint(player.transform.position).y;
+
+            Assert.That(playerViewportHeight, Is.InRange(0.10f, 0.12f));
+            Assert.That(playerViewportY, Is.InRange(0.35f, 0.45f));
+        }
+
+        [Test]
+        public void HubCameraPreservesFramingWhenTargetMoves()
+        {
+            var target = new GameObject("Target");
+            var cameraObject = new GameObject("Camera", typeof(Camera), typeof(QuarterViewCamera));
+            var follow = cameraObject.GetComponent<QuarterViewCamera>();
+            var serializedFollow = new SerializedObject(follow);
+            var focusOffset = serializedFollow.FindProperty("focusOffset");
+            Assert.That(focusOffset, Is.Not.Null);
+
+            focusOffset.vector3Value = new Vector3(0f, 0f, 3f);
+            serializedFollow.ApplyModifiedPropertiesWithoutUndo();
+            follow.Target = target.transform;
+            follow.Offset = new Vector3(0f, 16f, -16f);
+            follow.SnapToTarget();
+
+            var before = cameraObject.transform.position;
+            var movement = new Vector3(2.5f, 0f, 4f);
+            target.transform.position += movement;
+            follow.SnapToTarget();
+
+            Assert.That((cameraObject.transform.position - before - movement).sqrMagnitude, Is.LessThan(0.0001f));
+        }
+
+        [Test]
+        public void HubCameraDefaultsToZeroFocusOffsetAndIgnoresNullTarget()
+        {
+            var cameraObject = new GameObject("Camera", typeof(QuarterViewCamera));
+            var follow = cameraObject.GetComponent<QuarterViewCamera>();
+            var focusOffset = new SerializedObject(follow).FindProperty("focusOffset");
+            Assert.That(focusOffset, Is.Not.Null);
+            Assert.That(focusOffset.vector3Value.sqrMagnitude, Is.LessThan(0.0001f));
+
+            cameraObject.transform.SetPositionAndRotation(new Vector3(3f, 5f, 7f), Quaternion.Euler(10f, 20f, 30f));
+            var positionBefore = cameraObject.transform.position;
+            var rotationBefore = cameraObject.transform.rotation;
+            follow.SnapToTarget();
+
+            Assert.That((cameraObject.transform.position - positionBefore).sqrMagnitude, Is.LessThan(0.0001f));
+            Assert.That(Quaternion.Angle(cameraObject.transform.rotation, rotationBefore), Is.LessThan(0.001f));
+        }
+
+        [Test]
         public void RepeatedBuildKeepsStableRequiredRootsAndBuildSettings()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
@@ -164,6 +240,28 @@ namespace AlmostDelivered.Tests.EditMode
         private static GameObject FindRoot(Scene scene, string name)
         {
             return scene.GetRootGameObjects().SingleOrDefault(root => root.name == name);
+        }
+
+        private static float ViewportHeight(Camera camera, Bounds bounds)
+        {
+            var minY = float.PositiveInfinity;
+            var maxY = float.NegativeInfinity;
+
+            for (var x = -1; x <= 1; x += 2)
+            {
+                for (var y = -1; y <= 1; y += 2)
+                {
+                    for (var z = -1; z <= 1; z += 2)
+                    {
+                        var corner = bounds.center + Vector3.Scale(bounds.extents, new Vector3(x, y, z));
+                        var viewportY = camera.WorldToViewportPoint(corner).y;
+                        minY = Mathf.Min(minY, viewportY);
+                        maxY = Mathf.Max(maxY, viewportY);
+                    }
+                }
+            }
+
+            return maxY - minY;
         }
     }
 }

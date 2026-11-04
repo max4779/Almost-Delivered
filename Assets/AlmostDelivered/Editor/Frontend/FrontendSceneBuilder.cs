@@ -215,13 +215,14 @@ namespace AlmostDelivered.Editor.Frontend
             cameraObject.tag = "MainCamera";
             var camera = cameraObject.GetComponent<Camera>();
             camera.orthographic = true;
-            camera.orthographicSize = 13.5f;
+            camera.orthographicSize = 9f;
             camera.backgroundColor = new Color(.025f, .04f, .055f);
             camera.nearClipPlane = .1f;
             camera.farClipPlane = 120f;
             var follow = cameraObject.GetComponent<QuarterViewCamera>();
             follow.Target = player.transform;
             follow.Offset = new Vector3(0f, 16f, -16f);
+            follow.FocusOffset = new Vector3(0f, 0f, 3f);
             follow.SnapToTarget();
 
             var keyLight = new GameObject("Hub Directional Light", typeof(Light));

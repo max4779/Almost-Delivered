@@ -6,6 +6,7 @@ namespace AlmostDelivered.Frontend
     {
         [SerializeField] private Transform target;
         [SerializeField] private Vector3 offset = new Vector3(0f, 16f, -16f);
+        [SerializeField] private Vector3 focusOffset = Vector3.zero;
 
         public Transform Target
         {
@@ -17,6 +18,12 @@ namespace AlmostDelivered.Frontend
         {
             get => offset;
             set => offset = value;
+        }
+
+        public Vector3 FocusOffset
+        {
+            get => focusOffset;
+            set => focusOffset = value;
         }
 
         private void LateUpdate()
@@ -31,8 +38,9 @@ namespace AlmostDelivered.Frontend
                 return;
             }
 
-            transform.position = target.position + offset;
-            transform.LookAt(target.position, Vector3.up);
+            var focusPoint = target.position + focusOffset;
+            transform.position = focusPoint + offset;
+            transform.LookAt(focusPoint, Vector3.up);
         }
     }
 }
