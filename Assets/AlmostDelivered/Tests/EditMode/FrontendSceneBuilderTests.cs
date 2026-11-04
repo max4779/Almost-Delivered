@@ -127,6 +127,19 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void HubCameraUsesModerateDiagonalQuarterViewAngle()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+
+            var follow = GameObject.Find("Main Camera").GetComponent<QuarterViewCamera>();
+            var downwardAngle = Mathf.Atan2(follow.Offset.y, Mathf.Abs(follow.Offset.z)) * Mathf.Rad2Deg;
+
+            Assert.That(downwardAngle, Is.InRange(43f, 47f));
+            Assert.That(Mathf.Abs(follow.Offset.z), Is.EqualTo(follow.Offset.y).Within(0.1f));
+        }
+
+        [Test]
         public void RepeatedBuildKeepsStableRequiredRootsAndBuildSettings()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();

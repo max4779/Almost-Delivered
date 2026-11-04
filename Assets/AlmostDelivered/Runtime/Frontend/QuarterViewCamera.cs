@@ -5,7 +5,7 @@ namespace AlmostDelivered.Frontend
     public sealed class QuarterViewCamera : MonoBehaviour
     {
         [SerializeField] private Transform target;
-        [SerializeField] private Vector3 offset = new Vector3(0f, 12f, -9f);
+        [SerializeField] private Vector3 offset = new Vector3(0f, 16f, -16f);
 
         public Transform Target
         {

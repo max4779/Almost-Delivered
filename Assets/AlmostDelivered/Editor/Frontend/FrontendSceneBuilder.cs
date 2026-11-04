@@ -221,7 +221,7 @@ namespace AlmostDelivered.Editor.Frontend
             camera.farClipPlane = 120f;
             var follow = cameraObject.GetComponent<QuarterViewCamera>();
             follow.Target = player.transform;
-            follow.Offset = new Vector3(0f, 18f, -13f);
+            follow.Offset = new Vector3(0f, 16f, -16f);
             follow.SnapToTarget();
 
             var keyLight = new GameObject("Hub Directional Light", typeof(Light));
