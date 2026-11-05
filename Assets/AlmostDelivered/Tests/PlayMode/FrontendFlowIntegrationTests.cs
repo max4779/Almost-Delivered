@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Linq;
 using AlmostDelivered.Frontend;
+using AlmostDelivered.Gameplay;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -102,6 +103,29 @@ namespace AlmostDelivered.Tests.PlayMode
 
             Assert.That(gate.CanLaunch, Is.False, "Leaving the trigger must disarm the deployment gate.");
             Assert.That(prompt.activeSelf, Is.False, "Leaving the trigger must hide the deployment prompt.");
+        }
+
+        [UnityTest]
+        public IEnumerator DeploymentGateRequestLoadsPlayableMission()
+        {
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath, new LoadSceneParameters(LoadSceneMode.Single));
+
+            var gate = Object.FindObjectOfType<HubDeploymentGate>();
+            var player = GameObject.Find("Player");
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = gate.transform.position;
+            controller.enabled = true;
+            controller.Move(Vector3.zero);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(gate.CanLaunch, Is.True);
+            gate.RequestLaunch();
+            yield return WaitForScene(GameSceneFlow.MissionPrototypeScene);
+
+            Assert.That(GameObject.Find("Player").GetComponent<MissionPlayerController>(), Is.Not.Null);
+            Assert.That(Object.FindObjectsOfType<PrototypeBossController>(), Has.Length.EqualTo(2));
         }
 
         private static IEnumerator WaitForScene(string sceneName)
