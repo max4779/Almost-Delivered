@@ -37,6 +37,7 @@ namespace AlmostDelivered.Editor.Frontend
             var materials = CreateOrUpdateMaterials();
             BuildFrontend(materials);
             BuildDepartureHub(materials);
+            MissionPrototypeSceneBuilder.BuildOrUpdate();
             RegisterBuildSettings();
             AssetDatabase.SaveAssets();
             EditorSceneManager.OpenScene(DepartureHubScenePath, OpenSceneMode.Single);
@@ -315,12 +316,14 @@ namespace AlmostDelivered.Editor.Frontend
             var ordered = new List<EditorBuildSettingsScene>
             {
                 new EditorBuildSettingsScene(FrontendScenePath, true),
-                new EditorBuildSettingsScene(DepartureHubScenePath, true)
+                new EditorBuildSettingsScene(DepartureHubScenePath, true),
+                new EditorBuildSettingsScene(MissionPrototypeSceneBuilder.ScenePath, true)
             };
 
             ordered.AddRange(EditorBuildSettings.scenes.Where(scene =>
                 scene.path != FrontendScenePath
                 && scene.path != DepartureHubScenePath
+                && scene.path != MissionPrototypeSceneBuilder.ScenePath
                 && scene.path != CommanderScenePath));
 
             if (File.Exists(CommanderScenePath))

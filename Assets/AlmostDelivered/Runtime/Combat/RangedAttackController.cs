@@ -16,6 +16,11 @@ namespace AlmostDelivered.Combat
         private CombatTeam ownerTeam;
         private float nextFireTime;
 
+        private void Awake()
+        {
+            CacheOwnerComponents();
+        }
+
         public void Configure(
             GameObject template,
             Transform muzzleTransform,
@@ -43,8 +48,7 @@ namespace AlmostDelivered.Combat
             cooldown = shotCooldown;
             projectileSpeed = shotSpeed;
             projectileLifetime = shotLifetime;
-            ownerHealth = GetComponent<ActorHealth>();
-            ownerTeam = GetComponent<CombatTeam>();
+            CacheOwnerComponents();
             nextFireTime = 0f;
         }
 
@@ -83,5 +87,11 @@ namespace AlmostDelivered.Combat
 
         private static bool IsFinite(Vector3 value) =>
             IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+
+        private void CacheOwnerComponents()
+        {
+            ownerHealth = GetComponent<ActorHealth>();
+            ownerTeam = GetComponent<CombatTeam>();
+        }
     }
 }
