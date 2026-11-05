@@ -3,6 +3,7 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.Gameplay.Payload;
 using AlmostDelivered.MapGeneration;
 using AlmostDelivered.Presentation;
 using NUnit.Framework;
@@ -15,30 +16,34 @@ namespace AlmostDelivered.Tests.EditMode
 {
     public sealed class MissionPrototypeSceneBuilderTests
     {
+        private static readonly Rect MissionBounds = new Rect(-28f, -50f, 56f, 100f);
+
         [Test]
-        public void BuildCreatesPlayableMissionWithPlayerBossesCameraAndHud()
+        public void BuildCreatesPayloadMissionAuthorityPlayerCameraHudAndMinimap()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
             var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
-
             var player = Find(scene, "Player");
-            var warden = Find(scene, "Warden Boss");
-            var charger = Find(scene, "Charger Boss");
+            var payload = Find(scene, "Payload");
             var camera = Find(scene, "Main Camera");
 
             Assert.That(player.GetComponent<MissionPlayerController>(), Is.Not.Null);
             Assert.That(player.GetComponent<RangedAttackController>(), Is.Not.Null);
             Assert.That(player.GetComponent<CombatTeam>().Team, Is.EqualTo(CombatTeamId.Player));
-            Assert.That(warden.GetComponent<PrototypeBossController>().Mode, Is.EqualTo(PrototypeBossMode.RangedWarden));
-            Assert.That(charger.GetComponent<PrototypeBossController>().Mode, Is.EqualTo(PrototypeBossMode.IronCharger));
-            Assert.That(Object.FindObjectsOfType<MissionHud>(true).Length, Is.EqualTo(1));
-            Assert.That(Object.FindObjectsOfType<CombatProjectile>(true).Count(projectile => projectile.name == "Projectile Template"), Is.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PayloadMissionController>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<PayloadMissionController>(true).IsAuthority, Is.True);
+            Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<MissionMinimap>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<MissionHud>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);
+            Assert.That(Object.FindObjectsOfType<PrototypeBossController>(true), Is.Empty);
+            Assert.That(Object.FindObjectsOfType<CombatProjectile>(true).Count(item => item.name == "Projectile Template"), Is.EqualTo(1));
+            AssertVisual(player, VisualArchetype.Player);
+            AssertVisual(payload, VisualArchetype.Payload);
 
             var follow = camera.GetComponent<QuarterViewCamera>();
             Assert.That(camera.GetComponent<Camera>().orthographicSize, Is.EqualTo(9f));
             Assert.That(follow.Target, Is.EqualTo(player.transform));
-            Assert.That(follow.Offset, Is.EqualTo(new Vector3(0f, 16f, -16f)));
-            Assert.That(follow.FocusOffset, Is.EqualTo(new Vector3(0f, 0f, 3f)));
 
             var buildPaths = EditorBuildSettings.scenes.Select(item => item.path).ToArray();
             Assert.That(buildPaths.Take(3), Is.EqualTo(new[]
@@ -50,33 +55,33 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
-        public void MissionActorsUseGeneratedArchetypes()
+        public void MissionUsesRouteAwareMapAndCappedWaveConfiguration()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
-            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
-
-            AssertVisual(Find(scene, "Player"), VisualArchetype.Player);
-            AssertVisual(Find(scene, "Warden Boss"), VisualArchetype.Commander);
-            AssertVisual(Find(scene, "Charger Boss"), VisualArchetype.Charger);
-        }
-
-        [Test]
-        public void MissionUsesConfiguredProceduralMapGenerator()
-        {
-            FrontendSceneBuilder.BuildOrUpdateAll();
-            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
-
-            var generator = scene.GetRootGameObjects()
-                .SelectMany(root => root.GetComponentsInChildren<MissionMapGenerator>(true))
-                .Single();
+            EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+            var generator = Object.FindObjectOfType<MissionMapGenerator>(true);
+            var spawner = Object.FindObjectOfType<PayloadWaveSpawner>(true);
 
             Assert.That(generator.Theme, Is.Not.Null);
-            Assert.That(generator.TerrainDetailCount, Is.EqualTo(24));
-            Assert.That(generator.BlockingObstacleCount, Is.EqualTo(14));
-            Assert.That(generator.RandomizeOnStart, Is.True);
-            Assert.That(GameObject.Find("Crate West"), Is.Null);
-            Assert.That(GameObject.Find("Crate East"), Is.Null);
-            Assert.That(GameObject.Find("Center Cover"), Is.Null);
+            Assert.That(generator.RandomizeOnStart, Is.False);
+            Assert.That(generator.TerrainDetailCount, Is.EqualTo(40));
+            Assert.That(generator.BlockingObstacleCount, Is.EqualTo(28));
+            Assert.That(spawner.ActiveCap, Is.EqualTo(18));
+            Assert.That(PayloadWaveSpawner.WaveCountFor(0, false), Is.EqualTo(10));
+            Assert.That(PayloadWaveSpawner.WaveCountFor(1, false), Is.EqualTo(14));
+            Assert.That(PayloadWaveSpawner.WaveCountFor(2, false), Is.EqualTo(18));
+            Assert.That(PayloadWaveSpawner.WaveCountFor(3, true), Is.EqualTo(22));
+
+            var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 3f);
+            var generatedPieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true);
+            Assert.That(generatedPieces, Has.Length.EqualTo(68), "Generated map pieces must survive a saved-scene reload.");
+            var blockers = generatedPieces
+                .Where(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle)
+                .ToArray();
+            Assert.That(blockers, Has.Length.EqualTo(28));
+            foreach (var blocker in blockers)
+            foreach (var zone in route.CorridorExclusions)
+                Assert.That(Overlaps(blocker.Position, blocker.Footprint, zone.Center, zone.Size), Is.False, blocker.name);
         }
 
         [Test]
@@ -91,21 +96,20 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(EditorBuildSettings.scenes.Count(item => item.path == MissionPrototypeSceneBuilder.ScenePath), Is.EqualTo(1));
         }
 
-        private static GameObject Find(Scene scene, string name)
-        {
-            return scene.GetRootGameObjects()
-                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
-                .Select(transform => transform.gameObject)
-                .Single(candidate => candidate.name == name);
-        }
+        private static GameObject Find(Scene scene, string name) => scene.GetRootGameObjects()
+            .SelectMany(root => root.GetComponentsInChildren<Transform>(true)).Select(item => item.gameObject)
+            .Single(candidate => candidate.name == name);
 
         private static void AssertVisual(GameObject actor, VisualArchetype expected)
         {
             var visuals = actor.GetComponentsInChildren<LowPolyVisual>(true);
-            Assert.That(actor.GetComponent<Renderer>(), Is.Null, actor.name + " gameplay root must stay invisible.");
-            Assert.That(visuals, Has.Length.EqualTo(1), actor.name);
-            Assert.That(visuals[0].Archetype, Is.EqualTo(expected), actor.name);
-            Assert.That(actor.transform.Cast<Transform>().Count(child => child.name == "VisualRoot"), Is.EqualTo(1), actor.name);
+            Assert.That(actor.GetComponent<Renderer>(), Is.Null);
+            Assert.That(visuals, Has.Length.EqualTo(1));
+            Assert.That(visuals[0].Archetype, Is.EqualTo(expected));
         }
+
+        private static bool Overlaps(Vector2 firstCenter, Vector2 firstSize, Vector2 secondCenter, Vector2 secondSize) =>
+            Mathf.Abs(firstCenter.x - secondCenter.x) < (firstSize.x + secondSize.x) * .5f &&
+            Mathf.Abs(firstCenter.y - secondCenter.y) < (firstSize.y + secondSize.y) * .5f;
     }
 }

@@ -6,22 +6,24 @@ namespace AlmostDelivered.Gameplay.Payload
 {
     public sealed class MissionMinimap : MonoBehaviour
     {
-        private readonly List<RectTransform> routeSegments = new List<RectTransform>();
-        private readonly List<RectTransform> checkpointMarkers = new List<RectTransform>();
+        [SerializeField] private List<RectTransform> routeSegments = new List<RectTransform>();
+        [SerializeField] private List<RectTransform> checkpointMarkers = new List<RectTransform>();
         private readonly Dictionary<int, RectTransform> enemyIcons = new Dictionary<int, RectTransform>();
         private readonly List<int> staleEnemyIds = new List<int>();
 
-        private Rect worldBounds;
-        private Transform player;
-        private Transform payload;
-        private PayloadWaveSpawner waves;
-        private RectTransform panel;
+        [SerializeField] private Rect worldBounds;
+        [SerializeField] private Transform player;
+        [SerializeField] private Transform payload;
+        [SerializeField] private PayloadWaveSpawner waves;
+        [SerializeField] private RectTransform panel;
+        [SerializeField] private RectTransform playerIcon;
+        [SerializeField] private RectTransform payloadIcon;
 
         public int RouteSegmentCount => routeSegments.Count;
         public int CheckpointMarkerCount => checkpointMarkers.Count;
         public int EnemyIconCount => enemyIcons.Count;
-        public RectTransform PlayerIcon { get; private set; }
-        public RectTransform PayloadIcon { get; private set; }
+        public RectTransform PlayerIcon => playerIcon;
+        public RectTransform PayloadIcon => payloadIcon;
 
         public static Vector2 ProjectWorld(Vector3 worldPosition, Rect worldBounds, Rect minimapRect)
         {
@@ -61,8 +63,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 BuildRoute(route);
             }
 
-            PlayerIcon = CreateIcon("Player Icon", new Color(.25f, .9f, 1f, 1f), 10f);
-            PayloadIcon = CreateIcon("Payload Icon", new Color(1f, .75f, .15f, 1f), 12f);
+            playerIcon = CreateIcon("Player Icon", new Color(.25f, .9f, 1f, 1f), 10f);
+            payloadIcon = CreateIcon("Payload Icon", new Color(1f, .75f, .15f, 1f), 12f);
             Refresh();
         }
 
@@ -79,8 +81,8 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             var mapRect = panel.rect;
-            UpdateIcon(PlayerIcon, player, mapRect);
-            UpdateIcon(PayloadIcon, payload, mapRect);
+            UpdateIcon(playerIcon, player, mapRect);
+            UpdateIcon(payloadIcon, payload, mapRect);
             RefreshEnemyIcons(mapRect);
         }
 
@@ -197,13 +199,13 @@ namespace AlmostDelivered.Gameplay.Payload
                 DestroyView(icon);
             }
 
-            DestroyView(PlayerIcon);
-            DestroyView(PayloadIcon);
+            DestroyView(playerIcon);
+            DestroyView(payloadIcon);
             routeSegments.Clear();
             checkpointMarkers.Clear();
             enemyIcons.Clear();
-            PlayerIcon = null;
-            PayloadIcon = null;
+            playerIcon = null;
+            payloadIcon = null;
         }
 
         private static void DestroyView(RectTransform view)

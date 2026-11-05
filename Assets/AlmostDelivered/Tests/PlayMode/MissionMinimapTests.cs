@@ -109,6 +109,8 @@ namespace AlmostDelivered.Tests.PlayMode
             var checkpoint = Text("Checkpoint", hudObject.transform);
             var escort = Text("Escort", hudObject.transform);
             var elapsed = Text("Elapsed", hudObject.transform);
+            var targets = Text("Targets", hudObject.transform);
+            hud.BindViews(null, null, targets);
             hud.ConfigurePayload(mission, phase, progress, checkpoint, escort, elapsed);
             mission.ApplySnapshot(new PayloadMissionSnapshot(
                 PayloadMissionPhase.CheckpointDefense,
@@ -130,6 +132,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(checkpoint.text, Does.Contain("2 / 3"));
             Assert.That(escort.text, Does.Contain("CONTESTED"));
             Assert.That(elapsed.text, Does.Contain("02:05"));
+            Assert.That(targets.text, Does.Contain("4"));
         }
 
         private static GameObject Actor(string name, CombatTeamId team)

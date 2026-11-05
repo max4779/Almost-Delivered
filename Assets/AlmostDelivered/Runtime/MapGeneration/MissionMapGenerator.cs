@@ -32,7 +32,7 @@ namespace AlmostDelivered.MapGeneration
         [SerializeField] private MissionMapProtectedZone[] protectedZones = Array.Empty<MissionMapProtectedZone>();
         [SerializeField] private bool randomizeOnStart = true;
 
-        private Transform generatedRoot;
+        [SerializeField] private Transform generatedRoot;
 
         public MissionMapTheme Theme => theme;
         public int TerrainDetailCount => terrainDetailCount;

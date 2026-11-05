@@ -21,6 +21,8 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadElapsedText;
 
         public int RemainingBosses => bosses == null ? 0 : bosses.Count(boss => boss != null && !boss.IsDefeated);
+        public bool HasPayloadViews => payloadMission != null && payloadPhaseText != null && payloadProgressText != null &&
+                                       payloadCheckpointText != null && payloadEscortText != null && payloadElapsedText != null;
 
         public void BindViews(Text controls, Text health, Text bossCount)
         {
@@ -65,7 +67,12 @@ namespace AlmostDelivered.Gameplay
             if (playerHealthText != null && playerHealth != null)
                 playerHealthText.text = $"PLAYER  {Mathf.CeilToInt(playerHealth.CurrentHealth)} / {Mathf.CeilToInt(playerHealth.MaxHealth)}";
             if (bossCountText != null)
-                bossCountText.text = $"TARGETS  {RemainingBosses}";
+            {
+                var remainingTargets = payloadMission != null
+                    ? payloadMission.Snapshot.RemainingEnemyCount
+                    : RemainingBosses;
+                bossCountText.text = $"TARGETS  {remainingTargets}";
+            }
 
             RefreshPayload();
         }

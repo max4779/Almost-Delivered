@@ -2,6 +2,7 @@ using System.Collections;
 using System.Linq;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.Gameplay.Payload;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -125,7 +126,12 @@ namespace AlmostDelivered.Tests.PlayMode
             yield return WaitForScene(GameSceneFlow.MissionPrototypeScene);
 
             Assert.That(GameObject.Find("Player").GetComponent<MissionPlayerController>(), Is.Not.Null);
-            Assert.That(Object.FindObjectsOfType<PrototypeBossController>(), Has.Length.EqualTo(2));
+            Assert.That(GameObject.Find("Payload"), Is.Not.Null);
+            Assert.That(Object.FindObjectsOfType<PrototypeBossController>(), Is.Empty);
+            Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(), Has.Length.EqualTo(1));
+            var mission = Object.FindObjectOfType<PayloadMissionController>();
+            Assert.That(mission, Is.Not.Null);
+            Assert.That(mission.IsAuthority, Is.True);
         }
 
         private static IEnumerator WaitForScene(string sceneName)

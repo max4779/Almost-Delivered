@@ -27,6 +27,14 @@ namespace AlmostDelivered.Gameplay.Payload
         public IReadOnlyCollection<MissionMobController> LivingEnemies => living.Values;
         public int ActiveCount => living.Count;
         public int PendingCount => pending.Count;
+        public int ActiveCap => activeCap;
+
+        public static int WaveCountFor(int checkpointIndex, bool finalWave)
+        {
+            return finalWave
+                ? 22
+                : CheckpointWaveCounts[Mathf.Clamp(checkpointIndex, 0, CheckpointWaveCounts.Length - 1)];
+        }
 
         public event Action<int, IReadOnlyCollection<int>> WaveStarted;
         public event Action<int, int> EnemyRemoved;
@@ -63,9 +71,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 throw new InvalidOperationException("The previous payload wave is still active.");
             }
 
-            var count = finalWave
-                ? 22
-                : CheckpointWaveCounts[Mathf.Clamp(checkpointIndex, 0, CheckpointWaveCounts.Length - 1)];
+            var count = WaveCountFor(checkpointIndex, finalWave);
             var random = new System.Random(unchecked(missionSeed * 486187739 + waveId * 397 + checkpointIndex * 31));
             var anchor = ResolveAnchor(checkpointIndex);
             var identifiers = new int[count];

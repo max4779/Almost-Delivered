@@ -8,14 +8,23 @@ namespace AlmostDelivered.Gameplay.Payload
     {
         private readonly PayloadPresenceSensor presenceSensor = new PayloadPresenceSensor();
 
-        private Transform playerTransform;
-        private Transform payloadTransform;
-        private PayloadWaveSpawner waveSpawner;
+        [SerializeField] private bool initializeOnStart;
+        [SerializeField] private bool authority;
+        [SerializeField] private int configuredSeed;
+        [SerializeField] private Rect configuredBounds;
+        [SerializeField] private Transform playerTransform;
+        [SerializeField] private Transform payloadTransform;
+        [SerializeField] private MissionMapGenerator configuredMapGenerator;
+        [SerializeField] private PayloadWaveSpawner waveSpawner;
+        [SerializeField] private float configuredMovementSpeed;
+        [SerializeField] private float configuredDeploymentDuration;
+        [SerializeField] private float configuredCorridorWidth = 3f;
+        [SerializeField] private int configuredInteriorPointCount = 5;
         private PayloadMissionStateMachine stateMachine;
-        private float escortRadius;
+        [SerializeField] private float escortRadius;
         private PayloadMissionSnapshot snapshot;
 
-        public bool IsAuthority { get; private set; }
+        public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
         public PayloadMissionSnapshot Snapshot => snapshot;
 
@@ -36,18 +45,44 @@ namespace AlmostDelivered.Gameplay.Payload
             int interiorPointCount = 5,
             float corridorWidth = 3f)
         {
-            UnbindWaveSpawner();
-            IsAuthority = isAuthority;
+            if (stateMachine != null)
+            {
+                stateMachine.WaveRequested -= HandleWaveRequested;
+            }
+
+            UnbindWaveSpawner(false);
+            initializeOnStart = true;
+            authority = isAuthority;
+            configuredSeed = missionSeed;
+            configuredBounds = missionBounds;
             playerTransform = player;
             payloadTransform = payload;
+            configuredMapGenerator = mapGenerator;
             waveSpawner = waves;
             escortRadius = Mathf.Max(0f, radius);
-            RoutePlan = PayloadRoutePlanner.Generate(missionSeed, missionBounds, interiorPointCount, corridorWidth);
+            configuredMovementSpeed = movementSpeed;
+            configuredDeploymentDuration = deploymentDuration;
+            configuredInteriorPointCount = interiorPointCount;
+            configuredCorridorWidth = corridorWidth;
+            Initialize();
+        }
+
+        private void Start()
+        {
+            if (initializeOnStart && stateMachine == null)
+            {
+                Initialize();
+            }
+        }
+
+        private void Initialize()
+        {
+            RoutePlan = PayloadRoutePlanner.Generate(configuredSeed, configuredBounds, configuredInteriorPointCount, configuredCorridorWidth);
             stateMachine = new PayloadMissionStateMachine(
                 RoutePlan.TotalLength,
                 RoutePlan.CheckpointDistances,
-                movementSpeed,
-                deploymentDuration);
+                configuredMovementSpeed,
+                configuredDeploymentDuration);
             stateMachine.WaveRequested += HandleWaveRequested;
             snapshot = stateMachine.Snapshot;
 
@@ -56,9 +91,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 payloadTransform.position = RoutePlan.Points[0];
             }
 
-            if (mapGenerator != null)
+            if (configuredMapGenerator != null)
             {
-                mapGenerator.Generate(missionSeed, RoutePlan.CorridorExclusions);
+                configuredMapGenerator.Generate(configuredSeed, RoutePlan.CorridorExclusions);
             }
 
             BindWaveSpawner();
@@ -77,12 +112,12 @@ namespace AlmostDelivered.Gameplay.Payload
                 stateMachine.WaveRequested -= HandleWaveRequested;
             }
 
-            UnbindWaveSpawner();
+            UnbindWaveSpawner(false);
         }
 
         public void Tick(float deltaTime)
         {
-            if (!IsAuthority || stateMachine == null || playerTransform == null || payloadTransform == null)
+            if (!authority || stateMachine == null || playerTransform == null || payloadTransform == null)
             {
                 return;
             }
@@ -96,7 +131,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public bool ApplySnapshot(PayloadMissionSnapshot value)
         {
-            if (IsAuthority || RoutePlan == null)
+            if (authority || RoutePlan == null)
             {
                 return false;
             }
@@ -128,7 +163,7 @@ namespace AlmostDelivered.Gameplay.Payload
             waveSpawner.EnemyRemoved += HandleEnemyRemoved;
         }
 
-        private void UnbindWaveSpawner()
+        private void UnbindWaveSpawner(bool clearReference)
         {
             if (waveSpawner == null)
             {
@@ -137,12 +172,15 @@ namespace AlmostDelivered.Gameplay.Payload
 
             waveSpawner.WaveStarted -= HandleWaveStarted;
             waveSpawner.EnemyRemoved -= HandleEnemyRemoved;
-            waveSpawner = null;
+            if (clearReference)
+            {
+                waveSpawner = null;
+            }
         }
 
         private void HandleWaveRequested(PayloadWaveRequest request)
         {
-            if (IsAuthority && waveSpawner != null)
+            if (authority && waveSpawner != null)
             {
                 waveSpawner.SpawnWave(request.WaveId, request.CheckpointIndex, request.IsFinal);
             }
@@ -150,7 +188,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void HandleWaveStarted(int waveId, System.Collections.Generic.IReadOnlyCollection<int> enemyIds)
         {
-            if (IsAuthority && stateMachine != null)
+            if (authority && stateMachine != null)
             {
                 stateMachine.RegisterWave(waveId, enemyIds);
             }
@@ -158,7 +196,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void HandleEnemyRemoved(int waveId, int enemyId)
         {
-            if (!IsAuthority || stateMachine == null)
+            if (!authority || stateMachine == null)
             {
                 return;
             }
