@@ -65,7 +65,9 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(generator.Theme, Is.Not.Null);
             Assert.That(generator.RandomizeOnStart, Is.False);
             Assert.That(generator.TerrainDetailCount, Is.EqualTo(40));
+            Assert.That(generator.TraversableTerrainCount, Is.EqualTo(6));
             Assert.That(generator.BlockingObstacleCount, Is.EqualTo(28));
+            Assert.That(generator.FoliageCount, Is.EqualTo(42));
             Assert.That(spawner.ActiveCap, Is.EqualTo(18));
             Assert.That(PayloadWaveSpawner.WaveCountFor(0, false), Is.EqualTo(10));
             Assert.That(PayloadWaveSpawner.WaveCountFor(1, false), Is.EqualTo(14));
@@ -74,14 +76,16 @@ namespace AlmostDelivered.Tests.EditMode
 
             var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 3f);
             var generatedPieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true);
-            Assert.That(generatedPieces, Has.Length.EqualTo(68), "Generated map pieces must survive a saved-scene reload.");
-            var blockers = generatedPieces
-                .Where(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle)
+            Assert.That(generatedPieces, Has.Length.EqualTo(116), "Generated map pieces must survive a saved-scene reload.");
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.EqualTo(6));
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.EqualTo(28));
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.EqualTo(42));
+            var routeSensitivePieces = generatedPieces
+                .Where(piece => piece.Category != MissionMapPieceCategory.TerrainDetail)
                 .ToArray();
-            Assert.That(blockers, Has.Length.EqualTo(28));
-            foreach (var blocker in blockers)
+            foreach (var piece in routeSensitivePieces)
             foreach (var zone in route.CorridorExclusions)
-                Assert.That(Overlaps(blocker.Position, blocker.Footprint, zone.Center, zone.Size), Is.False, blocker.name);
+                Assert.That(Overlaps(piece.Position, piece.Footprint, zone.Center, zone.Size), Is.False, piece.name);
         }
 
         [Test]
