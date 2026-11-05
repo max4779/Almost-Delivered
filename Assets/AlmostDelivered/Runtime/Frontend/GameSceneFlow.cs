@@ -8,11 +8,13 @@ namespace AlmostDelivered.Frontend
     {
         public const string FrontendScene = "Frontend";
         public const string DepartureHubScene = "DepartureHub";
+        public const string MissionPrototypeScene = "MissionPrototype";
 
         public static bool IsKnownScene(string sceneName)
         {
             return string.Equals(sceneName, FrontendScene, StringComparison.Ordinal)
-                || string.Equals(sceneName, DepartureHubScene, StringComparison.Ordinal);
+                || string.Equals(sceneName, DepartureHubScene, StringComparison.Ordinal)
+                || string.Equals(sceneName, MissionPrototypeScene, StringComparison.Ordinal);
         }
 
         public static void LoadScene(string sceneName)
@@ -33,6 +35,11 @@ namespace AlmostDelivered.Frontend
         public static void LoadFrontend()
         {
             LoadScene(FrontendScene);
+        }
+
+        public static void LoadMissionPrototype()
+        {
+            LoadScene(MissionPrototypeScene);
         }
 
         public static void QuitGame()

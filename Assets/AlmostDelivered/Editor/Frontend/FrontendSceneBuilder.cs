@@ -184,9 +184,8 @@ namespace AlmostDelivered.Editor.Frontend
             CollisionCube("West Wall Collision", collision, new Vector3(-16f, 3f, 0f), new Vector3(1f, 7f, 22f));
             CollisionCube("East Wall Collision", collision, new Vector3(16f, 3f, 0f), new Vector3(1f, 7f, 22f));
 
-            VisualCube("Floor", layout, new Vector3(0f, -.04f, 0f), new Vector3(31.4f, .12f, 21.4f), materials["Floor"]);
+            VisualCube("Floor", layout, new Vector3(0f, -.04f, -3f), new Vector3(31.4f, .12f, 27.4f), materials["Floor"]);
             VisualCube("North Wall", layout, new Vector3(0f, 3f, 10.65f), new Vector3(31.4f, 6.8f, .25f), materials["Structure"]);
-            VisualCube("South Wall", layout, new Vector3(0f, 3f, -10.65f), new Vector3(31.4f, 6.8f, .25f), materials["Structure"]);
             VisualCube("West Wall", layout, new Vector3(-15.65f, 3f, 0f), new Vector3(.25f, 6.8f, 21.4f), materials["Structure"]);
             VisualCube("East Wall", layout, new Vector3(15.65f, 3f, 0f), new Vector3(.25f, 6.8f, 21.4f), materials["Structure"]);
 
@@ -250,6 +249,18 @@ namespace AlmostDelivered.Editor.Frontend
                 stripe.transform.rotation = Quaternion.Euler(0f, 0f, -18f);
             }
             WorldLabel("DEPLOYMENT // LOCKED", gate, new Vector3(0f, 4.2f, 9.78f), 46, AmberColor, TextAnchor.MiddleCenter);
+
+            var prompt = WorldLabel("Deployment Prompt", gate, new Vector3(0f, 1.15f, 8.2f), 38, CyanColor, TextAnchor.MiddleCenter);
+            prompt.text = "E  출발";
+            prompt.gameObject.SetActive(false);
+
+            var triggerObject = new GameObject("Deployment Gate Trigger", typeof(BoxCollider), typeof(HubDeploymentGate));
+            triggerObject.transform.SetParent(gate, false);
+            triggerObject.transform.position = new Vector3(0f, 1.5f, 8.2f);
+            var trigger = triggerObject.GetComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(9f, 3f, 3f);
+            triggerObject.GetComponent<HubDeploymentGate>().Configure(prompt.gameObject);
         }
 
         private static void BuildMissionTerminal(Transform stations, IReadOnlyDictionary<string, Material> materials)

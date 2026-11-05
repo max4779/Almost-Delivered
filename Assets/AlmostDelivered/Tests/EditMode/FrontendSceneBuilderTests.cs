@@ -110,6 +110,47 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void HubUsesCutawaySouthSideAndKeepsCollisionBoundary()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+            var hub = FindRoot(scene, "Departure Hub");
+            var collision = hub.transform.Find("Collision/South Wall Collision");
+            var southWallVisual = hub.transform.Find("Layout/South Wall");
+            var floor = hub.transform.Find("Layout/Floor").GetComponent<Renderer>();
+
+            Assert.That(collision, Is.Not.Null);
+            Assert.That(collision.GetComponent<Collider>().enabled, Is.True);
+            Assert.That(
+                southWallVisual == null || !southWallVisual.GetComponent<Renderer>().enabled,
+                Is.True,
+                "The camera-facing wall must be a cutaway instead of hiding the player.");
+            Assert.That(floor.bounds.min.z, Is.LessThanOrEqualTo(-14f));
+        }
+
+        [Test]
+        public void HubContainsOneConfiguredDeploymentGate()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var hub = EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+
+            var gateComponents = Object.FindObjectsOfType<MonoBehaviour>()
+                .Where(component => component.GetType().FullName == "AlmostDelivered.Frontend.HubDeploymentGate")
+                .ToArray();
+            var trigger = GameObject.Find("Deployment Gate Trigger");
+            var prompt = hub.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .Select(transform => transform.gameObject)
+                .FirstOrDefault(candidate => candidate.name == "Deployment Prompt");
+
+            Assert.That(gateComponents.Length, Is.EqualTo(1));
+            Assert.That(trigger, Is.Not.Null);
+            Assert.That(trigger.GetComponent<Collider>().isTrigger, Is.True);
+            Assert.That(prompt, Is.Not.Null);
+            Assert.That(prompt.activeSelf, Is.False);
+        }
+
+        [Test]
         public void HubPlayerAndCameraAreWired()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();

@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using AlmostDelivered.Frontend;
 using NUnit.Framework;
 using UnityEditor.SceneManagement;
@@ -66,6 +67,41 @@ namespace AlmostDelivered.Tests.PlayMode
             yield return WaitForScene(GameSceneFlow.FrontendScene);
 
             Assert.That(GameObject.Find("Start Operation").GetComponent<Button>().interactable, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator DeploymentGateTracksPlayerAndPrompt()
+        {
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath, new LoadSceneParameters(LoadSceneMode.Single));
+
+            var gate = Object.FindObjectOfType<HubDeploymentGate>();
+            Assert.That(gate, Is.Not.Null);
+            var prompt = SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
+                .Select(transform => transform.gameObject)
+                .FirstOrDefault(candidate => candidate.name == "Deployment Prompt");
+            Assert.That(prompt, Is.Not.Null);
+            Assert.That(gate.CanLaunch, Is.False, "The gate must start empty before the player enters it.");
+            Assert.That(prompt.activeSelf, Is.False, "The prompt must start hidden before the player enters the gate.");
+
+            var player = GameObject.Find("Player");
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = gate.transform.position;
+            controller.enabled = true;
+            controller.Move(Vector3.zero);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(gate.CanLaunch, Is.True, "Entering the trigger must arm the deployment gate.");
+            Assert.That(prompt.activeSelf, Is.True, "Entering the trigger must reveal the deployment prompt.");
+
+            controller.Move(Vector3.back * 8f);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(gate.CanLaunch, Is.False, "Leaving the trigger must disarm the deployment gate.");
+            Assert.That(prompt.activeSelf, Is.False, "Leaving the trigger must hide the deployment prompt.");
         }
 
         private static IEnumerator WaitForScene(string sceneName)
