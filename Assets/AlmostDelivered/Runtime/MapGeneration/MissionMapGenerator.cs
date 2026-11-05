@@ -61,6 +61,11 @@ namespace AlmostDelivered.MapGeneration
 
         public void Generate(int seed)
         {
+            Generate(seed, Array.Empty<MapExclusionZone>());
+        }
+
+        public void Generate(int seed, IReadOnlyList<MapExclusionZone> extraBlockingExclusions)
+        {
             LastSeed = seed;
             ReplaceGeneratedRoot();
             if (theme == null)
@@ -68,7 +73,7 @@ namespace AlmostDelivered.MapGeneration
                 return;
             }
 
-            var exclusions = BuildExclusions();
+            var protectedExclusions = BuildExclusions();
             GenerateCategory(
                 theme.TerrainDetails,
                 terrainDetailCount,
@@ -76,7 +81,16 @@ namespace AlmostDelivered.MapGeneration
                 MissionMapPieceCategory.TerrainDetail,
                 "Terrain Details",
                 .015f,
-                exclusions);
+                protectedExclusions);
+            var blockingExclusions = new List<MapExclusionZone>(protectedExclusions);
+            if (extraBlockingExclusions != null)
+            {
+                for (var index = 0; index < extraBlockingExclusions.Count; index++)
+                {
+                    blockingExclusions.Add(extraBlockingExclusions[index]);
+                }
+            }
+
             GenerateCategory(
                 theme.BlockingObstacles,
                 blockingObstacleCount,
@@ -84,7 +98,7 @@ namespace AlmostDelivered.MapGeneration
                 MissionMapPieceCategory.BlockingObstacle,
                 "Blocking Obstacles",
                 0f,
-                exclusions);
+                blockingExclusions);
         }
 
         private void Start()

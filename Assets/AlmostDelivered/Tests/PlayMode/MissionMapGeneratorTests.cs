@@ -100,6 +100,49 @@ namespace AlmostDelivered.Tests.PlayMode
             }
         }
 
+        [UnityTest]
+        public IEnumerator ExtraRouteExclusionsBlockObstaclesButNotTerrainDetails()
+        {
+            var routeZone = new MapExclusionZone(Vector2.zero, new Vector2(24f, 20f));
+
+            generator.Generate(444, new[] { routeZone });
+            yield return null;
+
+            var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
+            var terrain = pieces.Where(piece => piece.Category == MissionMapPieceCategory.TerrainDetail).ToArray();
+            var blockers = pieces.Where(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle).ToArray();
+            Assert.That(terrain, Is.Not.Empty);
+            Assert.That(blockers, Is.Empty);
+        }
+
+        [UnityTest]
+        public IEnumerator ExtraExclusionsRemainDeterministicForSameSeed()
+        {
+            var routeZones = new[]
+            {
+                new MapExclusionZone(new Vector2(3f, 0f), new Vector2(4f, 12f))
+            };
+
+            generator.Generate(9191, routeZones);
+            var first = Snapshot(generator.GeneratedRoot);
+            generator.Generate(9191, routeZones);
+            yield return null;
+            var second = Snapshot(generator.GeneratedRoot);
+
+            Assert.That(second, Is.EqualTo(first));
+        }
+
+        [UnityTest]
+        public IEnumerator ExistingGenerateOverloadStillCreatesBothCategories()
+        {
+            generator.Generate(8181);
+            yield return null;
+
+            var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.True);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.True);
+        }
+
         private GameObject Primitive(string name, PrimitiveType type, bool keepCollider)
         {
             var primitive = GameObject.CreatePrimitive(type);
