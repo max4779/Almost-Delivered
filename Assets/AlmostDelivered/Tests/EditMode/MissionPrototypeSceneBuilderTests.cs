@@ -3,6 +3,7 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.MapGeneration;
 using AlmostDelivered.Presentation;
 using NUnit.Framework;
 using UnityEditor;
@@ -57,6 +58,25 @@ namespace AlmostDelivered.Tests.EditMode
             AssertVisual(Find(scene, "Player"), VisualArchetype.Player);
             AssertVisual(Find(scene, "Warden Boss"), VisualArchetype.Commander);
             AssertVisual(Find(scene, "Charger Boss"), VisualArchetype.Charger);
+        }
+
+        [Test]
+        public void MissionUsesConfiguredProceduralMapGenerator()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+
+            var generator = scene.GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<MissionMapGenerator>(true))
+                .Single();
+
+            Assert.That(generator.Theme, Is.Not.Null);
+            Assert.That(generator.TerrainDetailCount, Is.EqualTo(24));
+            Assert.That(generator.BlockingObstacleCount, Is.EqualTo(14));
+            Assert.That(generator.RandomizeOnStart, Is.True);
+            Assert.That(GameObject.Find("Crate West"), Is.Null);
+            Assert.That(GameObject.Find("Crate East"), Is.Null);
+            Assert.That(GameObject.Find("Center Cover"), Is.Null);
         }
 
         [Test]

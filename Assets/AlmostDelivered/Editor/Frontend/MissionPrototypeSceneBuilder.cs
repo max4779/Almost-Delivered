@@ -3,6 +3,7 @@ using System.IO;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.MapGeneration;
 using AlmostDelivered.Presentation;
 using AlmostDelivered.Presentation.Editor;
 using UnityEditor;
@@ -23,6 +24,7 @@ namespace AlmostDelivered.Editor.Frontend
         public static void BuildOrUpdate()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
+            MissionMapAssetFactory.CreateOrUpdateAll();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject("Mission Prototype");
 
@@ -35,9 +37,6 @@ namespace AlmostDelivered.Editor.Frontend
             Cube("North Boundary", root.transform, new Vector3(0f, 1f, 16f), new Vector3(40f, 2f, .6f), darkMaterial);
             Cube("West Boundary", root.transform, new Vector3(-20f, 1f, 0f), new Vector3(.6f, 2f, 32f), darkMaterial);
             Cube("East Boundary", root.transform, new Vector3(20f, 1f, 0f), new Vector3(.6f, 2f, 32f), darkMaterial);
-            Cube("Crate West", root.transform, new Vector3(-6f, 1f, 0f), new Vector3(3f, 2f, 2f), darkMaterial);
-            Cube("Crate East", root.transform, new Vector3(6f, 1f, 2f), new Vector3(3f, 2f, 2f), darkMaterial);
-            Cube("Center Cover", root.transform, new Vector3(0f, .75f, 5f), new Vector3(4f, 1.5f, 1.5f), darkMaterial);
 
             var projectileTemplate = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             projectileTemplate.name = "Projectile Template";
@@ -73,12 +72,36 @@ namespace AlmostDelivered.Editor.Frontend
             var chargerBoss = charger.AddComponent<PrototypeBossController>();
             chargerBoss.Configure(PrototypeBossMode.IronCharger, player.transform, null, 3.8f, 1.7f, 16f, 1.1f, 5.5f);
 
+            BuildMapGenerator(root.transform);
+
             BuildCamera(player.transform);
             BuildLighting(root.transform);
             BuildHud(player.GetComponent<ActorHealth>(), new[] { wardenBoss, chargerBoss });
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             Debug.Log("MISSION_PROTOTYPE_BUILT " + ScenePath);
+        }
+
+        private static void BuildMapGenerator(Transform parent)
+        {
+            var generatorObject = new GameObject("Mission Map Generator");
+            generatorObject.transform.SetParent(parent, false);
+            var generator = generatorObject.AddComponent<MissionMapGenerator>();
+            var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath);
+            generator.Configure(
+                theme,
+                new Vector2(18f, 14f),
+                24,
+                14,
+                new[]
+                {
+                    new MissionMapProtectedZone(new Vector2(0f, -8f), new Vector2(5f, 5f)),
+                    new MissionMapProtectedZone(new Vector2(-8f, 8f), new Vector2(5f, 5f)),
+                    new MissionMapProtectedZone(new Vector2(8f, 8f), new Vector2(5f, 5f)),
+                    new MissionMapProtectedZone(new Vector2(0f, 0f), new Vector2(4.5f, 18f))
+                },
+                true,
+                3000);
         }
 
         private static GameObject Actor(string name, Transform parent, Vector3 position, CombatTeamId team, VisualArchetype archetype)

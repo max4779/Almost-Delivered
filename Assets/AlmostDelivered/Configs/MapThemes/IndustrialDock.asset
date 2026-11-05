@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 173e90c8dea479a4faf770c8c82960a3, type: 3}
+  m_Name: IndustrialDock
+  m_EditorClassIdentifier: 
+  terrainDetails:
+  - prefab: {fileID: 153400567457417066, guid: 59e057363a732d946b0fcc337016c092, type: 3}
+    footprint: {x: 3.6, y: 3.6}
+  - prefab: {fileID: 919073015258430944, guid: 0109152ccbeabcf409d404fe183453f1, type: 3}
+    footprint: {x: 3.2, y: 2.6}
+  - prefab: {fileID: 7990533713854212212, guid: 94f8795e80bb31e4db72275bf0d5f3e1, type: 3}
+    footprint: {x: 2.4, y: 1.8}
+  - prefab: {fileID: 8173358457260159253, guid: 819e9ae7512a9d047b0e78b14b5e2c12, type: 3}
+    footprint: {x: 2.2, y: 2.2}
+  blockingObstacles:
+  - prefab: {fileID: 2714328537164058660, guid: 745235f57dc45c54087b8ab86874ad4b, type: 3}
+    footprint: {x: 2.8, y: 2.4}
+  - prefab: {fileID: 4257819233782098349, guid: d7d5b9c021bc6fd47a6200e4b080d4dd, type: 3}
+    footprint: {x: 3.5, y: 1.2}
+  - prefab: {fileID: 2165214881023482932, guid: 0ba59440382e3f64e8580a879829c646, type: 3}
+    footprint: {x: 2.8, y: 2.2}
+  - prefab: {fileID: 18980523764509137, guid: 1ac4244d9afdefe42a32411da4da1263, type: 3}
+    footprint: {x: 3.3, y: 2.1}
