@@ -8,6 +8,7 @@ namespace AlmostDelivered.Tests.PlayMode
     public sealed class MissionPlayerControllerTests
     {
         private GameObject player;
+        private GameObject floor;
         private MissionPlayerController missionPlayer;
 
         [SetUp]
@@ -41,6 +42,8 @@ namespace AlmostDelivered.Tests.PlayMode
                 Object.DestroyImmediate(projectile.gameObject);
             if (player != null)
                 Object.DestroyImmediate(player);
+            if (floor != null)
+                Object.DestroyImmediate(floor);
         }
 
         [Test]
@@ -50,7 +53,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(missionPlayer.Move(Vector2.one, 1f), Is.True);
             var displacement = player.transform.position - before;
 
-            Assert.That(displacement.magnitude, Is.EqualTo(6f).Within(.01f));
+            Assert.That(new Vector2(displacement.x, displacement.z).magnitude, Is.EqualTo(6f).Within(.01f));
             Assert.That(Vector3.Dot(player.transform.forward, new Vector3(1f, 0f, 1f).normalized), Is.GreaterThan(.999f));
         }
 
@@ -73,6 +76,26 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(missionPlayer.AimAndFire(new Vector3(float.PositiveInfinity, 0f, 0f), 0f), Is.False);
             missionPlayer.enabled = false;
             Assert.That(missionPlayer.Move(Vector2.right, 1f), Is.False);
+        }
+
+        [Test]
+        public void IdlePlayerFallsToGroundAndRemainsGrounded()
+        {
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Ground";
+            floor.transform.position = new Vector3(0f, -.5f, 0f);
+            floor.transform.localScale = new Vector3(20f, 1f, 20f);
+            player.transform.position = new Vector3(0f, 4f, 0f);
+            Physics.SyncTransforms();
+
+            for (var step = 0; step < 80; step++)
+                missionPlayer.Move(Vector2.zero, .05f);
+
+            Assert.That(player.transform.position.y, Is.EqualTo(1.08f).Within(.02f));
+            var settledHeight = player.transform.position.y;
+            for (var step = 0; step < 20; step++)
+                missionPlayer.Move(Vector2.zero, .05f);
+            Assert.That(player.transform.position.y, Is.EqualTo(settledHeight).Within(.01f));
         }
     }
 }

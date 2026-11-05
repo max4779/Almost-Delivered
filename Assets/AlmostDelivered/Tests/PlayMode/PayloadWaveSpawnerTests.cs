@@ -136,6 +136,20 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(removed.Distinct().Count(), Is.EqualTo(2));
         }
 
+        [Test]
+        public void SpawnedEnemiesUseTerrainAwareCharacterControllers()
+        {
+            var spawner = CreateSpawner(root.transform, 444, 18);
+
+            spawner.SpawnWave(2, 0, false);
+
+            foreach (var enemy in spawner.LivingEnemies)
+            {
+                Assert.That(enemy.GetComponent<CharacterController>(), Is.Not.Null, enemy.name);
+                Assert.That(enemy.GetComponent<CapsuleCollider>(), Is.Null, enemy.name);
+            }
+        }
+
         private PayloadWaveSpawner CreateSpawner(Transform parent, int seed, int activeCap)
         {
             var spawnerObject = new GameObject("Payload Wave Spawner");

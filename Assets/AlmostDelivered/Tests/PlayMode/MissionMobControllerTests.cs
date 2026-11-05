@@ -10,6 +10,7 @@ namespace AlmostDelivered.Tests.PlayMode
         private GameObject target;
         private GameObject mob;
         private GameObject projectileTemplate;
+        private GameObject floor;
 
         [SetUp]
         public void SetUp()
@@ -29,6 +30,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Object.DestroyImmediate(projectileTemplate);
             Object.DestroyImmediate(mob);
             Object.DestroyImmediate(target);
+            Object.DestroyImmediate(floor);
         }
 
         [Test]
@@ -109,6 +111,29 @@ namespace AlmostDelivered.Tests.PlayMode
             target.GetComponent<ActorHealth>().ApplyDamage(1000f);
             controller.Tick(2f, 1f);
             Assert.That(mob.transform.position, Is.EqualTo(Vector3.zero));
+        }
+
+        [Test]
+        public void CharacterControllerMobFallsToGroundWhileStationary()
+        {
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Ground";
+            floor.transform.position = new Vector3(0f, -.5f, 0f);
+            floor.transform.localScale = new Vector3(20f, 1f, 20f);
+            var character = mob.AddComponent<CharacterController>();
+            character.height = 2f;
+            character.radius = .5f;
+            character.center = Vector3.up;
+            mob.transform.position = new Vector3(0f, 4f, 0f);
+            target.transform.position = Vector3.zero;
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            Physics.SyncTransforms();
+
+            for (var step = 0; step < 80; step++)
+                controller.Tick(step * .05f, .05f);
+
+            Assert.That(mob.transform.position.y, Is.EqualTo(.08f).Within(.02f));
         }
 
         private static GameObject Actor(string name, CombatTeamId team, Vector3 position)

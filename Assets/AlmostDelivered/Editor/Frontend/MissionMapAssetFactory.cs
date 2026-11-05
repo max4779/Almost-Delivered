@@ -314,11 +314,11 @@ namespace AlmostDelivered.Editor.Frontend
                 var backStart = vertices.Count;
                 AddBladeSide(vertices, uv, center, right, bladeHeight, true);
                 triangles.Add(backStart);
+                triangles.Add(backStart + 2);
                 triangles.Add(backStart + 1);
-                triangles.Add(backStart + 2);
                 triangles.Add(backStart);
-                triangles.Add(backStart + 2);
                 triangles.Add(backStart + 3);
+                triangles.Add(backStart + 2);
             }
 
             var mesh = new Mesh { name = name };

@@ -131,9 +131,12 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var health = actor.AddComponent<ActorHealth>();
             actor.AddComponent<CombatTeam>().Team = CombatTeamId.Enemy;
-            var collider = actor.AddComponent<CapsuleCollider>();
-            collider.height = 2f;
-            collider.radius = .5f;
+            var character = actor.AddComponent<CharacterController>();
+            character.height = 2f;
+            character.radius = .5f;
+            character.center = Vector3.up;
+            character.slopeLimit = 45f;
+            character.stepOffset = .3f;
 
             RangedAttackController rangedAttack = null;
             if (IsRanged(pendingEnemy.Definition.Archetype) &&

@@ -88,6 +88,34 @@ namespace AlmostDelivered.Tests.EditMode
             }
         }
 
+        [Test]
+        public void FoliageUsesOpposingBackFaceNormals()
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath);
+
+            foreach (var piece in theme.Foliage)
+            {
+                var mesh = piece.Prefab.GetComponent<MeshFilter>().sharedMesh;
+                var vertices = mesh.vertices;
+                var triangles = mesh.triangles;
+                Assert.That(triangles.Length % 12, Is.Zero, piece.Prefab.name);
+                for (var blade = 0; blade < triangles.Length; blade += 12)
+                {
+                    var front = TriangleNormal(vertices, triangles, blade);
+                    var back = TriangleNormal(vertices, triangles, blade + 6);
+                    Assert.That(Vector3.Dot(front, back), Is.LessThan(-.99f), $"{piece.Prefab.name} blade {blade / 12}");
+                }
+            }
+        }
+
+        private static Vector3 TriangleNormal(Vector3[] vertices, int[] triangles, int start)
+        {
+            var first = vertices[triangles[start]];
+            var second = vertices[triangles[start + 1]];
+            var third = vertices[triangles[start + 2]];
+            return Vector3.Cross(second - first, third - first).normalized;
+        }
+
         private static float MaxSurfaceSlope(Mesh mesh)
         {
             var vertices = mesh.vertices;

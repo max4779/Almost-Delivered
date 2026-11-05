@@ -64,10 +64,13 @@ namespace AlmostDelivered.Gameplay.Payload
     {
         [SerializeField] private Transform target;
         [SerializeField] private RangedAttackController rangedAttack;
+        [SerializeField] private float gravity = -24f;
+        [SerializeField] private float groundedVerticalSpeed = -2f;
 
         private ActorHealth health;
         private CharacterController characterController;
         private float nextContactTime;
+        private float verticalVelocity;
         private bool removalReported;
 
         public MissionMobDefinition Definition { get; private set; }
@@ -113,6 +116,7 @@ namespace AlmostDelivered.Gameplay.Payload
             target = combatTarget;
             rangedAttack = attack;
             nextContactTime = 0f;
+            verticalVelocity = 0f;
             removalReported = false;
             health.ConfigureMaximum(definition.MaxHealth);
         }
@@ -133,12 +137,14 @@ namespace AlmostDelivered.Gameplay.Payload
             var targetHealth = target.GetComponentInParent<ActorHealth>();
             if (targetHealth == null || targetHealth.IsDead)
             {
+                Move(Vector3.zero, deltaTime);
                 return;
             }
 
             var toTarget = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
             if (toTarget.sqrMagnitude <= .0001f)
             {
+                Move(Vector3.zero, deltaTime);
                 return;
             }
 
@@ -157,6 +163,11 @@ namespace AlmostDelivered.Gameplay.Payload
                     rangedAttack.TryFire(target.position, now);
                 }
 
+                if (distance <= Definition.StandOffRange)
+                {
+                    Move(Vector3.zero, deltaTime);
+                }
+
                 return;
             }
 
@@ -171,18 +182,28 @@ namespace AlmostDelivered.Gameplay.Payload
                 targetHealth.ApplyDamage(Definition.ContactDamage);
                 nextContactTime = now + Definition.ContactCooldown;
             }
+
+            Move(Vector3.zero, deltaTime);
         }
 
         private void Move(Vector3 direction, float deltaTime)
         {
-            var movement = direction * (Definition.MoveSpeed * deltaTime);
+            var horizontalVelocity = direction * Definition.MoveSpeed;
             if (characterController != null && characterController.enabled)
             {
-                characterController.Move(movement);
+                if (characterController.isGrounded && verticalVelocity < 0f)
+                    verticalVelocity = groundedVerticalSpeed;
+                else
+                    verticalVelocity += gravity * deltaTime;
+
+                var movement = (horizontalVelocity + Vector3.up * verticalVelocity) * deltaTime;
+                var collisionFlags = characterController.Move(movement);
+                if ((collisionFlags & CollisionFlags.Below) != 0)
+                    verticalVelocity = groundedVerticalSpeed;
             }
             else
             {
-                transform.position += movement;
+                transform.position += horizontalVelocity * deltaTime;
             }
         }
 
