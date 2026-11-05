@@ -3,6 +3,7 @@
   "rootNamespace": "AlmostDelivered.Editor.Frontend",
   "references": [
     "AlmostDelivered.Runtime",
+    "AlmostDelivered.Presentation.Editor",
     "Unity.ugui"
   ],
   "includePlatforms": [

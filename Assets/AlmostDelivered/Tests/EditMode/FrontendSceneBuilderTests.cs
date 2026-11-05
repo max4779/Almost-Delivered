@@ -1,6 +1,7 @@
 using System.Linq;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.Frontend;
+using AlmostDelivered.Presentation;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -33,6 +34,31 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(GameObject.Find("Start Operation").GetComponent<Button>().interactable, Is.True);
             Assert.That(GameObject.Find("Settings Placeholder").GetComponent<Button>().interactable, Is.False);
             Assert.That(GameObject.Find("Quit Game").GetComponent<Button>().interactable, Is.True);
+        }
+
+        [Test]
+        public void BuildLeavesFrontendAsActiveStartScene()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+
+            Assert.That(SceneManager.GetActiveScene().path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
+            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
+            Assert.That(EditorSceneManager.playModeStartScene, Is.Null);
+        }
+
+        [Test]
+        public void HubPlayerUsesGeneratedPlayerVisual()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+
+            var player = GameObject.Find("Player");
+            var visuals = player.GetComponentsInChildren<LowPolyVisual>(true);
+
+            Assert.That(player.GetComponent<Renderer>(), Is.Null);
+            Assert.That(visuals, Has.Length.EqualTo(1));
+            Assert.That(visuals[0].Archetype, Is.EqualTo(VisualArchetype.Player));
+            Assert.That(player.transform.Cast<Transform>().Count(child => child.name == "VisualRoot"), Is.EqualTo(1));
         }
 
         [Test]
@@ -207,7 +233,7 @@ namespace AlmostDelivered.Tests.EditMode
             var camera = GameObject.Find("Main Camera").GetComponent<Camera>();
             camera.aspect = aspect;
 
-            var playerViewportHeight = ViewportHeight(camera, player.GetComponent<Renderer>().bounds);
+            var playerViewportHeight = ViewportHeight(camera, RendererBounds(player));
             var playerViewportY = camera.WorldToViewportPoint(player.transform.position).y;
 
             Assert.That(playerViewportHeight, Is.InRange(0.10f, 0.12f));
@@ -303,6 +329,19 @@ namespace AlmostDelivered.Tests.EditMode
             }
 
             return maxY - minY;
+        }
+
+        private static Bounds RendererBounds(GameObject root)
+        {
+            var renderers = root.GetComponentsInChildren<Renderer>();
+            Assert.That(renderers, Is.Not.Empty);
+            var bounds = renderers[0].bounds;
+            foreach (var renderer in renderers.Skip(1))
+            {
+                bounds.Encapsulate(renderer.bounds);
+            }
+
+            return bounds;
         }
     }
 }

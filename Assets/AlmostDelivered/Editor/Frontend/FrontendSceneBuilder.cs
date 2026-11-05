@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AlmostDelivered.Frontend;
+using AlmostDelivered.Presentation;
+using AlmostDelivered.Presentation.Editor;
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEditor.SceneManagement;
@@ -40,7 +42,8 @@ namespace AlmostDelivered.Editor.Frontend
             MissionPrototypeSceneBuilder.BuildOrUpdate();
             RegisterBuildSettings();
             AssetDatabase.SaveAssets();
-            EditorSceneManager.OpenScene(DepartureHubScenePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(FrontendScenePath, OpenSceneMode.Single);
+            EditorSceneManager.playModeStartScene = null;
             Debug.Log("FRONTEND_HUB_BUILT " + FrontendScenePath + " " + DepartureHubScenePath);
         }
 
@@ -201,15 +204,13 @@ namespace AlmostDelivered.Editor.Frontend
             BuildCrewDoor(stations, materials);
             BuildCargoAndDetails(layout, materials);
 
-            var player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            player.name = "Player";
+            var player = new GameObject("Player");
             player.transform.position = new Vector3(0f, 1f, -7.2f);
-            Object.DestroyImmediate(player.GetComponent<CapsuleCollider>());
-            player.GetComponent<Renderer>().sharedMaterial = materials["Player"];
             var characterController = player.AddComponent<CharacterController>();
             characterController.height = 2f;
             characterController.radius = .45f;
             player.AddComponent<HubPlayerController>();
+            AttachVisual(player, VisualArchetype.Player);
 
             var cameraObject = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener), typeof(QuarterViewCamera));
             cameraObject.tag = "MainCamera";
@@ -332,6 +333,12 @@ namespace AlmostDelivered.Editor.Frontend
             }
 
             EditorBuildSettings.scenes = ordered.ToArray();
+        }
+
+        private static void AttachVisual(GameObject actor, VisualArchetype archetype)
+        {
+            var visual = LowPolyAssetFactory.InstantiateVisual(actor, archetype);
+            visual.transform.localPosition = Vector3.down;
         }
 
         private static Transform Child(Transform parent, string name)

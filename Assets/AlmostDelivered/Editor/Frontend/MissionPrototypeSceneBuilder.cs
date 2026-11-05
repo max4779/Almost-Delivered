@@ -3,6 +3,8 @@ using System.IO;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.Presentation;
+using AlmostDelivered.Presentation.Editor;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -26,11 +28,8 @@ namespace AlmostDelivered.Editor.Frontend
 
             var floorMaterial = Material("Floor");
             var darkMaterial = Material("Dark");
-            var playerMaterial = Material("Player");
             var cyanMaterial = Material("Cyan");
             var amberMaterial = Material("Amber");
-            var wardenMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/AlmostDelivered/Art/Materials/Generated/Commander.mat") ?? amberMaterial;
-            var chargerMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/AlmostDelivered/Art/Materials/Generated/Charger.mat") ?? amberMaterial;
 
             Cube("Mission Floor", root.transform, new Vector3(0f, -.5f, 0f), new Vector3(40f, 1f, 32f), floorMaterial);
             Cube("North Boundary", root.transform, new Vector3(0f, 1f, 16f), new Vector3(40f, 2f, .6f), darkMaterial);
@@ -49,7 +48,7 @@ namespace AlmostDelivered.Editor.Frontend
             projectileTemplate.AddComponent<CombatProjectile>();
             projectileTemplate.SetActive(false);
 
-            var player = Actor("Player", root.transform, new Vector3(0f, 1f, -8f), playerMaterial, CombatTeamId.Player);
+            var player = Actor("Player", root.transform, new Vector3(0f, 1f, -8f), CombatTeamId.Player, VisualArchetype.Player);
             var playerPrimitiveCollider = player.GetComponent<CapsuleCollider>();
             Object.DestroyImmediate(playerPrimitiveCollider);
             var playerController = player.AddComponent<CharacterController>();
@@ -61,7 +60,7 @@ namespace AlmostDelivered.Editor.Frontend
             var playerInput = player.AddComponent<MissionPlayerController>();
             playerInput.Configure(playerController, playerAttack, 6.5f);
 
-            var warden = Actor("Warden Boss", root.transform, new Vector3(-8f, 1f, 8f), wardenMaterial, CombatTeamId.Enemy);
+            var warden = Actor("Warden Boss", root.transform, new Vector3(-8f, 1f, 8f), CombatTeamId.Enemy, VisualArchetype.Commander);
             SetMaxHealth(warden.GetComponent<ActorHealth>(), 220f);
             var wardenAttack = warden.AddComponent<RangedAttackController>();
             var wardenMuzzle = Child(warden.transform, "Warden Muzzle", new Vector3(0f, .65f, .9f));
@@ -69,7 +68,7 @@ namespace AlmostDelivered.Editor.Frontend
             var wardenBoss = warden.AddComponent<PrototypeBossController>();
             wardenBoss.Configure(PrototypeBossMode.RangedWarden, player.transform, wardenAttack, 0f, 2f, 10f, 1f, 4f);
 
-            var charger = Actor("Charger Boss", root.transform, new Vector3(8f, 1f, 8f), chargerMaterial, CombatTeamId.Enemy);
+            var charger = Actor("Charger Boss", root.transform, new Vector3(8f, 1f, 8f), CombatTeamId.Enemy, VisualArchetype.Charger);
             SetMaxHealth(charger.GetComponent<ActorHealth>(), 300f);
             var chargerBoss = charger.AddComponent<PrototypeBossController>();
             chargerBoss.Configure(PrototypeBossMode.IronCharger, player.transform, null, 3.8f, 1.7f, 16f, 1.1f, 5.5f);
@@ -82,15 +81,18 @@ namespace AlmostDelivered.Editor.Frontend
             Debug.Log("MISSION_PROTOTYPE_BUILT " + ScenePath);
         }
 
-        private static GameObject Actor(string name, Transform parent, Vector3 position, Material material, CombatTeamId team)
+        private static GameObject Actor(string name, Transform parent, Vector3 position, CombatTeamId team, VisualArchetype archetype)
         {
-            var actor = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-            actor.name = name;
+            var actor = new GameObject(name);
             actor.transform.SetParent(parent, false);
             actor.transform.position = position;
-            actor.GetComponent<Renderer>().sharedMaterial = material;
+            var collider = actor.AddComponent<CapsuleCollider>();
+            collider.height = 2f;
+            collider.radius = .5f;
             actor.AddComponent<ActorHealth>();
             actor.AddComponent<CombatTeam>().Team = team;
+            var visual = LowPolyAssetFactory.InstantiateVisual(actor, archetype);
+            visual.transform.localPosition = Vector3.down;
             return actor;
         }
 

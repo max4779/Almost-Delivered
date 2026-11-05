@@ -3,6 +3,7 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.Presentation;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -48,6 +49,17 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void MissionActorsUseGeneratedArchetypes()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+
+            AssertVisual(Find(scene, "Player"), VisualArchetype.Player);
+            AssertVisual(Find(scene, "Warden Boss"), VisualArchetype.Commander);
+            AssertVisual(Find(scene, "Charger Boss"), VisualArchetype.Charger);
+        }
+
+        [Test]
         public void RepeatedBuildKeepsOneMissionRootAndOneBuildEntry()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
@@ -65,6 +77,15 @@ namespace AlmostDelivered.Tests.EditMode
                 .SelectMany(root => root.GetComponentsInChildren<Transform>(true))
                 .Select(transform => transform.gameObject)
                 .Single(candidate => candidate.name == name);
+        }
+
+        private static void AssertVisual(GameObject actor, VisualArchetype expected)
+        {
+            var visuals = actor.GetComponentsInChildren<LowPolyVisual>(true);
+            Assert.That(actor.GetComponent<Renderer>(), Is.Null, actor.name + " gameplay root must stay invisible.");
+            Assert.That(visuals, Has.Length.EqualTo(1), actor.name);
+            Assert.That(visuals[0].Archetype, Is.EqualTo(expected), actor.name);
+            Assert.That(actor.transform.Cast<Transform>().Count(child => child.name == "VisualRoot"), Is.EqualTo(1), actor.name);
         }
     }
 }
