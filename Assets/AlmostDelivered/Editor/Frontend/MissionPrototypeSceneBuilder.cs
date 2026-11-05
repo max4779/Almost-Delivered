@@ -67,12 +67,12 @@ namespace AlmostDelivered.Editor.Frontend
             var wardenMuzzle = Child(warden.transform, "Warden Muzzle", new Vector3(0f, .65f, .9f));
             wardenAttack.Configure(projectileTemplate, wardenMuzzle, 10f, .9f, 18f, 3f);
             var wardenBoss = warden.AddComponent<PrototypeBossController>();
-            wardenBoss.Configure(PrototypeBossMode.RangedWarden, player.transform, wardenAttack, 0f, 2f, 10f, 1f);
+            wardenBoss.Configure(PrototypeBossMode.RangedWarden, player.transform, wardenAttack, 0f, 2f, 10f, 1f, 4f);
 
             var charger = Actor("Charger Boss", root.transform, new Vector3(8f, 1f, 8f), chargerMaterial, CombatTeamId.Enemy);
             SetMaxHealth(charger.GetComponent<ActorHealth>(), 300f);
             var chargerBoss = charger.AddComponent<PrototypeBossController>();
-            chargerBoss.Configure(PrototypeBossMode.IronCharger, player.transform, null, 3.8f, 1.7f, 16f, 1.1f);
+            chargerBoss.Configure(PrototypeBossMode.IronCharger, player.transform, null, 3.8f, 1.7f, 16f, 1.1f, 5.5f);
 
             BuildCamera(player.transform);
             BuildLighting(root.transform);

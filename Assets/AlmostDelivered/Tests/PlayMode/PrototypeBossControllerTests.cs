@@ -72,6 +72,21 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(boss.transform.position, Is.EqualTo(Vector3.zero));
         }
 
+        [Test]
+        public void ActivationDelayKeepsBossIdleUntilElapsed()
+        {
+            var target = Actor("Target", CombatTeamId.Player, new Vector3(0f, 0f, 8f));
+            var boss = Boss("Charger", CombatTeamId.Enemy, Vector3.zero, out var controller, out _);
+            controller.Configure(PrototypeBossMode.IronCharger, target.transform, null, 4f, 1.5f, 15f, 1f, 2f);
+
+            controller.Tick(0f, .75f);
+            controller.Tick(.75f, 1.25f);
+            Assert.That(boss.transform.position, Is.EqualTo(Vector3.zero));
+
+            controller.Tick(2f, .5f);
+            Assert.That(boss.transform.position.z, Is.EqualTo(2f).Within(.01f));
+        }
+
         private static GameObject Actor(string name, CombatTeamId team, Vector3 position)
         {
             var actor = new GameObject(name, typeof(ActorHealth), typeof(CombatTeam));

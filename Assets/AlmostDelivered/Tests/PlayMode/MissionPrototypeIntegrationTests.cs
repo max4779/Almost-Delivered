@@ -79,6 +79,7 @@ namespace AlmostDelivered.Tests.PlayMode
             charger.transform.position = player.transform.position + Vector3.right;
             Physics.SyncTransforms();
             var playerHealthBefore = playerHealth.CurrentHealth;
+            charger.Tick(Time.time, 6f);
             charger.Tick(Time.time + 10f, 0f);
 
             Assert.That(playerHealth.CurrentHealth, Is.LessThan(playerHealthBefore));

@@ -19,10 +19,12 @@ namespace AlmostDelivered.Gameplay
         [SerializeField, Min(.1f)] private float contactRange = 1.6f;
         [SerializeField, Min(0f)] private float contactDamage = 18f;
         [SerializeField, Min(0f)] private float contactCooldown = 1f;
+        [SerializeField, Min(0f)] private float activationDelay;
 
         private ActorHealth health;
         private CharacterController characterController;
         private float nextContactTime;
+        private float activationDelayRemaining;
 
         public PrototypeBossMode Mode => mode;
         public bool IsDefeated => health != null && health.IsDead;
@@ -34,7 +36,8 @@ namespace AlmostDelivered.Gameplay
             float speed,
             float range,
             float damage,
-            float cooldown)
+            float cooldown,
+            float delay = 0f)
         {
             mode = bossMode;
             target = combatTarget;
@@ -43,6 +46,8 @@ namespace AlmostDelivered.Gameplay
             contactRange = Mathf.Max(.1f, range);
             contactDamage = Mathf.Max(0f, damage);
             contactCooldown = Mathf.Max(0f, cooldown);
+            activationDelay = Mathf.Max(0f, delay);
+            activationDelayRemaining = activationDelay;
             nextContactTime = 0f;
         }
 
@@ -50,6 +55,7 @@ namespace AlmostDelivered.Gameplay
         {
             health = GetComponent<ActorHealth>();
             characterController = GetComponent<CharacterController>();
+            activationDelayRemaining = activationDelay;
             health.Died += HandleDeath;
         }
 
@@ -68,6 +74,12 @@ namespace AlmostDelivered.Gameplay
         {
             if (!enabled || IsDefeated || target == null || !IsFinite(now) || !IsFinite(deltaTime) || deltaTime < 0f)
                 return;
+
+            if (activationDelayRemaining > 0f)
+            {
+                activationDelayRemaining = Mathf.Max(0f, activationDelayRemaining - deltaTime);
+                return;
+            }
 
             var targetHealth = target.GetComponentInParent<ActorHealth>();
             if (targetHealth == null || targetHealth.IsDead)

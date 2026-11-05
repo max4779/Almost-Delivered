@@ -800,6 +800,7 @@ MonoBehaviour:
   contactRange: 2
   contactDamage: 10
   contactCooldown: 1
+  activationDelay: 4
 --- !u!1 &1032238016
 GameObject:
   m_ObjectHideFlags: 0
@@ -1035,6 +1036,7 @@ MonoBehaviour:
   contactRange: 1.7
   contactDamage: 16
   contactCooldown: 1.1
+  activationDelay: 5.5
 --- !u!4 &1103241718
 Transform:
   m_ObjectHideFlags: 0
