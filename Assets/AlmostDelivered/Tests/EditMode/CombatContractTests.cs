@@ -45,6 +45,67 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(deaths, Is.EqualTo(1));
         }
 
+        [Test]
+        public void ConfigureMaximum_RefillsOrClampsCurrentHealth()
+        {
+            var health = actor.AddComponent<ActorHealth>();
+
+            health.ConfigureMaximum(150f);
+            Assert.That(health.MaxHealth, Is.EqualTo(150f));
+            Assert.That(health.CurrentHealth, Is.EqualTo(150f));
+
+            health.ApplyDamage(25f);
+            health.ConfigureMaximum(80f, false);
+            Assert.That(health.MaxHealth, Is.EqualTo(80f));
+            Assert.That(health.CurrentHealth, Is.EqualTo(80f));
+
+            health.ConfigureMaximum(200f, false);
+            Assert.That(health.MaxHealth, Is.EqualTo(200f));
+            Assert.That(health.CurrentHealth, Is.EqualTo(80f));
+
+            health.ConfigureMaximum(50f);
+            Assert.That(health.CurrentHealth, Is.EqualTo(50f));
+        }
+
+        [TestCase(0f)]
+        [TestCase(-1f)]
+        [TestCase(float.NaN)]
+        [TestCase(float.PositiveInfinity)]
+        public void ConfigureMaximum_InvalidValue_RejectsWithoutChangingHealth(float maximum)
+        {
+            var health = actor.AddComponent<ActorHealth>();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => health.ConfigureMaximum(maximum));
+            Assert.That(health.MaxHealth, Is.EqualTo(100f));
+            Assert.That(health.CurrentHealth, Is.EqualTo(100f));
+        }
+
+        [Test]
+        public void ApplyDamage_RaisesOneHealthChangedEventWithCurrentAndMaximum()
+        {
+            var health = actor.AddComponent<ActorHealth>();
+            var changes = new List<Vector2>();
+            health.HealthChanged += (current, maximum) => changes.Add(new Vector2(current, maximum));
+
+            health.ApplyDamage(25f);
+
+            Assert.That(changes, Is.EqualTo(new[] { new Vector2(75f, 100f) }));
+        }
+
+        [Test]
+        public void FatalDamage_RaisesFinalHealthChangeBeforeDeath()
+        {
+            var health = actor.AddComponent<ActorHealth>();
+            var events = new List<string>();
+            health.HealthChanged += (current, _) => events.Add($"health:{current:0}");
+            health.Died += () => events.Add("died");
+
+            health.ApplyDamage(100f);
+            health.ApplyDamage(10f);
+
+            Assert.That(events, Is.EqualTo(new[] { "health:0", "died" }));
+        }
+
         [TestCase(-1f)]
         [TestCase(float.NaN)]
         [TestCase(float.PositiveInfinity)]
