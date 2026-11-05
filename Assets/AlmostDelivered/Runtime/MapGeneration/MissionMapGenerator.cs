@@ -27,7 +27,9 @@ namespace AlmostDelivered.MapGeneration
         [SerializeField] private MissionMapTheme theme;
         [SerializeField] private Vector2 halfExtents = new Vector2(18f, 14f);
         [SerializeField, Min(0)] private int terrainDetailCount = 24;
+        [SerializeField, Min(0)] private int traversableTerrainCount;
         [SerializeField, Min(0)] private int blockingObstacleCount = 14;
+        [SerializeField, Min(0)] private int foliageCount;
         [SerializeField, Min(0)] private int maxAttempts = 2400;
         [SerializeField] private MissionMapProtectedZone[] protectedZones = Array.Empty<MissionMapProtectedZone>();
         [SerializeField] private bool randomizeOnStart = true;
@@ -36,7 +38,9 @@ namespace AlmostDelivered.MapGeneration
 
         public MissionMapTheme Theme => theme;
         public int TerrainDetailCount => terrainDetailCount;
+        public int TraversableTerrainCount => traversableTerrainCount;
         public int BlockingObstacleCount => blockingObstacleCount;
+        public int FoliageCount => foliageCount;
         public bool RandomizeOnStart => randomizeOnStart;
         public int LastSeed { get; private set; }
         public Transform GeneratedRoot => generatedRoot;
@@ -50,10 +54,35 @@ namespace AlmostDelivered.MapGeneration
             bool valueRandomizeOnStart,
             int valueMaxAttempts = 2400)
         {
+            Configure(
+                valueTheme,
+                valueHalfExtents,
+                valueTerrainDetailCount,
+                0,
+                valueBlockingObstacleCount,
+                0,
+                valueProtectedZones,
+                valueRandomizeOnStart,
+                valueMaxAttempts);
+        }
+
+        public void Configure(
+            MissionMapTheme valueTheme,
+            Vector2 valueHalfExtents,
+            int valueTerrainDetailCount,
+            int valueTraversableTerrainCount,
+            int valueBlockingObstacleCount,
+            int valueFoliageCount,
+            MissionMapProtectedZone[] valueProtectedZones,
+            bool valueRandomizeOnStart,
+            int valueMaxAttempts = 2400)
+        {
             theme = valueTheme;
             halfExtents = valueHalfExtents;
             terrainDetailCount = Mathf.Max(0, valueTerrainDetailCount);
+            traversableTerrainCount = Mathf.Max(0, valueTraversableTerrainCount);
             blockingObstacleCount = Mathf.Max(0, valueBlockingObstacleCount);
+            foliageCount = Mathf.Max(0, valueFoliageCount);
             protectedZones = valueProtectedZones ?? Array.Empty<MissionMapProtectedZone>();
             randomizeOnStart = valueRandomizeOnStart;
             maxAttempts = Mathf.Max(0, valueMaxAttempts);
@@ -82,16 +111,28 @@ namespace AlmostDelivered.MapGeneration
                 "Terrain Details",
                 .015f,
                 protectedExclusions);
-            var blockingExclusions = new List<MapExclusionZone>(protectedExclusions);
+
+            var environmentExclusions = new List<MapExclusionZone>(protectedExclusions);
             if (extraBlockingExclusions != null)
             {
                 for (var index = 0; index < extraBlockingExclusions.Count; index++)
                 {
-                    blockingExclusions.Add(extraBlockingExclusions[index]);
+                    environmentExclusions.Add(extraBlockingExclusions[index]);
                 }
             }
 
-            GenerateCategory(
+            var hillPlacements = GenerateCategory(
+                theme.TraversableTerrain,
+                traversableTerrainCount,
+                unchecked(seed ^ 0x51EAD123),
+                MissionMapPieceCategory.TraversableTerrain,
+                "Traversable Terrain",
+                0f,
+                environmentExclusions);
+
+            var blockingExclusions = new List<MapExclusionZone>(environmentExclusions);
+            AppendPlacementExclusions(blockingExclusions, hillPlacements);
+            var blockerPlacements = GenerateCategory(
                 theme.BlockingObstacles,
                 blockingObstacleCount,
                 unchecked(seed ^ (int)0xA341316C),
@@ -99,6 +140,17 @@ namespace AlmostDelivered.MapGeneration
                 "Blocking Obstacles",
                 0f,
                 blockingExclusions);
+
+            var foliageExclusions = new List<MapExclusionZone>(blockingExclusions);
+            AppendPlacementExclusions(foliageExclusions, blockerPlacements);
+            GenerateCategory(
+                theme.Foliage,
+                foliageCount,
+                unchecked(seed ^ 0x63D83595),
+                MissionMapPieceCategory.Foliage,
+                "Foliage",
+                .02f,
+                foliageExclusions);
         }
 
         private void Start()
@@ -129,7 +181,7 @@ namespace AlmostDelivered.MapGeneration
             generatedRoot.SetParent(transform, false);
         }
 
-        private void GenerateCategory(
+        private IReadOnlyList<MapPlacement> GenerateCategory(
             IReadOnlyList<MissionMapPiece> catalog,
             int requestedCount,
             int seed,
@@ -142,7 +194,7 @@ namespace AlmostDelivered.MapGeneration
             categoryRoot.SetParent(generatedRoot, false);
             if (catalog == null || catalog.Count == 0 || requestedCount <= 0)
             {
-                return;
+                return Array.Empty<MapPlacement>();
             }
 
             var specs = new List<MapPieceSpec>(catalog.Count);
@@ -166,6 +218,18 @@ namespace AlmostDelivered.MapGeneration
                 instance.transform.localRotation = Quaternion.Euler(0f, placement.QuarterTurns * 90f, 0f);
                 instance.SetActive(true);
                 instance.AddComponent<MissionMapPieceInstance>().Configure(category, placement);
+            }
+
+            return placements;
+        }
+
+        private static void AppendPlacementExclusions(
+            ICollection<MapExclusionZone> exclusions,
+            IReadOnlyList<MapPlacement> placements)
+        {
+            for (var index = 0; index < placements.Count; index++)
+            {
+                exclusions.Add(new MapExclusionZone(placements[index].Position, placements[index].Footprint));
             }
         }
 

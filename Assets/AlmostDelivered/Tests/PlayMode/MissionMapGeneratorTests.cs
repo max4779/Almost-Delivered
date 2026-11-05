@@ -18,17 +18,21 @@ namespace AlmostDelivered.Tests.PlayMode
         public void SetUp()
         {
             var terrain = Primitive("Test Terrain", PrimitiveType.Quad, false);
+            var hill = Primitive("Test Hill", PrimitiveType.Sphere, true);
             var blocker = Primitive("Test Blocker", PrimitiveType.Cube, true);
+            var foliage = Primitive("Test Foliage", PrimitiveType.Quad, false);
             theme = ScriptableObject.CreateInstance<MissionMapTheme>();
             created.Add(theme);
             theme.Configure(
                 new[] { new MissionMapPiece(terrain, new Vector2(1.5f, 1.5f)) },
-                new[] { new MissionMapPiece(blocker, new Vector2(2f, 2f)) });
+                new[] { new MissionMapPiece(hill, new Vector2(3f, 3f)) },
+                new[] { new MissionMapPiece(blocker, new Vector2(2f, 2f)) },
+                new[] { new MissionMapPiece(foliage, new Vector2(1f, 1f)) });
 
             var root = new GameObject("Map Generator Test");
             created.Add(root);
             generator = root.AddComponent<MissionMapGenerator>();
-            generator.Configure(theme, new Vector2(12f, 10f), 8, 6, ProtectedZones(), false, 600);
+            generator.Configure(theme, new Vector2(12f, 10f), 8, 4, 6, 10, ProtectedZones(), false, 600);
         }
 
         [UnityTearDown]
@@ -141,6 +145,90 @@ namespace AlmostDelivered.Tests.PlayMode
             var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
             Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.True);
             Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator ExtendedCategoriesAreGeneratedDeterministically()
+        {
+            generator.Generate(1117);
+            var first = Snapshot(generator.GeneratedRoot);
+            var firstCategories = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>()
+                .Select(piece => piece.Category)
+                .Distinct()
+                .ToArray();
+
+            generator.Generate(1117);
+            yield return null;
+            var second = Snapshot(generator.GeneratedRoot);
+
+            Assert.That(firstCategories, Does.Contain(MissionMapPieceCategory.TerrainDetail));
+            Assert.That(firstCategories, Does.Contain(MissionMapPieceCategory.TraversableTerrain));
+            Assert.That(firstCategories, Does.Contain(MissionMapPieceCategory.BlockingObstacle));
+            Assert.That(firstCategories, Does.Contain(MissionMapPieceCategory.Foliage));
+            Assert.That(second, Is.EqualTo(first));
+        }
+
+        [UnityTest]
+        public IEnumerator RouteExclusionsProtectAllPhysicalAndVisualEnvironment()
+        {
+            var wholeMap = new MapExclusionZone(Vector2.zero, new Vector2(24f, 20f));
+
+            generator.Generate(444, new[] { wholeMap });
+            yield return null;
+
+            var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.True);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.False);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.False);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator BlockersAndFoliageAvoidGeneratedHills()
+        {
+            generator.Generate(7717);
+            yield return null;
+
+            var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
+            var hills = pieces.Where(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain).ToArray();
+            var laterPieces = pieces.Where(piece =>
+                piece.Category == MissionMapPieceCategory.BlockingObstacle ||
+                piece.Category == MissionMapPieceCategory.Foliage).ToArray();
+
+            Assert.That(hills, Is.Not.Empty);
+            Assert.That(laterPieces, Is.Not.Empty);
+            foreach (var hill in hills)
+            {
+                foreach (var laterPiece in laterPieces)
+                {
+                    Assert.That(
+                        Overlaps(hill.Position, hill.Footprint, laterPiece.Position, laterPiece.Footprint),
+                        Is.False,
+                        $"{laterPiece.name} overlaps {hill.name}");
+                }
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator EmptyExtendedCatalogsRemainSafe()
+        {
+            var sparseTheme = ScriptableObject.CreateInstance<MissionMapTheme>();
+            created.Add(sparseTheme);
+            sparseTheme.Configure(
+                new[] { new MissionMapPiece(Primitive("Sparse Terrain", PrimitiveType.Quad, false), Vector2.one) },
+                null,
+                new[] { new MissionMapPiece(Primitive("Sparse Blocker", PrimitiveType.Cube, true), Vector2.one) },
+                null);
+            generator.Configure(sparseTheme, new Vector2(8f, 8f), 3, 5, 3, 5, System.Array.Empty<MissionMapProtectedZone>(), false, 200);
+
+            generator.Generate(8080);
+            yield return null;
+
+            var pieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>();
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.True);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.True);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.False);
+            Assert.That(pieces.Any(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.False);
         }
 
         private GameObject Primitive(string name, PrimitiveType type, bool keepCollider)
