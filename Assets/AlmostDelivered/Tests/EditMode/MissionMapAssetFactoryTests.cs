@@ -21,9 +21,13 @@ namespace AlmostDelivered.Tests.EditMode
 
             Assert.That(theme, Is.Not.Null);
             Assert.That(theme.TerrainDetails.Count, Is.GreaterThanOrEqualTo(3));
+            Assert.That(theme.TraversableTerrain.Count, Is.GreaterThanOrEqualTo(2));
             Assert.That(theme.BlockingObstacles.Count, Is.GreaterThanOrEqualTo(4));
+            Assert.That(theme.Foliage.Count, Is.GreaterThanOrEqualTo(2));
             AssertCatalog(theme.TerrainDetails);
+            AssertCatalog(theme.TraversableTerrain);
             AssertCatalog(theme.BlockingObstacles);
+            AssertCatalog(theme.Foliage);
         }
 
         [Test]
@@ -46,6 +50,64 @@ namespace AlmostDelivered.Tests.EditMode
             {
                 Assert.That(piece.Prefab.GetComponentsInChildren<Collider>(true), Is.Not.Empty, piece.Prefab.name);
             }
+        }
+
+        [Test]
+        public void TraversableTerrainUsesElevatedMeshColliders()
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath);
+
+            Assert.That(theme.TraversableTerrain.Count, Is.GreaterThanOrEqualTo(2));
+            foreach (var piece in theme.TraversableTerrain)
+            {
+                var filter = piece.Prefab.GetComponent<MeshFilter>();
+                var collider = piece.Prefab.GetComponent<MeshCollider>();
+                Assert.That(filter, Is.Not.Null, piece.Prefab.name);
+                Assert.That(filter.sharedMesh, Is.Not.Null, piece.Prefab.name);
+                Assert.That(filter.sharedMesh.bounds.size.y, Is.GreaterThanOrEqualTo(1f), piece.Prefab.name);
+                Assert.That(collider, Is.Not.Null, piece.Prefab.name);
+                Assert.That(collider.sharedMesh, Is.SameAs(filter.sharedMesh), piece.Prefab.name);
+                Assert.That(MaxSurfaceSlope(filter.sharedMesh), Is.LessThan(45f), piece.Prefab.name);
+            }
+        }
+
+        [Test]
+        public void FoliageUsesSingleMeshWithoutColliders()
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath);
+
+            Assert.That(theme.Foliage.Count, Is.GreaterThanOrEqualTo(2));
+            foreach (var piece in theme.Foliage)
+            {
+                var filters = piece.Prefab.GetComponentsInChildren<MeshFilter>(true);
+                Assert.That(filters, Has.Length.EqualTo(1), piece.Prefab.name);
+                Assert.That(filters[0].sharedMesh, Is.Not.Null, piece.Prefab.name);
+                Assert.That(filters[0].sharedMesh.triangles, Is.Not.Empty, piece.Prefab.name);
+                Assert.That(piece.Prefab.GetComponentsInChildren<MeshRenderer>(true), Has.Length.EqualTo(1), piece.Prefab.name);
+                Assert.That(piece.Prefab.GetComponentsInChildren<Collider>(true), Is.Empty, piece.Prefab.name);
+            }
+        }
+
+        private static float MaxSurfaceSlope(Mesh mesh)
+        {
+            var vertices = mesh.vertices;
+            var triangles = mesh.triangles;
+            var maximum = 0f;
+            for (var index = 0; index < triangles.Length; index += 3)
+            {
+                var first = vertices[triangles[index]];
+                var second = vertices[triangles[index + 1]];
+                var third = vertices[triangles[index + 2]];
+                var normal = Vector3.Cross(second - first, third - first).normalized;
+                if (normal.y < 0f)
+                {
+                    normal = -normal;
+                }
+
+                maximum = Mathf.Max(maximum, Vector3.Angle(normal, Vector3.up));
+            }
+
+            return maximum;
         }
 
         private static void AssertCatalog(System.Collections.Generic.IReadOnlyList<MissionMapPiece> catalog)

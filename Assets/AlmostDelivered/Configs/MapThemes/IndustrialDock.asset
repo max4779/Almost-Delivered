@@ -21,6 +21,11 @@ MonoBehaviour:
     footprint: {x: 2.4, y: 1.8}
   - prefab: {fileID: 8173358457260159253, guid: 819e9ae7512a9d047b0e78b14b5e2c12, type: 3}
     footprint: {x: 2.2, y: 2.2}
+  traversableTerrain:
+  - prefab: {fileID: 3113888887474246733, guid: bd7aee1843b31424ca4ab0e67067c94b, type: 3}
+    footprint: {x: 5.8, y: 4.8}
+  - prefab: {fileID: 1476674938283849958, guid: cf8da488b4d56cf4d9e249f8b7936cc5, type: 3}
+    footprint: {x: 4.4, y: 3.8}
   blockingObstacles:
   - prefab: {fileID: 2714328537164058660, guid: 745235f57dc45c54087b8ab86874ad4b, type: 3}
     footprint: {x: 2.8, y: 2.4}
@@ -30,3 +35,8 @@ MonoBehaviour:
     footprint: {x: 2.8, y: 2.2}
   - prefab: {fileID: 18980523764509137, guid: 1ac4244d9afdefe42a32411da4da1263, type: 3}
     footprint: {x: 3.3, y: 2.1}
+  foliage:
+  - prefab: {fileID: 363318068338538282, guid: 65dcba2060b7dc241ad3b5082b694409, type: 3}
+    footprint: {x: 1.8, y: 1.8}
+  - prefab: {fileID: 8491481275381766453, guid: 2d5db37d35593d9478c57ef1f4ab1966, type: 3}
+    footprint: {x: 1.6, y: 1.6}
