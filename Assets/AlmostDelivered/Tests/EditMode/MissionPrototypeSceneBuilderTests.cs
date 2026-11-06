@@ -76,7 +76,7 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(PayloadWaveSpawner.WaveCountFor(2, false), Is.EqualTo(18));
             Assert.That(PayloadWaveSpawner.WaveCountFor(3, true), Is.EqualTo(22));
 
-            var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 3f);
+            var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 8f);
             var generatedPieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true);
             Assert.That(generatedPieces, Has.Length.EqualTo(116), "Generated map pieces must survive a saved-scene reload.");
             Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.EqualTo(6));
@@ -106,6 +106,25 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(relays.Count(relay => relay.transform.Find("Supply Cache") != null), Is.EqualTo(3));
             Assert.That(relays.Single(relay => relay.IsFinalDestination).name, Is.EqualTo("Final Destination Relay"));
             Assert.That(payload.transform.Cast<Transform>().Count(child => child.name.StartsWith("Collected Cargo ")), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void BuildCreatesNaturalRoadWithoutRestoringWorldRouteLine()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+            var roads = Object.FindObjectsOfType<PayloadRoadView>(true);
+
+            Assert.That(roads, Has.Length.EqualTo(1));
+            Assert.That(roads[0].RoadWidth, Is.EqualTo(5.5f));
+            Assert.That(roads[0].RoadMesh, Is.Not.Null);
+            Assert.That(roads[0].RoadMesh.vertexCount, Is.GreaterThan(0));
+            Assert.That(roads[0].RoadMesh.subMeshCount, Is.EqualTo(2));
+            Assert.That(roads[0].GetComponent<MeshRenderer>().sharedMaterials.Select(item => item.name),
+                Is.EqualTo(new[] { "Earth", "Moss" }));
+            Assert.That(roads[0].RoadsideFoliageCount, Is.InRange(8, 30));
+            Assert.That(roads[0].GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
         }
 
         [Test]

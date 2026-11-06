@@ -21,6 +21,8 @@ namespace AlmostDelivered.Editor.Frontend
         public const int MissionSeed = 4711;
 
         private static readonly Rect MissionBounds = new Rect(-28f, -50f, 56f, 100f);
+        private const float RouteCorridorWidth = 8f;
+        private const float RoadWidth = 5.5f;
         private const string FontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
         private const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/Frontend";
 
@@ -32,9 +34,10 @@ namespace AlmostDelivered.Editor.Frontend
             LowPolyAssetFactory.CreateOrUpdateAll();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject("Mission Prototype");
-            var route = PayloadRoutePlanner.Generate(MissionSeed, MissionBounds, 5, 3f);
+            var route = PayloadRoutePlanner.Generate(MissionSeed, MissionBounds, 5, RouteCorridorWidth);
 
             BuildArena(root.transform);
+            BuildPayloadRoad(root.transform, route);
             var projectileTemplate = BuildProjectile(root.transform);
             var routeDirection = (route.Points[1] - route.Points[0]).normalized;
             var player = BuildPlayer(root.transform, route.Points[0] + routeDirection * 3f + Vector3.up, projectileTemplate);
@@ -46,7 +49,19 @@ namespace AlmostDelivered.Editor.Frontend
             var controllerObject = new GameObject("Payload Mission Controller");
             controllerObject.transform.SetParent(root.transform, false);
             var mission = controllerObject.AddComponent<PayloadMissionController>();
-            mission.Configure(true, MissionSeed, MissionBounds, player.transform, payload.transform, mapGenerator, waveSpawner, .35f, 8f, 4.5f);
+            mission.Configure(
+                true,
+                MissionSeed,
+                MissionBounds,
+                player.transform,
+                payload.transform,
+                mapGenerator,
+                waveSpawner,
+                .35f,
+                8f,
+                4.5f,
+                5,
+                RouteCorridorWidth);
 
             BuildPayloadEscortRadius(payload.transform, mission);
             BuildSupplyRelays(root.transform, payload.transform, mission, route);
@@ -68,6 +83,23 @@ namespace AlmostDelivered.Editor.Frontend
             Cube("South Boundary", parent, new Vector3(0f, 1f, -50f), new Vector3(56f, 2f, .6f), dark);
             Cube("West Boundary", parent, new Vector3(-28f, 1f, 0f), new Vector3(.6f, 2f, 100f), dark);
             Cube("East Boundary", parent, new Vector3(28f, 1f, 0f), new Vector3(.6f, 2f, 100f), dark);
+        }
+
+        private static void BuildPayloadRoad(Transform parent, PayloadRoutePlan route)
+        {
+            var roadObject = new GameObject("Payload Road", typeof(MeshFilter), typeof(MeshRenderer), typeof(PayloadRoadView));
+            roadObject.transform.SetParent(parent, false);
+            var earth = AssetDatabase.LoadAssetAtPath<Material>($"{MissionMapAssetFactory.MaterialRoot}/Earth.mat");
+            var moss = AssetDatabase.LoadAssetAtPath<Material>($"{MissionMapAssetFactory.MaterialRoot}/Moss.mat");
+            var grass = AssetDatabase.LoadAssetAtPath<GameObject>($"{MissionMapAssetFactory.PrefabRoot}/Foliage/GrassPatch.prefab");
+            var tallGrass = AssetDatabase.LoadAssetAtPath<GameObject>($"{MissionMapAssetFactory.PrefabRoot}/Foliage/TallGrass.prefab");
+            roadObject.GetComponent<PayloadRoadView>().Configure(
+                route,
+                MissionSeed,
+                RoadWidth,
+                earth,
+                moss,
+                new[] { grass, tallGrass });
         }
 
         private static GameObject BuildProjectile(Transform parent)
