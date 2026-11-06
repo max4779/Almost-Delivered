@@ -44,6 +44,38 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ProjectileSpawnedInsideEnemyStillDamagesOnce()
+        {
+            var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
+            var enemy = Actor("Enemy", CombatTeamId.Enemy, new Vector3(0f, 0f, .2f), true);
+            var projectile = Projectile(owner, CombatTeamId.Player, Vector3.forward, 100f, 20f, 1f, .14f);
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Assert.That(enemy.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(80f));
+            Assert.That(projectile == null, Is.True);
+            Object.Destroy(owner);
+            Object.Destroy(enemy);
+        }
+
+        [UnityTest]
+        public IEnumerator ProjectileSweepUsesVisibleSphereRadiusAtEnemyEdge()
+        {
+            var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
+            var enemy = Actor("Enemy", CombatTeamId.Enemy, new Vector3(.62f, 0f, 1f), true);
+            var projectile = Projectile(owner, CombatTeamId.Player, Vector3.forward, 100f, 20f, 1f, .14f);
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Assert.That(enemy.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(80f));
+            Assert.That(projectile == null, Is.True);
+            Object.Destroy(owner);
+            Object.Destroy(enemy);
+        }
+
+        [UnityTest]
         public IEnumerator ProjectileDiesOnWorldGeometry()
         {
             var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
@@ -90,10 +122,17 @@ namespace AlmostDelivered.Tests.PlayMode
             Vector3 direction,
             float speed,
             float damage,
-            float lifetime)
+            float lifetime,
+            float radius = 0f)
         {
             var projectile = new GameObject("Projectile", typeof(CombatProjectile));
             projectile.transform.position = owner.transform.position;
+            if (radius > 0f)
+            {
+                var collider = projectile.AddComponent<SphereCollider>();
+                collider.radius = radius;
+                collider.isTrigger = true;
+            }
             projectile.GetComponent<CombatProjectile>().Configure(owner, team, direction, speed, damage, lifetime);
             Physics.SyncTransforms();
             return projectile;

@@ -12,6 +12,7 @@ namespace AlmostDelivered.Combat
         private float speed;
         private float damage;
         private float remainingLifetime;
+        private float collisionRadius;
         private bool configured;
         private bool resolved;
 
@@ -45,6 +46,7 @@ namespace AlmostDelivered.Combat
             speed = travelSpeed;
             damage = hitDamage;
             remainingLifetime = lifetime;
+            collisionRadius = ResolveCollisionRadius();
             configured = true;
             resolved = false;
             transform.forward = direction;
@@ -57,10 +59,21 @@ namespace AlmostDelivered.Combat
 
             var step = speed * Time.fixedDeltaTime;
             var origin = transform.position;
-            var hits = Physics.RaycastAll(origin, direction, step, ~0, QueryTriggerInteraction.Ignore)
-                .OrderBy(hit => hit.distance);
+            var overlap = Physics.OverlapSphere(origin, collisionRadius, ~0, QueryTriggerInteraction.Ignore)
+                .Where(candidate => !ShouldIgnore(candidate))
+                .OrderBy(candidate => (candidate.ClosestPoint(origin) - origin).sqrMagnitude)
+                .FirstOrDefault();
+            if (overlap != null)
+            {
+                Resolve(overlap);
+                return;
+            }
 
-            foreach (var hit in hits)
+            var hits = collisionRadius > Mathf.Epsilon
+                ? Physics.SphereCastAll(origin, collisionRadius, direction, step, ~0, QueryTriggerInteraction.Ignore)
+                : Physics.RaycastAll(origin, direction, step, ~0, QueryTriggerInteraction.Ignore);
+
+            foreach (var hit in hits.OrderBy(hit => hit.distance))
             {
                 if (ShouldIgnore(hit.collider))
                     continue;
@@ -105,6 +118,19 @@ namespace AlmostDelivered.Combat
             }
 
             Destroy(gameObject);
+        }
+
+        private float ResolveCollisionRadius()
+        {
+            var sphere = GetComponent<SphereCollider>();
+            if (sphere == null || !sphere.enabled)
+            {
+                return 0f;
+            }
+
+            var scale = transform.lossyScale;
+            var largestScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            return Mathf.Max(0f, sphere.radius * largestScale);
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
