@@ -89,6 +89,24 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void BuildUsesVisibleSupplyRelaysWithoutDrawingWorldRoute()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+            var payload = Find(scene, "Payload");
+            var relays = Object.FindObjectsOfType<PayloadRelayBeaconView>(true);
+
+            Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
+            Assert.That(relays, Has.Length.EqualTo(4));
+            Assert.That(relays.Count(relay => !relay.IsFinalDestination), Is.EqualTo(3));
+            Assert.That(relays.Count(relay => relay.IsFinalDestination), Is.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PayloadNavigationIndicator>(true), Has.Length.EqualTo(1));
+            Assert.That(relays.Count(relay => relay.transform.Find("Supply Cache") != null), Is.EqualTo(3));
+            Assert.That(relays.Single(relay => relay.IsFinalDestination).name, Is.EqualTo("Final Destination Relay"));
+            Assert.That(payload.transform.Cast<Transform>().Count(child => child.name.StartsWith("Collected Cargo ")), Is.EqualTo(3));
+        }
+
+        [Test]
         public void RepeatedBuildKeepsOneMissionRootAndOneBuildEntry()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();

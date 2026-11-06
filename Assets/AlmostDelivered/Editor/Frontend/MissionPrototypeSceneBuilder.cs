@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
@@ -47,9 +48,7 @@ namespace AlmostDelivered.Editor.Frontend
             var mission = controllerObject.AddComponent<PayloadMissionController>();
             mission.Configure(true, MissionSeed, MissionBounds, player.transform, payload.transform, mapGenerator, waveSpawner, .35f, 8f, 4.5f);
 
-            var routeViewObject = new GameObject("Payload Route");
-            routeViewObject.transform.SetParent(root.transform, false);
-            routeViewObject.AddComponent<PayloadRouteView>().Configure(route, Material("Cyan"));
+            BuildSupplyRelays(root.transform, payload.transform, mission, route);
 
             BuildCamera(player.transform);
             BuildLighting(root.transform);
@@ -106,6 +105,134 @@ namespace AlmostDelivered.Editor.Frontend
             collider.size = new Vector3(2.2f, 1.4f, 2.7f);
             LowPolyAssetFactory.InstantiateVisual(payload, VisualArchetype.Payload);
             return payload;
+        }
+
+        private static void BuildSupplyRelays(
+            Transform parent,
+            Transform payload,
+            PayloadMissionController mission,
+            PayloadRoutePlan route)
+        {
+            var cargoProgress = BuildCargoProgress(payload);
+            var relayTargets = new List<Transform>(4);
+            for (var index = 0; index < 3; index++)
+            {
+                var relay = BuildRelay(
+                    parent,
+                    $"Supply Relay {index + 1}",
+                    route.EvaluateDistance(route.CheckpointDistances[index]),
+                    index,
+                    false,
+                    mission,
+                    cargoProgress[index]);
+                relayTargets.Add(relay.transform);
+            }
+
+            var destination = BuildRelay(
+                parent,
+                "Final Destination Relay",
+                route.Destination,
+                3,
+                true,
+                mission,
+                null);
+            relayTargets.Add(destination.transform);
+
+            var navigator = new GameObject("Payload Relay Navigator");
+            navigator.transform.SetParent(payload, false);
+            navigator.transform.localPosition = new Vector3(0f, 2.7f, 0f);
+            var antenna = Primitive(
+                PrimitiveType.Cube,
+                "Antenna",
+                navigator.transform,
+                new Vector3(0f, 0f, .72f),
+                new Vector3(.18f, .12f, 1.4f),
+                Material("Amber"));
+            antenna.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
+            var antennaTip = Primitive(
+                PrimitiveType.Cube,
+                "Antenna Tip",
+                navigator.transform,
+                new Vector3(0f, 0f, 1.55f),
+                new Vector3(.42f, .18f, .6f),
+                Material("Amber"));
+            antennaTip.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
+            navigator.AddComponent<PayloadNavigationIndicator>().Configure(mission, relayTargets);
+        }
+
+        private static GameObject BuildRelay(
+            Transform parent,
+            string name,
+            Vector3 position,
+            int checkpointIndex,
+            bool finalDestination,
+            PayloadMissionController mission,
+            GameObject collectedCargo)
+        {
+            var relay = new GameObject(name);
+            relay.transform.SetParent(parent, false);
+            relay.transform.position = position;
+
+            var signalMaterial = finalDestination ? Material("Player") : Material("Cyan");
+            Primitive(PrimitiveType.Cylinder, "Relay Base", relay.transform, new Vector3(0f, .12f, 0f), new Vector3(2.5f, .12f, 2.5f), Material("Dark"));
+            Primitive(PrimitiveType.Cylinder, "Relay Mast", relay.transform, new Vector3(0f, 1.55f, 0f), new Vector3(.34f, 1.5f, .34f), signalMaterial);
+            var ring = Primitive(PrimitiveType.Cylinder, "Pulse Ring", relay.transform, new Vector3(0f, .28f, 0f), new Vector3(2.2f, .04f, 2.2f), Material("Amber"));
+            var beam = Primitive(PrimitiveType.Cube, "Signal Beam", relay.transform, new Vector3(0f, 4.2f, 0f), new Vector3(.16f, 7.2f, .16f), signalMaterial);
+
+            var labelObject = new GameObject("Relay Label", typeof(TextMesh));
+            labelObject.transform.SetParent(relay.transform, false);
+            labelObject.transform.localPosition = new Vector3(0f, 3.15f, -.45f);
+            labelObject.transform.localRotation = Quaternion.Euler(20f, 0f, 0f);
+            var label = labelObject.GetComponent<TextMesh>();
+            label.text = finalDestination ? "DESTINATION" : $"SUPPLY {checkpointIndex + 1}";
+            label.anchor = TextAnchor.MiddleCenter;
+            label.alignment = TextAlignment.Center;
+            label.fontSize = 48;
+            label.characterSize = .08f;
+            label.color = finalDestination ? new Color(.35f, 1f, .72f) : new Color(.4f, .95f, 1f);
+
+            GameObject cache = null;
+            if (!finalDestination)
+            {
+                cache = new GameObject("Supply Cache");
+                cache.transform.SetParent(relay.transform, false);
+                cache.transform.localPosition = new Vector3(1.8f, 0f, 0f);
+                Primitive(PrimitiveType.Cube, "Cargo Crate A", cache.transform, new Vector3(0f, .48f, 0f), new Vector3(1.15f, .95f, 1.15f), Material("Amber"));
+                Primitive(PrimitiveType.Cube, "Cargo Crate B", cache.transform, new Vector3(.75f, .34f, .35f), new Vector3(.65f, .68f, .72f), Material("Dark"));
+                Primitive(PrimitiveType.Cylinder, "Fuel Cell", cache.transform, new Vector3(-.72f, .52f, .25f), new Vector3(.34f, .52f, .34f), Material("Cyan"));
+            }
+            else
+            {
+                Primitive(PrimitiveType.Cylinder, "Destination Platform", relay.transform, new Vector3(0f, .18f, 0f), new Vector3(3.6f, .08f, 3.6f), Material("Player"));
+            }
+
+            relay.AddComponent<PayloadRelayBeaconView>().Configure(
+                mission,
+                checkpointIndex,
+                finalDestination,
+                beam,
+                ring,
+                cache,
+                collectedCargo);
+            return relay;
+        }
+
+        private static GameObject[] BuildCargoProgress(Transform payload)
+        {
+            var cargo = new GameObject[3];
+            for (var index = 0; index < cargo.Length; index++)
+            {
+                cargo[index] = Primitive(
+                    index == 2 ? PrimitiveType.Cylinder : PrimitiveType.Cube,
+                    $"Collected Cargo {index + 1}",
+                    payload,
+                    new Vector3((index - 1) * .58f, 1.55f, -.15f),
+                    index == 2 ? new Vector3(.28f, .46f, .28f) : new Vector3(.5f, .55f, .58f),
+                    index == 1 ? Material("Cyan") : Material("Amber"));
+                cargo[index].SetActive(false);
+            }
+
+            return cargo;
         }
 
         private static MissionMapGenerator BuildMapGenerator(Transform parent)
@@ -274,6 +401,24 @@ namespace AlmostDelivered.Editor.Frontend
             cube.transform.localScale = scale;
             cube.GetComponent<Renderer>().sharedMaterial = material;
             return cube;
+        }
+
+        private static GameObject Primitive(
+            PrimitiveType type,
+            string name,
+            Transform parent,
+            Vector3 localPosition,
+            Vector3 localScale,
+            Material material)
+        {
+            var value = GameObject.CreatePrimitive(type);
+            value.name = name;
+            value.transform.SetParent(parent, false);
+            value.transform.localPosition = localPosition;
+            value.transform.localScale = localScale;
+            value.GetComponent<Renderer>().sharedMaterial = material;
+            UnityEngine.Object.DestroyImmediate(value.GetComponent<Collider>());
+            return value;
         }
 
         private static Transform Child(Transform parent, string name, Vector3 localPosition)

@@ -97,6 +97,9 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(minimap.CheckpointMarkerCount, Is.EqualTo(4));
             Assert.That(minimap.PlayerIcon, Is.Not.Null);
             Assert.That(minimap.PayloadIcon, Is.Not.Null);
+            Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
+            Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Count(relay => relay.VisualState == PayloadRelayVisualState.Active), Is.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0).VisualState, Is.EqualTo(PayloadRelayVisualState.Active));
         }
 
         private static void ClearWave(PayloadWaveSpawner waves)
