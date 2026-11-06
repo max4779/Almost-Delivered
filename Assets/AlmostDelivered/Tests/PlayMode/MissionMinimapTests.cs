@@ -70,6 +70,50 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void TopRightPivotKeepsRouteInsidePanel()
+        {
+            var panel = minimap.GetComponent<RectTransform>();
+            panel.pivot = Vector2.one;
+            minimap.Configure(bounds, route, player, payload, mission, waves);
+
+            foreach (var segment in minimap.GetComponentsInChildren<RectTransform>()
+                         .Where(view => view.name.StartsWith("Route Segment")))
+            {
+                Assert.That(
+                    panel.rect.Contains(segment.localPosition),
+                    Is.True,
+                    $"{segment.name} must remain inside the minimap when its panel uses a top-right pivot.");
+            }
+        }
+
+        [Test]
+        public void CurrentLegAndCheckpointAreBrighterThanFutureRoute()
+        {
+            mission.ApplySnapshot(Snapshot(0f, 0));
+
+            minimap.Refresh();
+
+            var currentSegment = minimap.transform.Find("Route Segment 1").GetComponent<Image>();
+            var futureSegment = minimap.transform.Find($"Route Segment {route.Points.Count - 1}").GetComponent<Image>();
+            var activeCheckpoint = minimap.transform.Find("Checkpoint 1").GetComponent<Image>();
+            var futureCheckpoint = minimap.transform.Find("Checkpoint 3").GetComponent<Image>();
+            Assert.That(currentSegment.color.a, Is.GreaterThan(futureSegment.color.a));
+            Assert.That(activeCheckpoint.color.grayscale, Is.GreaterThan(futureCheckpoint.color.grayscale));
+        }
+
+        [Test]
+        public void CompletedCheckpointUsesCompletedColor()
+        {
+            mission.ApplySnapshot(Snapshot(route.CheckpointDistances[0], 1));
+
+            minimap.Refresh();
+
+            var completed = minimap.transform.Find("Checkpoint 1").GetComponent<Image>().color;
+            Assert.That(completed.g, Is.GreaterThan(completed.r));
+            Assert.That(completed.g, Is.GreaterThan(completed.b));
+        }
+
+        [Test]
         public void PlayerPayloadAndEnemyIconsTrackProjectedPositions()
         {
             player.position = new Vector3(10f, 0f, 20f);
@@ -149,6 +193,22 @@ namespace AlmostDelivered.Tests.PlayMode
             var textObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             textObject.transform.SetParent(parent, false);
             return textObject.GetComponent<Text>();
+        }
+
+        private PayloadMissionSnapshot Snapshot(float distance, int nextCheckpointIndex)
+        {
+            return new PayloadMissionSnapshot(
+                PayloadMissionPhase.Escorting,
+                20f,
+                distance,
+                route.TotalLength > 0f ? distance / route.TotalLength : 0f,
+                nextCheckpointIndex,
+                -1,
+                0,
+                1,
+                0,
+                true,
+                false);
         }
     }
 }
