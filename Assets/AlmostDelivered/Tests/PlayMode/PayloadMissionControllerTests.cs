@@ -144,6 +144,63 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void AuthoritySpawnsTravelEnemiesBeforeFirstCheckpoint()
+        {
+            var spawner = CreateSpawner(601);
+            var controller = NewController();
+            controller.Configure(true, 601, Bounds(), player.transform, payload.transform, null, spawner, .1f, 0f, 4.5f);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+
+            controller.Tick(0f);
+            controller.Tick(8f);
+
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(controller.Snapshot.NextCheckpointIndex, Is.Zero);
+            Assert.That(spawner.ActiveCount, Is.InRange(3, 6));
+            Assert.That(spawner.LivingEnemies.All(enemy => enemy.EnemyId < 0), Is.True);
+        }
+
+        [Test]
+        public void ReplicaNeverRunsEscortDirector()
+        {
+            var spawner = CreateSpawner(602);
+            var controller = NewController();
+            controller.Configure(false, 602, Bounds(), player.transform, payload.transform, null, spawner, .1f, 0f, 4.5f);
+            controller.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.Escorting, 0f, 0f, 0f, 0, -1, 0, 1, 0, true, false));
+
+            controller.Tick(1000f);
+
+            Assert.That(spawner.ActiveCount, Is.Zero);
+            Assert.That(spawner.PendingCount, Is.Zero);
+        }
+
+        [Test]
+        public void CheckpointRegistrationIgnoresTravelEnemyIds()
+        {
+            var spawner = CreateSpawner(603);
+            var controller = NewController();
+            controller.Configure(true, 603, Bounds(), player.transform, payload.transform, null, spawner, .1f, 0f, 4.5f);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(0f);
+            controller.Tick(8f);
+            var travelEnemy = spawner.LivingEnemies.First(enemy => enemy.EnemyId < 0);
+
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1000f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
+            Assert.That(controller.Snapshot.RemainingEnemyCount, Is.EqualTo(10));
+
+            travelEnemy.GetComponent<ActorHealth>().ApplyDamage(10000f);
+
+            Assert.That(controller.Snapshot.RemainingEnemyCount, Is.EqualTo(10));
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
+        }
+
+        [Test]
         public void RouteViewBuildsPolylineAndThreeCheckpointMarkers()
         {
             var route = PayloadRoutePlanner.Generate(8, Bounds(), 5, 3f);
@@ -162,6 +219,25 @@ namespace AlmostDelivered.Tests.PlayMode
             var controllerObject = new GameObject("Mission Controller");
             controllerObject.transform.SetParent(root.transform, false);
             return controllerObject.AddComponent<PayloadMissionController>();
+        }
+
+        private PayloadWaveSpawner CreateSpawner(int seed)
+        {
+            var projectile = new GameObject("Projectile", typeof(CombatProjectile));
+            projectile.transform.SetParent(root.transform, false);
+            projectile.SetActive(false);
+            var anchors = Enumerable.Range(0, 4).Select(index =>
+            {
+                var anchor = new GameObject($"Anchor {index}").transform;
+                anchor.SetParent(root.transform, false);
+                anchor.position = new Vector3(index * 4f, 0f, index * 6f);
+                return anchor;
+            }).ToArray();
+            var spawnerObject = new GameObject("Spawner");
+            spawnerObject.transform.SetParent(root.transform, false);
+            var spawner = spawnerObject.AddComponent<PayloadWaveSpawner>();
+            spawner.Configure(player.transform, projectile, null, null, null, null, null, anchors, seed, 18);
+            return spawner;
         }
 
         private static GameObject Actor(string name, CombatTeamId team)

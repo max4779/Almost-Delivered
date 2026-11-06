@@ -22,6 +22,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private readonly Queue<PendingEnemy> pending = new Queue<PendingEnemy>();
         private readonly Dictionary<int, MissionMobController> living = new Dictionary<int, MissionMobController>();
+        private readonly HashSet<int> checkpointEnemyIds = new HashSet<int>();
+        private int activeCheckpointWaveId = -1;
         private bool shuttingDown;
 
         public IReadOnlyCollection<MissionMobController> LivingEnemies => living.Values;
@@ -66,7 +68,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void SpawnWave(int waveId, int checkpointIndex, bool finalWave)
         {
-            if (living.Count > 0 || pending.Count > 0)
+            if (activeCheckpointWaveId >= 0)
             {
                 throw new InvalidOperationException("The previous payload wave is still active.");
             }
@@ -81,6 +83,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 var archetype = SelectArchetype(random, finalWave, index);
                 var enemyId = unchecked(waveId * 1000 + index + 1);
                 identifiers[index] = enemyId;
+                checkpointEnemyIds.Add(enemyId);
                 pending.Enqueue(new PendingEnemy(
                     waveId,
                     enemyId,
@@ -88,7 +91,44 @@ namespace AlmostDelivered.Gameplay.Payload
                     SpawnPosition(random, anchor)));
             }
 
+            activeCheckpointWaveId = waveId;
             WaveStarted?.Invoke(waveId, Array.AsReadOnly(identifiers));
+            SpawnUntilCap();
+        }
+
+        public void SpawnTravelGroup(
+            PayloadEscortEncounter encounter,
+            Vector3 payloadPosition,
+            Vector3 routeDirection,
+            Rect missionBounds,
+            float exclusionRadius)
+        {
+            if (encounter.GroupSize <= 0 || !IsFinite(payloadPosition))
+            {
+                return;
+            }
+
+            var forward = HorizontalDirection(routeDirection, Vector3.forward);
+            var right = new Vector3(forward.z, 0f, -forward.x);
+            var random = new System.Random(unchecked(missionSeed * 486187739 + encounter.SequenceId * 397));
+            var approach = ApproachDirection(encounter.Pattern, forward, right);
+            var approachDistance = 18f + (float)random.NextDouble() * 6f;
+            var center = payloadPosition + approach * approachDistance;
+
+            for (var index = 0; index < encounter.GroupSize; index++)
+            {
+                var angle = (float)(random.NextDouble() * Math.PI * 2d);
+                var scatter = 3f + (float)random.NextDouble() * 2f;
+                var candidate = center + new Vector3(Mathf.Cos(angle) * scatter, 0f, Mathf.Sin(angle) * scatter);
+                candidate = SanitizeTravelPosition(candidate, payloadPosition, missionBounds, Mathf.Max(0f, exclusionRadius) + 2f);
+                var enemyId = unchecked(-((encounter.SequenceId + 1) * 1000 + index + 1));
+                pending.Enqueue(new PendingEnemy(
+                    -(encounter.SequenceId + 1),
+                    enemyId,
+                    MissionMobDefinition.For(SelectArchetype(random, false, index)),
+                    candidate));
+            }
+
             SpawnUntilCap();
         }
 
@@ -110,6 +150,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
             living.Clear();
             pending.Clear();
+            checkpointEnemyIds.Clear();
+            activeCheckpointWaveId = -1;
         }
 
         private void SpawnUntilCap()
@@ -181,6 +223,10 @@ namespace AlmostDelivered.Gameplay.Payload
 
             enemy.Removed -= HandleRemoved;
             living.Remove(enemy.EnemyId);
+            if (checkpointEnemyIds.Remove(enemy.EnemyId) && checkpointEnemyIds.Count == 0)
+            {
+                activeCheckpointWaveId = -1;
+            }
             EnemyRemoved?.Invoke(enemy.WaveId, enemy.EnemyId);
             SpawnUntilCap();
         }
@@ -236,6 +282,105 @@ namespace AlmostDelivered.Gameplay.Payload
             var angle = (float)(random.NextDouble() * Math.PI * 2d);
             var radius = 6f + (float)random.NextDouble() * 4f;
             return anchor.position + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+        }
+
+        private static Vector3 ApproachDirection(PayloadAssaultPattern pattern, Vector3 forward, Vector3 right)
+        {
+            switch (pattern)
+            {
+                case PayloadAssaultPattern.LeftAmbush:
+                    return -right;
+                case PayloadAssaultPattern.RightAmbush:
+                    return right;
+                case PayloadAssaultPattern.RearPursuit:
+                    return -forward;
+                default:
+                    return forward;
+            }
+        }
+
+        private static Vector3 SanitizeTravelPosition(
+            Vector3 candidate,
+            Vector3 payloadPosition,
+            Rect bounds,
+            float minimumDistance)
+        {
+            var insetBounds = Rect.MinMaxRect(
+                bounds.xMin + 1f,
+                bounds.yMin + 1f,
+                bounds.xMax - 1f,
+                bounds.yMax - 1f);
+            if (insetBounds.width <= 0f || insetBounds.height <= 0f)
+            {
+                insetBounds = bounds;
+            }
+
+            candidate = new Vector3(
+                Mathf.Clamp(IsFinite(candidate.x) ? candidate.x : payloadPosition.x, insetBounds.xMin, insetBounds.xMax),
+                0f,
+                Mathf.Clamp(IsFinite(candidate.z) ? candidate.z : payloadPosition.z, insetBounds.yMin, insetBounds.yMax));
+            var delta = Vector3.ProjectOnPlane(candidate - payloadPosition, Vector3.up);
+            if (delta.magnitude + .001f >= minimumDistance)
+            {
+                return candidate;
+            }
+
+            var towardCenter = new Vector3(insetBounds.center.x - payloadPosition.x, 0f, insetBounds.center.y - payloadPosition.z);
+            var direction = HorizontalDirection(delta, HorizontalDirection(towardCenter, Vector3.back));
+            candidate = payloadPosition + direction * (minimumDistance + .05f);
+            candidate.x = Mathf.Clamp(candidate.x, insetBounds.xMin, insetBounds.xMax);
+            candidate.z = Mathf.Clamp(candidate.z, insetBounds.yMin, insetBounds.yMax);
+            if (Vector3.Distance(candidate, payloadPosition) + .001f >= minimumDistance)
+            {
+                return candidate;
+            }
+
+            var corners = new[]
+            {
+                new Vector3(insetBounds.xMin, 0f, insetBounds.yMin),
+                new Vector3(insetBounds.xMin, 0f, insetBounds.yMax),
+                new Vector3(insetBounds.xMax, 0f, insetBounds.yMin),
+                new Vector3(insetBounds.xMax, 0f, insetBounds.yMax)
+            };
+            var farthest = corners[0];
+            var farthestDistance = (farthest - payloadPosition).sqrMagnitude;
+            for (var index = 1; index < corners.Length; index++)
+            {
+                var distance = (corners[index] - payloadPosition).sqrMagnitude;
+                if (distance > farthestDistance)
+                {
+                    farthest = corners[index];
+                    farthestDistance = distance;
+                }
+            }
+
+            return farthest;
+        }
+
+        private static Vector3 HorizontalDirection(Vector3 value, Vector3 fallback)
+        {
+            if (!IsFinite(value))
+            {
+                value = fallback;
+            }
+
+            value = Vector3.ProjectOnPlane(value, Vector3.up);
+            if (value.sqrMagnitude < .0001f)
+            {
+                value = Vector3.ProjectOnPlane(fallback, Vector3.up);
+            }
+
+            return value.sqrMagnitude < .0001f ? Vector3.forward : value.normalized;
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static bool IsRanged(MissionMobArchetype archetype)

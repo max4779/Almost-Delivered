@@ -21,6 +21,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private float configuredCorridorWidth = 3f;
         [SerializeField] private int configuredInteriorPointCount = 5;
         private PayloadMissionStateMachine stateMachine;
+        private PayloadEscortDirector escortDirector;
         [SerializeField] private float escortRadius;
         private PayloadMissionSnapshot snapshot;
 
@@ -84,6 +85,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 configuredMovementSpeed,
                 configuredDeploymentDuration);
             stateMachine.WaveRequested += HandleWaveRequested;
+            escortDirector = authority && waveSpawner != null
+                ? new PayloadEscortDirector(configuredSeed)
+                : null;
             snapshot = stateMachine.Snapshot;
 
             if (payloadTransform != null)
@@ -127,6 +131,7 @@ namespace AlmostDelivered.Gameplay.Payload
             stateMachine.Tick(deltaTime, players, enemies);
             payloadTransform.position = RoutePlan.EvaluateDistance(stateMachine.Snapshot.RouteDistance);
             PublishSnapshot(previousPhase);
+            TickEscortDirector(deltaTime);
         }
 
         public bool ApplySnapshot(PayloadMissionSnapshot value)
@@ -184,6 +189,29 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 waveSpawner.SpawnWave(request.WaveId, request.CheckpointIndex, request.IsFinal);
             }
+        }
+
+        private void TickEscortDirector(float deltaTime)
+        {
+            if (escortDirector == null || waveSpawner == null || RoutePlan == null || payloadTransform == null)
+            {
+                return;
+            }
+
+            if (!escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.ActiveCount, out var encounter))
+            {
+                return;
+            }
+
+            var distance = snapshot.RouteDistance;
+            var before = RoutePlan.EvaluateDistance(Mathf.Max(0f, distance - 1f));
+            var after = RoutePlan.EvaluateDistance(Mathf.Min(RoutePlan.TotalLength, distance + 1f));
+            waveSpawner.SpawnTravelGroup(
+                encounter,
+                payloadTransform.position,
+                after - before,
+                configuredBounds,
+                escortRadius);
         }
 
         private void HandleWaveStarted(int waveId, System.Collections.Generic.IReadOnlyCollection<int> enemyIds)

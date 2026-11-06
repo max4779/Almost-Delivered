@@ -150,6 +150,101 @@ namespace AlmostDelivered.Tests.PlayMode
             }
         }
 
+        [Test]
+        public void TravelGroupUsesRequestedCountAndStableNegativeIds()
+        {
+            var firstRoot = new GameObject("First travel spawner");
+            firstRoot.transform.SetParent(root.transform, false);
+            var secondRoot = new GameObject("Second travel spawner");
+            secondRoot.transform.SetParent(root.transform, false);
+            var first = CreateSpawner(firstRoot.transform, 707, 18);
+            var second = CreateSpawner(secondRoot.transform, 707, 18);
+            var encounter = new PayloadEscortEncounter(4, 5, PayloadAssaultPattern.LeftAmbush);
+            var bounds = new Rect(-28f, -50f, 56f, 100f);
+
+            first.SpawnTravelGroup(encounter, Vector3.zero, Vector3.forward, bounds, 4.5f);
+            second.SpawnTravelGroup(encounter, Vector3.zero, Vector3.forward, bounds, 4.5f);
+            var firstEnemies = first.LivingEnemies.OrderBy(enemy => enemy.EnemyId).ToArray();
+            var secondEnemies = second.LivingEnemies.OrderBy(enemy => enemy.EnemyId).ToArray();
+
+            Assert.That(firstEnemies, Has.Length.EqualTo(5));
+            Assert.That(firstEnemies.All(enemy => enemy.EnemyId < 0), Is.True);
+            Assert.That(firstEnemies.Select(enemy => enemy.EnemyId).Distinct().Count(), Is.EqualTo(5));
+            for (var index = 0; index < firstEnemies.Length; index++)
+            {
+                Assert.That(secondEnemies[index].EnemyId, Is.EqualTo(firstEnemies[index].EnemyId));
+                Assert.That(secondEnemies[index].Definition.Archetype, Is.EqualTo(firstEnemies[index].Definition.Archetype));
+                Assert.That(secondEnemies[index].transform.position, Is.EqualTo(firstEnemies[index].transform.position));
+            }
+        }
+
+        [Test]
+        public void TravelGroupsCanOverlapLivingEnemies()
+        {
+            var spawner = CreateSpawner(root.transform, 808, 18);
+            var bounds = new Rect(-28f, -50f, 56f, 100f);
+
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(1, 4, PayloadAssaultPattern.ForwardBlockade),
+                Vector3.zero,
+                Vector3.forward,
+                bounds,
+                4.5f);
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(2, 3, PayloadAssaultPattern.RearPursuit),
+                Vector3.zero,
+                Vector3.forward,
+                bounds,
+                4.5f);
+
+            Assert.That(spawner.ActiveCount, Is.EqualTo(7));
+            Assert.That(spawner.PendingCount, Is.Zero);
+        }
+
+        [Test]
+        public void CheckpointWaveCanJoinLivingTravelEnemies()
+        {
+            var spawner = CreateSpawner(root.transform, 909, 18);
+            var started = new List<int>();
+            spawner.WaveStarted += (_, ids) => started.AddRange(ids);
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(3, 5, PayloadAssaultPattern.RightAmbush),
+                Vector3.zero,
+                Vector3.forward,
+                new Rect(-28f, -50f, 56f, 100f),
+                4.5f);
+
+            Assert.DoesNotThrow(() => spawner.SpawnWave(6, 0, false));
+            Assert.That(started, Has.Count.EqualTo(10));
+            Assert.That(started.All(id => id > 0), Is.True);
+            Assert.That(spawner.ActiveCount, Is.EqualTo(15));
+        }
+
+        [Test]
+        public void TravelSpawnSanitizesDirectionAndBounds()
+        {
+            var spawner = CreateSpawner(root.transform, 1001, 18);
+            var bounds = new Rect(-28f, -50f, 56f, 100f);
+            var payloadPosition = new Vector3(27f, 0f, 49f);
+
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(5, 6, PayloadAssaultPattern.ForwardBlockade),
+                payloadPosition,
+                new Vector3(float.NaN, 0f, float.PositiveInfinity),
+                bounds,
+                4.5f);
+
+            foreach (var enemy in spawner.LivingEnemies)
+            {
+                var position = enemy.transform.position;
+                Assert.That(float.IsNaN(position.x) || float.IsInfinity(position.x), Is.False, enemy.name);
+                Assert.That(float.IsNaN(position.z) || float.IsInfinity(position.z), Is.False, enemy.name);
+                Assert.That(position.x, Is.InRange(-27f, 27f), enemy.name);
+                Assert.That(position.z, Is.InRange(-49f, 49f), enemy.name);
+                Assert.That(Vector3.Distance(position, payloadPosition), Is.GreaterThanOrEqualTo(6.5f), enemy.name);
+            }
+        }
+
         private PayloadWaveSpawner CreateSpawner(Transform parent, int seed, int activeCap)
         {
             var spawnerObject = new GameObject("Payload Wave Spawner");
