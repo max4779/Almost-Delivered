@@ -8,6 +8,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
+using UnityEngine.UI;
 
 namespace AlmostDelivered.Tests.PlayMode
 {
@@ -97,6 +98,20 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(minimap.CheckpointMarkerCount, Is.EqualTo(4));
             Assert.That(minimap.PlayerIcon, Is.Not.Null);
             Assert.That(minimap.PayloadIcon, Is.Not.Null);
+            Assert.That(minimap.GetComponent<RectMask2D>(), Is.Not.Null);
+            var minimapRect = minimap.GetComponent<RectTransform>();
+            foreach (var view in minimap.GetComponentsInChildren<RectTransform>()
+                         .Where(item => item.name.StartsWith("Route Segment") ||
+                                        item.name.StartsWith("Checkpoint") ||
+                                        item.name == "Destination"))
+            {
+                var corners = new Vector3[4];
+                view.GetWorldCorners(corners);
+                Assert.That(corners.All(corner => minimapRect.rect.Contains(minimapRect.InverseTransformPoint(corner))), Is.True, view.name);
+            }
+            var escortRadius = Object.FindObjectOfType<PayloadEscortRadiusView>();
+            Assert.That(escortRadius, Is.Not.Null);
+            Assert.That(escortRadius.Radius, Is.EqualTo(4.5f));
             Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Count(relay => relay.VisualState == PayloadRelayVisualState.Active), Is.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0).VisualState, Is.EqualTo(PayloadRelayVisualState.Active));

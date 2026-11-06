@@ -6,6 +6,7 @@ namespace AlmostDelivered.Gameplay.Payload
 {
     public sealed class MissionMinimap : MonoBehaviour
     {
+        public const float ContentPadding = 10f;
         [SerializeField] private List<RectTransform> routeSegments = new List<RectTransform>();
         [SerializeField] private List<RectTransform> checkpointMarkers = new List<RectTransform>();
         private readonly List<float> routeSegmentEndDistances = new List<float>();
@@ -37,16 +38,22 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public static Vector2 ProjectWorld(Vector3 worldPosition, Rect worldBounds, Rect minimapRect)
         {
+            return ProjectWorldInsidePanel(worldPosition, worldBounds, minimapRect, 0f);
+        }
+
+        public static Vector2 ProjectWorldInsidePanel(Vector3 worldPosition, Rect worldBounds, Rect minimapRect, float padding = ContentPadding)
+        {
             if (!IsFinitePositive(worldBounds.width) || !IsFinitePositive(worldBounds.height))
             {
                 return minimapRect.center;
             }
 
+            var contentRect = Inset(minimapRect, Mathf.Max(0f, padding));
             var normalizedX = Mathf.Clamp01((worldPosition.x - worldBounds.xMin) / worldBounds.width);
             var normalizedY = Mathf.Clamp01((worldPosition.z - worldBounds.yMin) / worldBounds.height);
             return new Vector2(
-                Mathf.Lerp(minimapRect.xMin, minimapRect.xMax, normalizedX),
-                Mathf.Lerp(minimapRect.yMin, minimapRect.yMax, normalizedY));
+                Mathf.Lerp(contentRect.xMin, contentRect.xMax, normalizedX),
+                Mathf.Lerp(contentRect.yMin, contentRect.yMax, normalizedY));
         }
 
         public void Configure(
@@ -68,6 +75,10 @@ namespace AlmostDelivered.Gameplay.Payload
             if (panel == null)
             {
                 panel = gameObject.AddComponent<RectTransform>();
+            }
+            if (GetComponent<RectMask2D>() == null)
+            {
+                gameObject.AddComponent<RectMask2D>();
             }
 
             if (route != null)
@@ -110,8 +121,8 @@ namespace AlmostDelivered.Gameplay.Payload
             var cumulativeDistance = 0f;
             for (var index = 1; index < route.Points.Count; index++)
             {
-                var start = ProjectWorld(route.Points[index - 1], worldBounds, mapRect);
-                var end = ProjectWorld(route.Points[index], worldBounds, mapRect);
+                var start = ProjectWorldInsidePanel(route.Points[index - 1], worldBounds, mapRect);
+                var end = ProjectWorldInsidePanel(route.Points[index], worldBounds, mapRect);
                 var segment = CreateIcon($"Route Segment {index}", new Color(.2f, .75f, .9f, .75f), 1f);
                 var delta = end - start;
                 segment.anchoredPosition = (start + end) * .5f;
@@ -125,12 +136,12 @@ namespace AlmostDelivered.Gameplay.Payload
             for (var index = 0; index < route.CheckpointDistances.Count; index++)
             {
                 var marker = CreateIcon($"Checkpoint {index + 1}", new Color(1f, .9f, .25f, 1f), 7f);
-                marker.anchoredPosition = ProjectWorld(route.EvaluateDistance(route.CheckpointDistances[index]), worldBounds, mapRect);
+                marker.anchoredPosition = ProjectWorldInsidePanel(route.EvaluateDistance(route.CheckpointDistances[index]), worldBounds, mapRect);
                 checkpointMarkers.Add(marker);
             }
 
             var destination = CreateIcon("Destination", new Color(1f, .35f, .2f, 1f), 9f);
-            destination.anchoredPosition = ProjectWorld(route.Destination, worldBounds, mapRect);
+            destination.anchoredPosition = ProjectWorldInsidePanel(route.Destination, worldBounds, mapRect);
             checkpointMarkers.Add(destination);
         }
 
@@ -207,7 +218,7 @@ namespace AlmostDelivered.Gameplay.Payload
                         enemyIcons.Add(enemy.EnemyId, icon);
                     }
 
-                    icon.anchoredPosition = ProjectWorld(enemy.transform.position, worldBounds, mapRect);
+                    icon.anchoredPosition = ProjectWorldInsidePanel(enemy.transform.position, worldBounds, mapRect);
                 }
             }
 
@@ -229,7 +240,7 @@ namespace AlmostDelivered.Gameplay.Payload
             icon.gameObject.SetActive(target != null);
             if (target != null)
             {
-                icon.anchoredPosition = ProjectWorld(target.position, worldBounds, mapRect);
+                icon.anchoredPosition = ProjectWorldInsidePanel(target.position, worldBounds, mapRect);
             }
         }
 
@@ -295,6 +306,20 @@ namespace AlmostDelivered.Gameplay.Payload
         private static bool IsFinitePositive(float value)
         {
             return value > 0f && !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static Rect Inset(Rect rect, float padding)
+        {
+            if (rect.width <= padding * 2f || rect.height <= padding * 2f)
+            {
+                return new Rect(rect.center, Vector2.zero);
+            }
+
+            return Rect.MinMaxRect(
+                rect.xMin + padding,
+                rect.yMin + padding,
+                rect.xMax - padding,
+                rect.yMax - padding);
         }
     }
 }

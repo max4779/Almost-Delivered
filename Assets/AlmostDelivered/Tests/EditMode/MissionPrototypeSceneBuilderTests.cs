@@ -33,6 +33,8 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectsOfType<PayloadMissionController>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<PayloadMissionController>(true).IsAuthority, Is.True);
             Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PayloadEscortRadiusView>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<PayloadEscortRadiusView>(true).Radius, Is.EqualTo(4.5f));
             Assert.That(Object.FindObjectsOfType<MissionMinimap>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<MissionHud>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);

@@ -48,6 +48,7 @@ namespace AlmostDelivered.Editor.Frontend
             var mission = controllerObject.AddComponent<PayloadMissionController>();
             mission.Configure(true, MissionSeed, MissionBounds, player.transform, payload.transform, mapGenerator, waveSpawner, .35f, 8f, 4.5f);
 
+            BuildPayloadEscortRadius(payload.transform, mission);
             BuildSupplyRelays(root.transform, payload.transform, mission, route);
 
             BuildCamera(player.transform);
@@ -105,6 +106,13 @@ namespace AlmostDelivered.Editor.Frontend
             collider.size = new Vector3(2.2f, 1.4f, 2.7f);
             LowPolyAssetFactory.InstantiateVisual(payload, VisualArchetype.Payload);
             return payload;
+        }
+
+        private static void BuildPayloadEscortRadius(Transform payload, PayloadMissionController mission)
+        {
+            var radiusObject = new GameObject("Payload Escort Radius", typeof(LineRenderer), typeof(PayloadEscortRadiusView));
+            radiusObject.transform.SetParent(payload, false);
+            radiusObject.GetComponent<PayloadEscortRadiusView>().Configure(mission, 4.5f, Material("Cyan"));
         }
 
         private static void BuildSupplyRelays(
@@ -345,7 +353,7 @@ namespace AlmostDelivered.Editor.Frontend
             var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -234f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -278f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
 
-            var minimapObject = new GameObject("Mission Minimap", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(MissionMinimap));
+            var minimapObject = new GameObject("Mission Minimap", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(RectMask2D), typeof(MissionMinimap));
             minimapObject.transform.SetParent(canvasObject.transform, false);
             var minimapRect = minimapObject.GetComponent<RectTransform>();
             minimapRect.anchorMin = minimapRect.anchorMax = minimapRect.pivot = Vector2.one;

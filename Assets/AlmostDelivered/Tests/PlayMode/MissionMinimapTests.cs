@@ -70,19 +70,27 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void TopRightPivotKeepsRouteInsidePanel()
+        public void TopRightPivotKeepsEntireRouteAndMarkersInsideMaskedPanel()
         {
             var panel = minimap.GetComponent<RectTransform>();
             panel.pivot = Vector2.one;
             minimap.Configure(bounds, route, player, payload, mission, waves);
 
-            foreach (var segment in minimap.GetComponentsInChildren<RectTransform>()
-                         .Where(view => view.name.StartsWith("Route Segment")))
+            Assert.That(minimap.GetComponent<RectMask2D>(), Is.Not.Null);
+            var routeViews = minimap.GetComponentsInChildren<RectTransform>()
+                .Where(view => view.name.StartsWith("Route Segment") ||
+                               view.name.StartsWith("Checkpoint") ||
+                               view.name == "Destination");
+            foreach (var view in routeViews)
             {
-                Assert.That(
-                    panel.rect.Contains(segment.localPosition),
-                    Is.True,
-                    $"{segment.name} must remain inside the minimap when its panel uses a top-right pivot.");
+                var corners = new Vector3[4];
+                view.GetWorldCorners(corners);
+                foreach (var corner in corners)
+                {
+                    var local = panel.InverseTransformPoint(corner);
+                    Assert.That(panel.rect.Contains(local), Is.True,
+                        $"{view.name} corner {local} must remain inside the minimap rectangle {panel.rect}.");
+                }
             }
         }
 
@@ -124,9 +132,9 @@ namespace AlmostDelivered.Tests.PlayMode
             minimap.Refresh();
             var panelRect = minimap.GetComponent<RectTransform>().rect;
 
-            Assert.That(minimap.PlayerIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorld(player.position, bounds, panelRect)));
-            Assert.That(minimap.PayloadIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorld(payload.position, bounds, panelRect)));
-            Assert.That(minimap.GetEnemyIcon(enemy.EnemyId).anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorld(enemy.transform.position, bounds, panelRect)));
+            Assert.That(minimap.PlayerIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(player.position, bounds, panelRect)));
+            Assert.That(minimap.PayloadIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, bounds, panelRect)));
+            Assert.That(minimap.GetEnemyIcon(enemy.EnemyId).anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(enemy.transform.position, bounds, panelRect)));
         }
 
         [Test]
