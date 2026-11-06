@@ -102,6 +102,44 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0).VisualState, Is.EqualTo(PayloadRelayVisualState.Active));
         }
 
+        [UnityTest]
+        public IEnumerator EscortSpawnsTravelCombatThenLoadsSuppliesAtRelay()
+        {
+            yield return LoadMission();
+            var mission = Object.FindObjectOfType<PayloadMissionController>();
+            var waves = Object.FindObjectOfType<PayloadWaveSpawner>();
+            var minimap = Object.FindObjectOfType<MissionMinimap>();
+            var player = GameObject.Find("Player").transform;
+            var payload = GameObject.Find("Payload").transform;
+            var firstRelay = Object.FindObjectsOfType<PayloadRelayBeaconView>(true)
+                .Single(relay => relay.CheckpointIndex == 0);
+            var firstCargo = payload.Find("Collected Cargo 1").gameObject;
+            mission.enabled = false;
+
+            mission.Tick(8f);
+            mission.Tick(8f);
+            minimap.Refresh();
+
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(waves.LivingEnemies, Is.Not.Empty);
+            Assert.That(waves.LivingEnemies.All(enemy => enemy.EnemyId < 0), Is.True);
+            Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
+            Assert.That(minimap.RouteSegmentCount, Is.GreaterThan(0));
+
+            MovePlayerIntoEscortRadius(player, payload);
+            mission.Tick(1000f);
+
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
+            Assert.That(firstRelay.VisualState, Is.EqualTo(PayloadRelayVisualState.Loading));
+            Assert.That(firstCargo.activeSelf, Is.False);
+
+            ClearWave(waves);
+
+            Assert.That(mission.Snapshot.NextCheckpointIndex, Is.EqualTo(1));
+            Assert.That(firstRelay.VisualState, Is.EqualTo(PayloadRelayVisualState.Completed));
+            Assert.That(firstCargo.activeSelf, Is.True);
+        }
+
         private static void ClearWave(PayloadWaveSpawner waves)
         {
             while (waves.ActiveCount > 0)

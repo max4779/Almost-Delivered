@@ -128,7 +128,9 @@ The payload gets a small antenna or forward lamp that rotates toward the active 
 - PlayMode tests cover continuous travel spawns, no spawn inside the escort radius, payload contest behavior, relay visual-state transitions, and loading completion.
 - Minimap tests cover the real top-right pivot and route containment.
 - Scene-builder tests verify the absence of the world route line and the presence of one relay beacon per checkpoint plus the final destination.
-- Full EditMode and PlayMode suites remain green.
+- The accelerated scene-level escort test verifies travel enemies during `Escorting`, minimap-only route visibility, relay loading, and the first collected-cargo prop.
+- Full verification on 2026-11-07 passed 220/220 EditMode tests and 175/175 PlayMode tests with zero failures or skipped tests.
+- Final relay art, animation timing, audio feedback, and full commander-AI squad integration remain future work.
 
 ## Acceptance Criteria
 
