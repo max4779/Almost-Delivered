@@ -8,6 +8,7 @@ namespace AlmostDelivered.Gameplay.Payload
     public sealed class PayloadRoadView : MonoBehaviour
     {
         private const float SampleSpacing = 1.5f;
+        private const float CornerClearance = 5f;
         private const float ShoulderWidth = .9f;
         private const float SurfaceHeight = .035f;
         private const float GrassSpacing = 7f;
@@ -81,26 +82,22 @@ namespace AlmostDelivered.Gameplay.Payload
         private static List<float> BuildSampleDistances(PayloadRoutePlan route)
         {
             var distances = new List<float>();
-            for (var distance = 0f; distance < route.TotalLength; distance += SampleSpacing)
+            for (var segment = 1; segment < route.CumulativeDistances.Count; segment++)
             {
-                distances.Add(distance);
-            }
-
-            for (var index = 1; index < route.CumulativeDistances.Count - 1; index++)
-            {
-                distances.Add(route.CumulativeDistances[index]);
-            }
-
-            distances.Add(route.TotalLength);
-            distances.Sort();
-            for (var index = distances.Count - 1; index > 0; index--)
-            {
-                if (Mathf.Abs(distances[index] - distances[index - 1]) < .01f)
+                var start = route.CumulativeDistances[segment - 1];
+                var end = route.CumulativeDistances[segment];
+                distances.Add(start);
+                var firstInterior = start + (segment == 1 ? SampleSpacing : CornerClearance);
+                var lastInterior = end - (segment == route.CumulativeDistances.Count - 1
+                    ? SampleSpacing
+                    : CornerClearance);
+                for (var distance = firstInterior; distance <= lastInterior + .001f; distance += SampleSpacing)
                 {
-                    distances.RemoveAt(index);
+                    distances.Add(distance);
                 }
             }
 
+            distances.Add(route.TotalLength);
             return distances;
         }
 
@@ -110,6 +107,11 @@ namespace AlmostDelivered.Gameplay.Payload
             var uvs = new Vector2[vertices.Length];
             var earthTriangles = new int[(distances.Count - 1) * 6];
             var shoulderTriangles = new int[(distances.Count - 1) * 12];
+            var centers = new Vector3[distances.Count];
+            var leftHalves = new float[distances.Count];
+            var rightHalves = new float[distances.Count];
+            var leftShoulders = new float[distances.Count];
+            var rightShoulders = new float[distances.Count];
             var noiseOrigin = SeedNoiseOrigin(seed);
 
             for (var index = 0; index < distances.Count; index++)
@@ -124,15 +126,22 @@ namespace AlmostDelivered.Gameplay.Payload
                 var shoulderNoise = SignedNoise(noiseOrigin + 71.9f, distance, .061f, .29f) * .12f;
                 center += lateral * centerNoise;
 
-                var leftHalf = roadWidth * .5f + leftNoise;
-                var rightHalf = roadWidth * .5f + rightNoise;
-                var leftShoulder = leftHalf + ShoulderWidth + shoulderNoise;
-                var rightShoulder = rightHalf + ShoulderWidth - shoulderNoise;
+                centers[index] = center;
+                leftHalves[index] = roadWidth * .5f + leftNoise;
+                rightHalves[index] = roadWidth * .5f + rightNoise;
+                leftShoulders[index] = leftHalves[index] + ShoulderWidth + shoulderNoise;
+                rightShoulders[index] = rightHalves[index] + ShoulderWidth - shoulderNoise;
+            }
+
+            for (var index = 0; index < distances.Count; index++)
+            {
+                var distance = distances[index];
+                MiterAt(centers, index, out var lateral, out var miterScale);
                 var vertex = index * 4;
-                vertices[vertex] = ToLocal(center + lateral * leftShoulder);
-                vertices[vertex + 1] = ToLocal(center + lateral * leftHalf);
-                vertices[vertex + 2] = ToLocal(center - lateral * rightHalf);
-                vertices[vertex + 3] = ToLocal(center - lateral * rightShoulder);
+                vertices[vertex] = ToLocal(centers[index] + lateral * (leftShoulders[index] * miterScale));
+                vertices[vertex + 1] = ToLocal(centers[index] + lateral * (leftHalves[index] * miterScale));
+                vertices[vertex + 2] = ToLocal(centers[index] - lateral * (rightHalves[index] * miterScale));
+                vertices[vertex + 3] = ToLocal(centers[index] - lateral * (rightShoulders[index] * miterScale));
                 var uvDistance = distance * .25f;
                 uvs[vertex] = new Vector2(0f, uvDistance);
                 uvs[vertex + 1] = new Vector2(.15f, uvDistance);
@@ -174,6 +183,47 @@ namespace AlmostDelivered.Gameplay.Payload
             mesh.SetTriangles(shoulderTriangles, 1);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+        }
+
+        private static void MiterAt(IReadOnlyList<Vector3> centers, int index, out Vector3 lateral, out float scale)
+        {
+            var incoming = index > 0
+                ? Vector3.ProjectOnPlane(centers[index] - centers[index - 1], Vector3.up).normalized
+                : Vector3.zero;
+            var outgoing = index < centers.Count - 1
+                ? Vector3.ProjectOnPlane(centers[index + 1] - centers[index], Vector3.up).normalized
+                : Vector3.zero;
+
+            if (incoming.sqrMagnitude <= .0001f)
+            {
+                incoming = outgoing.sqrMagnitude > .0001f ? outgoing : Vector3.forward;
+            }
+
+            if (outgoing.sqrMagnitude <= .0001f)
+            {
+                outgoing = incoming;
+            }
+
+            var incomingLeft = new Vector3(-incoming.z, 0f, incoming.x);
+            var outgoingLeft = new Vector3(-outgoing.z, 0f, outgoing.x);
+            var combined = incomingLeft + outgoingLeft;
+            if (combined.sqrMagnitude <= .0001f)
+            {
+                lateral = outgoingLeft;
+                scale = 1f;
+                return;
+            }
+
+            lateral = combined.normalized;
+            var denominator = Vector3.Dot(lateral, outgoingLeft);
+            if (denominator <= .25f)
+            {
+                lateral = outgoingLeft;
+                scale = 1f;
+                return;
+            }
+
+            scale = Mathf.Min(1f / denominator, 2f);
         }
 
         private void BuildRoadsideFoliage(PayloadRoutePlan route, int seed, IReadOnlyList<GameObject> grassPrefabs)
