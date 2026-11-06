@@ -57,6 +57,25 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void DamageShrinksVisibleFillGeometryFromTheRightEdge()
+        {
+            var bar = WorldHealthBar.Attach(actor, Vector3.up * 2f);
+            var fill = bar.transform.Find("Fill").GetComponent<RectTransform>();
+            Canvas.ForceUpdateCanvases();
+            var fullCorners = new Vector3[4];
+            fill.GetWorldCorners(fullCorners);
+            var fullWidth = Vector3.Distance(fullCorners[0], fullCorners[3]);
+
+            health.ApplyDamage(25f);
+            Canvas.ForceUpdateCanvases();
+            var damagedCorners = new Vector3[4];
+            fill.GetWorldCorners(damagedCorners);
+
+            Assert.That(Vector3.Distance(damagedCorners[0], fullCorners[0]), Is.LessThan(.001f));
+            Assert.That(Vector3.Distance(damagedCorners[0], damagedCorners[3]) / fullWidth, Is.EqualTo(.75f).Within(.01f));
+        }
+
+        [Test]
         public void RepeatedAttachReturnsExistingBarWithoutDuplicates()
         {
             var first = WorldHealthBar.Attach(actor, Vector3.up * 2f);

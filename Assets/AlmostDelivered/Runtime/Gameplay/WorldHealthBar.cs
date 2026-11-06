@@ -57,6 +57,7 @@ namespace AlmostDelivered.Gameplay
             fill.fillOrigin = (int)Image.OriginHorizontal.Left;
             fill.fillAmount = 1f;
             var fillRect = fill.rectTransform;
+            fillRect.pivot = new Vector2(0f, .5f);
             fillRect.offsetMin = new Vector2(2f, 2f);
             fillRect.offsetMax = new Vector2(-2f, -2f);
 
@@ -135,9 +136,11 @@ namespace AlmostDelivered.Gameplay
                 return;
             }
 
-            fillImage.fillAmount = maximum > Mathf.Epsilon
+            var ratio = maximum > Mathf.Epsilon
                 ? Mathf.Clamp01(current / maximum)
                 : 0f;
+            fillImage.fillAmount = ratio;
+            fillImage.rectTransform.localScale = new Vector3(ratio, 1f, 1f);
         }
 
         private static Image CreateImage(string objectName, RectTransform parent, Color color)
