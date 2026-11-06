@@ -103,7 +103,7 @@ namespace AlmostDelivered.Gameplay
             switch (phase)
             {
                 case PayloadMissionPhase.CheckpointDefense:
-                    return "CHECKPOINT DEFENSE";
+                    return "LOADING SUPPLIES";
                 case PayloadMissionPhase.FinalDefense:
                     return "FINAL DEFENSE";
                 case PayloadMissionPhase.Completed:
@@ -119,12 +119,14 @@ namespace AlmostDelivered.Gameplay
 
         private static string EscortLabel(PayloadMissionSnapshot state)
         {
+            if (state.Phase == PayloadMissionPhase.CheckpointDefense)
+                return "LOADING SUPPLIES";
+            if (state.Phase == PayloadMissionPhase.FinalDefense)
+                return "DEFEND DESTINATION";
             if (state.EnemiesInRange > 0)
                 return "CONTESTED";
             if (state.IsEscortActive)
                 return "MOVING";
-            if (state.Phase == PayloadMissionPhase.CheckpointDefense || state.Phase == PayloadMissionPhase.FinalDefense)
-                return "DEFEND";
             return "WAITING";
         }
     }

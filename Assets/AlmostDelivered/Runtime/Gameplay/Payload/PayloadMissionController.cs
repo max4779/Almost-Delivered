@@ -211,7 +211,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 payloadTransform.position,
                 after - before,
                 configuredBounds,
-                escortRadius);
+                escortRadius,
+                Camera.main);
         }
 
         private void HandleWaveStarted(int waveId, System.Collections.Generic.IReadOnlyCollection<int> enemyIds)

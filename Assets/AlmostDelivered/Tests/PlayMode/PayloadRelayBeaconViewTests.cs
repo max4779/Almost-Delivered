@@ -73,7 +73,8 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(relay.View.VisualState, Is.EqualTo(PayloadRelayVisualState.Completed));
             Assert.That(relay.Cache.activeSelf, Is.False);
             Assert.That(relay.Cargo.activeSelf, Is.True);
-            Assert.That(relay.Beam.activeSelf, Is.False);
+            Assert.That(relay.Beam.activeSelf, Is.True);
+            Assert.That(relay.Ring.activeSelf, Is.True);
         }
 
         [Test]
@@ -98,6 +99,18 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(view.VisualState, Is.EqualTo(PayloadRelayVisualState.Active));
         }
 
+        [Test]
+        public void RelayLabelShowsRemainingRouteDistance()
+        {
+            var relay = NewRelay(0, false);
+
+            Apply(PayloadMissionPhase.Escorting, 0);
+
+            var label = relay.View.transform.Find("Relay Label").GetComponent<TextMesh>();
+            Assert.That(label.text, Does.StartWith("SUPPLY 1"));
+            Assert.That(label.text, Does.EndWith("m"));
+        }
+
         private RelayParts NewRelay(int checkpointIndex, bool finalDestination)
         {
             var relay = Child($"Relay {checkpointIndex}");
@@ -105,6 +118,7 @@ namespace AlmostDelivered.Tests.PlayMode
             var ring = Child("Pulse Ring", relay.transform);
             var cache = Child("Supply Cache", relay.transform);
             var cargo = Child("Collected Cargo", relay.transform);
+            Child("Relay Label", relay.transform).AddComponent<TextMesh>();
             var view = relay.AddComponent<PayloadRelayBeaconView>();
             view.Configure(mission, checkpointIndex, finalDestination, beam, ring, cache, cargo);
             return new RelayParts(view, beam, ring, cache, cargo);

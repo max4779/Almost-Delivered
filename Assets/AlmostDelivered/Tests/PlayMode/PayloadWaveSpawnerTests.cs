@@ -245,6 +245,52 @@ namespace AlmostDelivered.Tests.PlayMode
             }
         }
 
+        [Test]
+        public void TravelSpawnUsesOffCameraCandidatesWhenCameraIsProvided()
+        {
+            var cameraObject = new GameObject("Travel Spawn Camera", typeof(Camera));
+            cameraObject.transform.SetParent(root.transform, false);
+            cameraObject.transform.position = new Vector3(0f, 16f, -16f);
+            cameraObject.transform.rotation = Quaternion.LookRotation(new Vector3(0f, 0f, 3f) - cameraObject.transform.position);
+            var camera = cameraObject.GetComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 9f;
+            camera.aspect = 16f / 9f;
+            var spawner = CreateSpawner(root.transform, 1201, 18);
+
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(0, 6, PayloadAssaultPattern.ForwardBlockade),
+                Vector3.zero,
+                Vector3.forward,
+                new Rect(-28f, -50f, 56f, 100f),
+                4.5f,
+                camera);
+
+            Assert.That(spawner.LivingEnemies, Is.Not.Empty);
+            foreach (var enemy in spawner.LivingEnemies)
+            {
+                var viewport = camera.WorldToViewportPoint(enemy.transform.position + Vector3.up);
+                var visible = viewport.z > 0f && viewport.x >= 0f && viewport.x <= 1f && viewport.y >= 0f && viewport.y <= 1f;
+                Assert.That(visible, Is.False, $"{enemy.name} spawned on camera at {viewport}.");
+            }
+        }
+
+        [Test]
+        public void TravelSpawnDefersWhenBoundsCannotSatisfyEscortExclusion()
+        {
+            var spawner = CreateSpawner(root.transform, 1202, 18);
+
+            spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(0, 4, PayloadAssaultPattern.ForwardBlockade),
+                Vector3.zero,
+                Vector3.forward,
+                new Rect(-1f, -1f, 2f, 2f),
+                10f);
+
+            Assert.That(spawner.ActiveCount, Is.Zero);
+            Assert.That(spawner.PendingCount, Is.Zero);
+        }
+
         private PayloadWaveSpawner CreateSpawner(Transform parent, int seed, int activeCap)
         {
             var spawnerObject = new GameObject("Payload Wave Spawner");

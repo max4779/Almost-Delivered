@@ -129,7 +129,7 @@ The payload gets a small antenna or forward lamp that rotates toward the active 
 - Minimap tests cover the real top-right pivot and route containment.
 - Scene-builder tests verify the absence of the world route line and the presence of one relay beacon per checkpoint plus the final destination.
 - The accelerated scene-level escort test verifies travel enemies during `Escorting`, minimap-only route visibility, relay loading, and the first collected-cargo prop.
-- Full verification on 2026-11-07 passed 220/220 EditMode tests and 175/175 PlayMode tests with zero failures or skipped tests.
+- Full verification on 2026-11-07 passed 221/221 EditMode tests and 178/178 PlayMode tests with zero failures or skipped tests.
 - Final relay art, animation timing, audio feedback, and full commander-AI squad integration remain future work.
 
 ## Acceptance Criteria

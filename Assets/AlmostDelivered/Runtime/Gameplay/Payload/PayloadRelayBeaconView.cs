@@ -20,8 +20,10 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private GameObject pulseRing;
         [SerializeField] private GameObject supplyCache;
         [SerializeField] private GameObject collectedCargo;
+        [SerializeField] private TextMesh relayLabel;
         [SerializeField] private PayloadRelayVisualState visualState;
         private bool subscribed;
+        private bool visualsInitialized;
         private Vector3 pulseRingBaseScale = Vector3.one;
 
         public int CheckpointIndex => checkpointIndex;
@@ -45,6 +47,8 @@ namespace AlmostDelivered.Gameplay.Payload
             pulseRing = ringVisual;
             supplyCache = cacheVisual;
             collectedCargo = cargoVisual;
+            relayLabel = transform.Find("Relay Label")?.GetComponent<TextMesh>();
+            visualsInitialized = false;
             pulseRingBaseScale = pulseRing == null ? Vector3.one : pulseRing.transform.localScale;
             Subscribe();
             Refresh();
@@ -73,6 +77,12 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
+            if (visualState == PayloadRelayVisualState.Completed)
+            {
+                pulseRing.transform.localScale = pulseRingBaseScale;
+                return;
+            }
+
             var pulse = 1f + Mathf.Sin(Time.time * 3.5f) * .08f;
             pulseRing.transform.localScale = pulseRingBaseScale * pulse;
         }
@@ -82,7 +92,11 @@ namespace AlmostDelivered.Gameplay.Payload
             var state = mission == null
                 ? PayloadRelayVisualState.Future
                 : ResolveState(mission.Snapshot);
-            ApplyVisualState(state);
+            if (!visualsInitialized || state != visualState)
+            {
+                ApplyVisualState(state);
+            }
+            UpdateDistanceLabel();
         }
 
         private PayloadRelayVisualState ResolveState(PayloadMissionSnapshot snapshot)
@@ -120,14 +134,65 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void ApplyVisualState(PayloadRelayVisualState state)
         {
+            visualsInitialized = true;
             visualState = state;
             var activeSignal = state == PayloadRelayVisualState.Active ||
                                state == PayloadRelayVisualState.Loading ||
+                               state == PayloadRelayVisualState.Completed ||
                                state == PayloadRelayVisualState.DestinationActive;
             SetActive(beam, activeSignal);
             SetActive(pulseRing, activeSignal);
             SetActive(supplyCache, state != PayloadRelayVisualState.Completed);
             SetActive(collectedCargo, state == PayloadRelayVisualState.Completed);
+            if (pulseRing != null && state == PayloadRelayVisualState.Completed)
+            {
+                pulseRing.transform.localScale = pulseRingBaseScale;
+            }
+
+            var signalColor = state == PayloadRelayVisualState.Completed
+                ? new Color(.25f, 1f, .45f)
+                : state == PayloadRelayVisualState.Loading
+                    ? new Color(1f, .65f, .15f)
+                    : new Color(.2f, .9f, 1f);
+            ApplySignalColor(beam, signalColor);
+            ApplySignalColor(pulseRing, signalColor);
+        }
+
+        private void UpdateDistanceLabel()
+        {
+            if (relayLabel == null || mission == null || mission.RoutePlan == null)
+            {
+                return;
+            }
+
+            if (!finalDestination && mission.RoutePlan.CheckpointDistances.Count == 0)
+            {
+                return;
+            }
+
+            var targetDistance = finalDestination
+                ? mission.RoutePlan.TotalLength
+                : mission.RoutePlan.CheckpointDistances[Mathf.Clamp(checkpointIndex, 0, mission.RoutePlan.CheckpointDistances.Count - 1)];
+            var remaining = Mathf.Max(0f, targetDistance - mission.Snapshot.RouteDistance);
+            relayLabel.text = finalDestination
+                ? $"DESTINATION\n{Mathf.CeilToInt(remaining)}m"
+                : $"SUPPLY {checkpointIndex + 1}\n{Mathf.CeilToInt(remaining)}m";
+        }
+
+        private static void ApplySignalColor(GameObject value, Color color)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            var renderers = value.GetComponentsInChildren<Renderer>(true);
+            var properties = new MaterialPropertyBlock();
+            properties.SetColor("_Color", color);
+            for (var index = 0; index < renderers.Length; index++)
+            {
+                renderers[index].SetPropertyBlock(properties);
+            }
         }
 
         private void Subscribe()

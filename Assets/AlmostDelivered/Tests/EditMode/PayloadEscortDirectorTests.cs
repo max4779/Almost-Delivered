@@ -64,6 +64,35 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void CheckpointDefenseResumesExistingPressureCountdown()
+        {
+            var uninterrupted = new PayloadEscortDirector(451);
+            var paused = new PayloadEscortDirector(451);
+            TriggerFirstEncounter(uninterrupted);
+            TriggerFirstEncounter(paused);
+
+            Assert.That(uninterrupted.Tick(5f, PayloadMissionPhase.Escorting, 0, out _), Is.False);
+            Assert.That(paused.Tick(5f, PayloadMissionPhase.Escorting, 0, out _), Is.False);
+            Assert.That(paused.Tick(100f, PayloadMissionPhase.CheckpointDefense, 0, out _), Is.False);
+
+            for (var second = 1; second <= 15; second++)
+            {
+                var expected = uninterrupted.Tick(1f, PayloadMissionPhase.Escorting, 0, out var expectedEncounter);
+                var actual = paused.Tick(1f, PayloadMissionPhase.Escorting, 0, out var actualEncounter);
+                Assert.That(actual, Is.EqualTo(expected), $"Countdown diverged {second} seconds after checkpoint defense.");
+                if (!expected)
+                    continue;
+
+                Assert.That(actualEncounter.SequenceId, Is.EqualTo(expectedEncounter.SequenceId));
+                Assert.That(actualEncounter.GroupSize, Is.EqualTo(expectedEncounter.GroupSize));
+                Assert.That(actualEncounter.Pattern, Is.EqualTo(expectedEncounter.Pattern));
+                return;
+            }
+
+            Assert.Fail("The resumed pressure countdown did not produce its next encounter.");
+        }
+
+        [Test]
         public void SameSeedProducesSameEncounterSequence()
         {
             var first = Sequence(1234);
@@ -102,6 +131,15 @@ namespace AlmostDelivered.Tests.EditMode
                 if (director.Tick(1f, PayloadMissionPhase.Escorting, 0, out var encounter))
                     sequence.Add($"{encounter.SequenceId}:{encounter.GroupSize}:{encounter.Pattern}");
             return sequence;
+        }
+
+        private static void TriggerFirstEncounter(PayloadEscortDirector director)
+        {
+            director.Tick(0f, PayloadMissionPhase.Escorting, 0, out _);
+            for (var second = 0; second < 8; second++)
+                if (director.Tick(1f, PayloadMissionPhase.Escorting, 0, out _))
+                    return;
+            Assert.Fail("Expected the first encounter within eight escort seconds.");
         }
     }
 }

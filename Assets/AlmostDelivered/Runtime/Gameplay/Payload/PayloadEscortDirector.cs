@@ -11,7 +11,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private readonly Random random;
         private readonly int pressureCap;
-        private bool wasEscorting;
+        private bool hasEnteredEscort;
         private float remainingDelay;
         private int nextSequenceId;
 
@@ -35,14 +35,12 @@ namespace AlmostDelivered.Gameplay.Payload
 
             if (phase != PayloadMissionPhase.Escorting)
             {
-                wasEscorting = false;
-                remainingDelay = 0f;
                 return false;
             }
 
-            if (!wasEscorting)
+            if (!hasEnteredEscort)
             {
-                wasEscorting = true;
+                hasEnteredEscort = true;
                 remainingDelay = NextDelay(InitialMinimumDelay, InitialMaximumDelay);
                 return false;
             }

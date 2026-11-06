@@ -101,7 +101,8 @@ namespace AlmostDelivered.Gameplay.Payload
             Vector3 payloadPosition,
             Vector3 routeDirection,
             Rect missionBounds,
-            float exclusionRadius)
+            float exclusionRadius,
+            Camera visibilityCamera = null)
         {
             if (encounter.GroupSize <= 0 || !IsFinite(payloadPosition))
             {
@@ -113,20 +114,38 @@ namespace AlmostDelivered.Gameplay.Payload
             var random = new System.Random(unchecked(missionSeed * 486187739 + encounter.SequenceId * 397));
             var approach = ApproachDirection(encounter.Pattern, forward, right);
             var approachDistance = 18f + (float)random.NextDouble() * 6f;
-            var center = payloadPosition + approach * approachDistance;
+            var minimumDistance = Mathf.Max(0f, exclusionRadius) + 2f;
+            var travelGroup = new List<PendingEnemy>(encounter.GroupSize);
 
             for (var index = 0; index < encounter.GroupSize; index++)
             {
                 var angle = (float)(random.NextDouble() * Math.PI * 2d);
                 var scatter = 3f + (float)random.NextDouble() * 2f;
-                var candidate = center + new Vector3(Mathf.Cos(angle) * scatter, 0f, Mathf.Sin(angle) * scatter);
-                candidate = SanitizeTravelPosition(candidate, payloadPosition, missionBounds, Mathf.Max(0f, exclusionRadius) + 2f);
+                if (!TryResolveTravelPosition(
+                        payloadPosition,
+                        approach,
+                        approachDistance,
+                        angle,
+                        scatter,
+                        missionBounds,
+                        minimumDistance,
+                        visibilityCamera,
+                        out var candidate))
+                {
+                    return;
+                }
+
                 var enemyId = unchecked(-((encounter.SequenceId + 1) * 1000 + index + 1));
-                pending.Enqueue(new PendingEnemy(
+                travelGroup.Add(new PendingEnemy(
                     -(encounter.SequenceId + 1),
                     enemyId,
                     MissionMobDefinition.For(SelectArchetype(random, false, index)),
                     candidate));
+            }
+
+            foreach (var enemy in travelGroup)
+            {
+                pending.Enqueue(enemy);
             }
 
             SpawnUntilCap();
@@ -299,11 +318,51 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
-        private static Vector3 SanitizeTravelPosition(
+        private static bool TryResolveTravelPosition(
+            Vector3 payloadPosition,
+            Vector3 approach,
+            float approachDistance,
+            float scatterAngle,
+            float scatter,
+            Rect bounds,
+            float minimumDistance,
+            Camera visibilityCamera,
+            out Vector3 position)
+        {
+            const int candidateCount = 16;
+            for (var attempt = 0; attempt < candidateCount; attempt++)
+            {
+                var offset = attempt == 0
+                    ? 0f
+                    : ((attempt + 1) / 2) * 45f * (attempt % 2 == 0 ? -1f : 1f);
+                var rotatedApproach = Quaternion.Euler(0f, offset, 0f) * approach;
+                var center = payloadPosition + rotatedApproach * approachDistance;
+                var angle = scatterAngle + attempt * 2.39996323f;
+                var candidate = center + new Vector3(Mathf.Cos(angle) * scatter, 0f, Mathf.Sin(angle) * scatter);
+                if (!TrySanitizeTravelPosition(candidate, payloadPosition, bounds, minimumDistance, out candidate))
+                {
+                    continue;
+                }
+
+                if (visibilityCamera != null && IsVisible(visibilityCamera, candidate))
+                {
+                    continue;
+                }
+
+                position = candidate;
+                return true;
+            }
+
+            position = default;
+            return false;
+        }
+
+        private static bool TrySanitizeTravelPosition(
             Vector3 candidate,
             Vector3 payloadPosition,
             Rect bounds,
-            float minimumDistance)
+            float minimumDistance,
+            out Vector3 position)
         {
             var insetBounds = Rect.MinMaxRect(
                 bounds.xMin + 1f,
@@ -322,7 +381,8 @@ namespace AlmostDelivered.Gameplay.Payload
             var delta = Vector3.ProjectOnPlane(candidate - payloadPosition, Vector3.up);
             if (delta.magnitude + .001f >= minimumDistance)
             {
-                return candidate;
+                position = candidate;
+                return true;
             }
 
             var towardCenter = new Vector3(insetBounds.center.x - payloadPosition.x, 0f, insetBounds.center.y - payloadPosition.z);
@@ -332,7 +392,8 @@ namespace AlmostDelivered.Gameplay.Payload
             candidate.z = Mathf.Clamp(candidate.z, insetBounds.yMin, insetBounds.yMax);
             if (Vector3.Distance(candidate, payloadPosition) + .001f >= minimumDistance)
             {
-                return candidate;
+                position = candidate;
+                return true;
             }
 
             var corners = new[]
@@ -354,7 +415,26 @@ namespace AlmostDelivered.Gameplay.Payload
                 }
             }
 
-            return farthest;
+            if (Vector3.Distance(farthest, payloadPosition) + .001f >= minimumDistance)
+            {
+                position = farthest;
+                return true;
+            }
+
+            position = default;
+            return false;
+        }
+
+        private static bool IsVisible(Camera camera, Vector3 position)
+        {
+            var feet = camera.WorldToViewportPoint(position);
+            var head = camera.WorldToViewportPoint(position + Vector3.up * 2f);
+            return IsInsideViewport(feet) || IsInsideViewport(head);
+        }
+
+        private static bool IsInsideViewport(Vector3 viewport)
+        {
+            return viewport.z > 0f && viewport.x >= 0f && viewport.x <= 1f && viewport.y >= 0f && viewport.y <= 1f;
         }
 
         private static Vector3 HorizontalDirection(Vector3 value, Vector3 fallback)

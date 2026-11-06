@@ -171,10 +171,10 @@ namespace AlmostDelivered.Tests.PlayMode
 
             hud.Refresh();
 
-            Assert.That(phase.text, Does.Contain("CHECKPOINT DEFENSE"));
+            Assert.That(phase.text, Does.Contain("LOADING SUPPLIES"));
             Assert.That(progress.text, Does.Contain("50%"));
             Assert.That(checkpoint.text, Does.Contain("2 / 3"));
-            Assert.That(escort.text, Does.Contain("CONTESTED"));
+            Assert.That(escort.text, Does.Contain("LOADING SUPPLIES"));
             Assert.That(elapsed.text, Does.Contain("02:05"));
             Assert.That(targets.text, Does.Contain("4"));
         }
