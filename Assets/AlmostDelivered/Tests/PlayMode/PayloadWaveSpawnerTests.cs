@@ -280,13 +280,14 @@ namespace AlmostDelivered.Tests.PlayMode
         {
             var spawner = CreateSpawner(root.transform, 1202, 18);
 
-            spawner.SpawnTravelGroup(
+            var spawned = spawner.SpawnTravelGroup(
                 new PayloadEscortEncounter(0, 4, PayloadAssaultPattern.ForwardBlockade),
                 Vector3.zero,
                 Vector3.forward,
                 new Rect(-1f, -1f, 2f, 2f),
                 10f);
 
+            Assert.That(spawned, Is.False);
             Assert.That(spawner.ActiveCount, Is.Zero);
             Assert.That(spawner.PendingCount, Is.Zero);
         }

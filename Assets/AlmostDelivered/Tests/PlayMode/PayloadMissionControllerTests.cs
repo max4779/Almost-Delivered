@@ -177,6 +177,37 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void BlockedTravelEncounterIsRetriedUntilItCanSpawnSafely()
+        {
+            var cameraObject = new GameObject("Blocking Main Camera", typeof(Camera));
+            cameraObject.transform.SetParent(root.transform, false);
+            cameraObject.tag = "MainCamera";
+            cameraObject.transform.position = new Vector3(0f, 50f, 0f);
+            cameraObject.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            var camera = cameraObject.GetComponent<Camera>();
+            camera.orthographic = true;
+            camera.orthographicSize = 1000f;
+            var spawner = CreateSpawner(604);
+            var controller = NewController();
+            controller.Configure(true, 604, Bounds(), player.transform, payload.transform, null, spawner, .1f, 0f, 4.5f);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+
+            controller.Tick(0f);
+            controller.Tick(8f);
+
+            Assert.That(spawner.ActiveCount, Is.Zero);
+            Assert.That(controller.HasPendingEscortEncounter, Is.True);
+
+            camera.enabled = false;
+            cameraObject.tag = "Untagged";
+            controller.Tick(0f);
+
+            Assert.That(spawner.ActiveCount, Is.InRange(3, 6));
+            Assert.That(controller.HasPendingEscortEncounter, Is.False);
+        }
+
+        [Test]
         public void CheckpointRegistrationIgnoresTravelEnemyIds()
         {
             var spawner = CreateSpawner(603);

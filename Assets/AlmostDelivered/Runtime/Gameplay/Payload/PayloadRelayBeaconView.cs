@@ -56,6 +56,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void OnEnable()
         {
+            ResolveRelayLabel();
             if (pulseRing != null)
             {
                 pulseRingBaseScale = pulseRing.transform.localScale;
@@ -89,6 +90,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Refresh()
         {
+            ResolveRelayLabel();
             var state = mission == null
                 ? PayloadRelayVisualState.Future
                 : ResolveState(mission.Snapshot);
@@ -177,6 +179,14 @@ namespace AlmostDelivered.Gameplay.Payload
             relayLabel.text = finalDestination
                 ? $"DESTINATION\n{Mathf.CeilToInt(remaining)}m"
                 : $"SUPPLY {checkpointIndex + 1}\n{Mathf.CeilToInt(remaining)}m";
+        }
+
+        private void ResolveRelayLabel()
+        {
+            if (relayLabel == null)
+            {
+                relayLabel = transform.Find("Relay Label")?.GetComponent<TextMesh>();
+            }
         }
 
         private static void ApplySignalColor(GameObject value, Color color)

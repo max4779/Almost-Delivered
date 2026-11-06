@@ -100,6 +100,8 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Count(relay => relay.VisualState == PayloadRelayVisualState.Active), Is.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0).VisualState, Is.EqualTo(PayloadRelayVisualState.Active));
+            Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0)
+                .transform.Find("Relay Label").GetComponent<TextMesh>().text, Does.EndWith("m"));
         }
 
         [UnityTest]

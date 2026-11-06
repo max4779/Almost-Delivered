@@ -22,12 +22,14 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private int configuredInteriorPointCount = 5;
         private PayloadMissionStateMachine stateMachine;
         private PayloadEscortDirector escortDirector;
+        private PayloadEscortEncounter? pendingEscortEncounter;
         [SerializeField] private float escortRadius;
         private PayloadMissionSnapshot snapshot;
 
         public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
         public PayloadMissionSnapshot Snapshot => snapshot;
+        public bool HasPendingEscortEncounter => pendingEscortEncounter.HasValue;
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
@@ -88,6 +90,7 @@ namespace AlmostDelivered.Gameplay.Payload
             escortDirector = authority && waveSpawner != null
                 ? new PayloadEscortDirector(configuredSeed)
                 : null;
+            pendingEscortEncounter = null;
             snapshot = stateMachine.Snapshot;
 
             if (payloadTransform != null)
@@ -198,7 +201,30 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
+            if (snapshot.Phase != PayloadMissionPhase.Escorting)
+            {
+                escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.ActiveCount, out _);
+                return;
+            }
+
+            if (pendingEscortEncounter.HasValue)
+            {
+                TrySpawnEscortEncounter(pendingEscortEncounter.Value);
+                return;
+            }
+
             if (!escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.ActiveCount, out var encounter))
+            {
+                return;
+            }
+
+            pendingEscortEncounter = encounter;
+            TrySpawnEscortEncounter(encounter);
+        }
+
+        private void TrySpawnEscortEncounter(PayloadEscortEncounter encounter)
+        {
+            if (waveSpawner == null || RoutePlan == null || payloadTransform == null)
             {
                 return;
             }
@@ -206,13 +232,16 @@ namespace AlmostDelivered.Gameplay.Payload
             var distance = snapshot.RouteDistance;
             var before = RoutePlan.EvaluateDistance(Mathf.Max(0f, distance - 1f));
             var after = RoutePlan.EvaluateDistance(Mathf.Min(RoutePlan.TotalLength, distance + 1f));
-            waveSpawner.SpawnTravelGroup(
+            if (waveSpawner.SpawnTravelGroup(
                 encounter,
                 payloadTransform.position,
                 after - before,
                 configuredBounds,
                 escortRadius,
-                Camera.main);
+                Camera.main))
+            {
+                pendingEscortEncounter = null;
+            }
         }
 
         private void HandleWaveStarted(int waveId, System.Collections.Generic.IReadOnlyCollection<int> enemyIds)

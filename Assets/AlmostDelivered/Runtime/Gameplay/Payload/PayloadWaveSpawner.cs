@@ -96,7 +96,7 @@ namespace AlmostDelivered.Gameplay.Payload
             SpawnUntilCap();
         }
 
-        public void SpawnTravelGroup(
+        public bool SpawnTravelGroup(
             PayloadEscortEncounter encounter,
             Vector3 payloadPosition,
             Vector3 routeDirection,
@@ -106,7 +106,7 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             if (encounter.GroupSize <= 0 || !IsFinite(payloadPosition))
             {
-                return;
+                return false;
             }
 
             var forward = HorizontalDirection(routeDirection, Vector3.forward);
@@ -132,7 +132,7 @@ namespace AlmostDelivered.Gameplay.Payload
                         visibilityCamera,
                         out var candidate))
                 {
-                    return;
+                    return false;
                 }
 
                 var enemyId = unchecked(-((encounter.SequenceId + 1) * 1000 + index + 1));
@@ -149,6 +149,7 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             SpawnUntilCap();
+            return true;
         }
 
         private void OnDisable()
