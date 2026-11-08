@@ -67,12 +67,20 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField, Min(1f)] private float turnSpeed = 360f;
         [SerializeField] private float gravity = -24f;
         [SerializeField] private float groundedVerticalSpeed = -2f;
+        [SerializeField, Min(.1f)] private float deathDuration = 1f;
+        [SerializeField] private float deathFallAngle = -82f;
+        [SerializeField, Min(0f)] private float deathSinkDepth = 1.35f;
 
         private ActorHealth health;
         private CharacterController characterController;
         private float nextContactTime;
         private float verticalVelocity;
         private bool removalReported;
+        private bool deathAnimating;
+        private float deathElapsed;
+        private Transform deathVisual;
+        private Vector3 deathStartPosition;
+        private Quaternion deathStartRotation;
 
         public MissionMobDefinition Definition { get; private set; }
         public int WaveId { get; private set; } = -1;
@@ -119,6 +127,9 @@ namespace AlmostDelivered.Gameplay.Payload
             nextContactTime = 0f;
             verticalVelocity = 0f;
             removalReported = false;
+            deathAnimating = false;
+            deathElapsed = 0f;
+            deathVisual = null;
             health.ConfigureMaximum(definition.MaxHealth);
         }
 
@@ -130,7 +141,18 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Tick(float now, float deltaTime)
         {
-            if (!enabled || IsDefeated || target == null || !IsFinite(now) || !IsFinite(deltaTime) || deltaTime < 0f)
+            if (!enabled || !IsFinite(now) || !IsFinite(deltaTime) || deltaTime < 0f)
+            {
+                return;
+            }
+
+            if (deathAnimating)
+            {
+                TickDeath(deltaTime);
+                return;
+            }
+
+            if (IsDefeated || target == null)
             {
                 return;
             }
@@ -237,8 +259,38 @@ namespace AlmostDelivered.Gameplay.Payload
                 actorCollider.enabled = false;
             }
 
+            deathVisual = transform.Find("VisualRoot");
+            if (deathVisual != null)
+            {
+                deathStartPosition = deathVisual.localPosition;
+                deathStartRotation = deathVisual.localRotation;
+            }
+
+            deathElapsed = 0f;
+            deathAnimating = true;
             NotifyRemoved();
+        }
+
+        private void TickDeath(float deltaTime)
+        {
+            deathElapsed += deltaTime;
+            var progress = Mathf.Clamp01(deathElapsed / Mathf.Max(.1f, deathDuration));
+            if (deathVisual != null)
+            {
+                var fall = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / .55f));
+                var sink = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.35f, 1f, progress));
+                deathVisual.localRotation = deathStartRotation * Quaternion.Euler(deathFallAngle * fall, 0f, 0f);
+                deathVisual.localPosition = deathStartPosition + Vector3.down * (deathSinkDepth * sink);
+            }
+
+            if (progress < 1f)
+            {
+                return;
+            }
+
+            deathAnimating = false;
             enabled = false;
+            Destroy(gameObject);
         }
 
         private void NotifyRemoved()

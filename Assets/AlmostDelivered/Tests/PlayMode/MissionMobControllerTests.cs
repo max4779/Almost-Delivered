@@ -1,7 +1,9 @@
+using System.Collections;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Gameplay.Payload;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace AlmostDelivered.Tests.PlayMode
 {
@@ -100,17 +102,27 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(mob.transform.position.z, Is.EqualTo(2.2f).Within(.001f));
         }
 
-        [Test]
-        public void DeathDisablesControllerAndColliders()
+        [UnityTest]
+        public IEnumerator DeathFallsThenSinksAndDestroysMob()
         {
             var collider = mob.AddComponent<CapsuleCollider>();
+            var visual = new GameObject("VisualRoot").transform;
+            visual.SetParent(mob.transform, false);
             var controller = mob.AddComponent<MissionMobController>();
             controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
 
             mob.GetComponent<ActorHealth>().ApplyDamage(1000f);
 
-            Assert.That(controller.enabled, Is.False);
+            Assert.That(controller.enabled, Is.True, "The controller must stay alive long enough to animate the corpse.");
             Assert.That(collider.enabled, Is.False);
+
+            controller.Tick(0f, .55f);
+            Assert.That(Quaternion.Angle(Quaternion.identity, visual.localRotation), Is.GreaterThan(30f));
+            Assert.That(visual.localPosition.y, Is.LessThan(-.05f));
+
+            controller.Tick(0f, .6f);
+            yield return null;
+            Assert.That(mob == null, Is.True);
         }
 
         [Test]
