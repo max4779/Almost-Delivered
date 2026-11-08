@@ -42,7 +42,8 @@ namespace AlmostDelivered.Gameplay.Payload
             int enemiesInRange,
             bool isEscortActive,
             bool isWaveRegistered,
-            float activationProgress = 0f)
+            float activationProgress = 0f,
+            bool isActivationInputHeld = false)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -56,6 +57,7 @@ namespace AlmostDelivered.Gameplay.Payload
             IsEscortActive = isEscortActive;
             IsWaveRegistered = isWaveRegistered;
             ActivationProgress = activationProgress;
+            IsActivationInputHeld = isActivationInputHeld;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -81,5 +83,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool IsWaveRegistered { get; }
 
         public float ActivationProgress { get; }
+
+        public bool IsActivationInputHeld { get; }
     }
 }

@@ -130,17 +130,21 @@ namespace AlmostDelivered.Tests.PlayMode
             player.transform.position = payload.transform.position;
             Physics.SyncTransforms();
             controller.Tick(0f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(8));
+
+            controller.Tick(0f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
             Assert.That(spawner.ActiveCount, Is.EqualTo(11));
 
-            controller.Tick(2f);
+            controller.Tick(1.5f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(controller.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
             Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
             Assert.That(spawner.ActiveCount, Is.EqualTo(14));
 
-            controller.Tick(2f);
+            controller.Tick(1.5f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
         }
 

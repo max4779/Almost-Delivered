@@ -25,6 +25,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private bool isEscortActive;
         private bool isWaveRegistered;
         private float activationElapsed;
+        private bool isActivationInputHeld;
 
         public PayloadMissionStateMachine(
             float routeLength,
@@ -65,9 +66,10 @@ namespace AlmostDelivered.Gameplay.Payload
                                  phase == PayloadMissionPhase.CheckpointDefense || phase == PayloadMissionPhase.FinalDefense ||
                                  phase == PayloadMissionPhase.Completed)
                 ? activationDuration <= Mathf.Epsilon ? 1f : Mathf.Clamp01(activationElapsed / activationDuration)
-                : 0f);
+                : 0f,
+            isActivationInputHeld);
 
-        public void Tick(float deltaTime, int playersInRange, int enemiesInRange)
+        public void Tick(float deltaTime, int playersInRange, int enemiesInRange, bool activationInputHeld = false)
         {
             if (!IsFinite(deltaTime) || deltaTime < 0f)
             {
@@ -81,6 +83,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
             this.playersInRange = Mathf.Max(0, playersInRange);
             this.enemiesInRange = Mathf.Max(0, enemiesInRange);
+            isActivationInputHeld = activationInputHeld && this.playersInRange > 0 &&
+                                    (phase == PayloadMissionPhase.Recovering || phase == PayloadMissionPhase.Activating);
             elapsedTime += deltaTime;
             isEscortActive = false;
 
@@ -98,7 +102,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
             if (phase == PayloadMissionPhase.Recovering)
             {
-                if (isWaveRegistered && remainingEnemies.Count == 0 && this.playersInRange > 0)
+                if (isWaveRegistered && remainingEnemies.Count == 0 && isActivationInputHeld)
                 {
                     remainingEnemies.Clear();
                     isWaveRegistered = false;
@@ -112,7 +116,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
             if (phase == PayloadMissionPhase.Activating)
             {
-                if (this.playersInRange <= 0)
+                if (!isActivationInputHeld)
                 {
                     return;
                 }
@@ -122,6 +126,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 {
                     activationElapsed = activationDuration;
                     phase = PayloadMissionPhase.Escorting;
+                    isActivationInputHeld = false;
                 }
 
                 return;

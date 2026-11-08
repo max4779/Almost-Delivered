@@ -19,10 +19,12 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadCheckpointText;
         [SerializeField] private Text payloadEscortText;
         [SerializeField] private Text payloadElapsedText;
+        [SerializeField] private Text payloadActivationCountdownText;
 
         public int RemainingBosses => bosses == null ? 0 : bosses.Count(boss => boss != null && !boss.IsDefeated);
         public bool HasPayloadViews => payloadMission != null && payloadPhaseText != null && payloadProgressText != null &&
                                        payloadCheckpointText != null && payloadEscortText != null && payloadElapsedText != null;
+        public Text ActivationCountdownText => payloadActivationCountdownText;
 
         public void BindViews(Text controls, Text health, Text bossCount)
         {
@@ -55,6 +57,12 @@ namespace AlmostDelivered.Gameplay
             Refresh();
         }
 
+        public void BindActivationCountdown(Text countdown)
+        {
+            payloadActivationCountdownText = countdown;
+            Refresh();
+        }
+
         private void Update()
         {
             Refresh();
@@ -63,7 +71,7 @@ namespace AlmostDelivered.Gameplay
         public void Refresh()
         {
             if (controlsText != null)
-                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 발사  |  ESC 귀환";
+                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 발사  |  E 화물 기동  |  ESC 귀환";
             if (playerHealthText != null && playerHealth != null)
                 playerHealthText.text = $"PLAYER  {Mathf.CeilToInt(playerHealth.CurrentHealth)} / {Mathf.CeilToInt(playerHealth.MaxHealth)}";
             if (bossCountText != null)
@@ -99,6 +107,41 @@ namespace AlmostDelivered.Gameplay
                 var totalSeconds = Mathf.Max(0, Mathf.FloorToInt(state.ElapsedTime));
                 payloadElapsedText.text = $"TIME  {totalSeconds / 60:00}:{totalSeconds % 60:00}";
             }
+
+            RefreshActivationCountdown(state);
+        }
+
+        private void RefreshActivationCountdown(PayloadMissionSnapshot state)
+        {
+            if (payloadActivationCountdownText == null)
+            {
+                return;
+            }
+
+            var readyToStart = state.Phase == PayloadMissionPhase.Recovering &&
+                               state.RemainingEnemyCount == 0 &&
+                               state.PlayersInRange > 0;
+            var activating = state.Phase == PayloadMissionPhase.Activating;
+            var visible = readyToStart || activating;
+            if (payloadActivationCountdownText.gameObject.activeSelf != visible)
+            {
+                payloadActivationCountdownText.gameObject.SetActive(visible);
+            }
+
+            if (!visible)
+            {
+                return;
+            }
+
+            var progress = activating ? state.ActivationProgress : 0f;
+            var remaining = Mathf.Max(0f, payloadMission.CargoActivationDuration * (1f - progress));
+            var running = activating && state.IsActivationInputHeld;
+            payloadActivationCountdownText.text = running
+                ? $"CARGO STARTUP\n{remaining:0.0}"
+                : $"HOLD E\n{remaining:0.0}";
+            payloadActivationCountdownText.color = running
+                ? new Color(.12f, .95f, 1f, 1f)
+                : new Color(1f, .66f, .12f, 1f);
         }
 
         private static string PhaseLabel(PayloadMissionPhase phase)
@@ -142,14 +185,16 @@ namespace AlmostDelivered.Gameplay
             if (state.Phase == PayloadMissionPhase.Activating)
             {
                 return state.PlayersInRange > 0
-                    ? $"CARGO STARTUP {Mathf.RoundToInt(state.ActivationProgress * 100f)}%"
+                    ? state.IsActivationInputHeld
+                        ? $"CARGO STARTUP {Mathf.RoundToInt(state.ActivationProgress * 100f)}%"
+                        : $"HOLD E TO CONTINUE {Mathf.RoundToInt(state.ActivationProgress * 100f)}%"
                     : "RETURN TO CARGO";
             }
 
             if (state.RemainingEnemyCount > 0)
                 return "CLEAR CARGO GUARDS";
             if (state.PlayersInRange > 0)
-                return "RESTARTING CARGO";
+                return "HOLD E TO START CARGO";
             return "APPROACH CARGO";
         }
     }

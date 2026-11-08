@@ -34,7 +34,7 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectsOfType<PayloadMissionController>(true), Has.Length.EqualTo(1));
             Assert.That(mission.IsAuthority, Is.True);
             Assert.That(mission.RequiresCargoRecovery, Is.True);
-            Assert.That(mission.CargoActivationDuration, Is.EqualTo(4f));
+            Assert.That(mission.CargoActivationDuration, Is.EqualTo(3f));
             Assert.That(mission.PreplacedSentryCount, Is.EqualTo(8));
             Assert.That(Vector3.Distance(player.transform.position, payload.transform.position), Is.GreaterThan(12f));
             Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(true), Has.Length.EqualTo(1));
@@ -48,6 +48,9 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectOfType<MissionMinimap>(true).transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
             Assert.That(Object.FindObjectsOfType<MissionHud>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);
+            Assert.That(Object.FindObjectsOfType<PlayerDamageFlashView>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PlayerHealthBarView>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<MissionHud>(true).ActivationCountdownText, Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<PrototypeBossController>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<CombatProjectile>(true).Count(item => item.name == "Projectile Template"), Is.EqualTo(1));
             AssertVisual(player, VisualArchetype.Player);

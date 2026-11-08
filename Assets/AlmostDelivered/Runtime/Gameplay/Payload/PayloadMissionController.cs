@@ -23,7 +23,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private int configuredInteriorPointCount = 5;
         [SerializeField] private bool requiresCargoRecovery;
         [SerializeField, Min(0)] private int configuredRecoveryGuardCount = 6;
-        [SerializeField, Min(0f)] private float configuredCargoActivationDuration = 4f;
+        [SerializeField, Min(0f)] private float configuredCargoActivationDuration = 3f;
         [SerializeField, Min(0)] private int configuredPreplacedSentryCount = 8;
         [SerializeField, Min(0f)] private float configuredCargoNoiseRadius = 26f;
         [SerializeField, Min(.1f)] private float configuredCargoNoiseInterval = .65f;
@@ -62,7 +62,7 @@ namespace AlmostDelivered.Gameplay.Payload
             float corridorWidth = 3f,
             bool requireCargoRecovery = false,
             int recoveryGuardCount = 6,
-            float cargoActivationDuration = 4f,
+            float cargoActivationDuration = 3f,
             int preplacedSentryCount = 8)
         {
             if (stateMachine != null)
@@ -79,6 +79,8 @@ namespace AlmostDelivered.Gameplay.Payload
             payloadTransform = payload;
             configuredMapGenerator = mapGenerator;
             waveSpawner = waves;
+            if (waveSpawner != null)
+                waveSpawner.ConfigureCargoTarget(payload);
             escortRadius = Mathf.Max(0f, radius);
             configuredMovementSpeed = movementSpeed;
             configuredDeploymentDuration = deploymentDuration;
@@ -161,7 +163,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void Update()
         {
-            Tick(Time.deltaTime);
+            Tick(Time.deltaTime, Input.GetKey(KeyCode.E));
         }
 
         private void OnDestroy()
@@ -176,6 +178,11 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Tick(float deltaTime)
         {
+            Tick(deltaTime, false);
+        }
+
+        public void Tick(float deltaTime, bool activationInputHeld)
+        {
             if (!authority || stateMachine == null || playerTransform == null || payloadTransform == null)
             {
                 return;
@@ -183,7 +190,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var previousPhase = snapshot.Phase;
-            stateMachine.Tick(deltaTime, players, enemies);
+            stateMachine.Tick(deltaTime, players, enemies, activationInputHeld);
             var currentState = stateMachine.Snapshot;
             HandleActivationTransition(previousPhase, currentState.Phase);
             TickActivationWaves(previousPhase, currentState);
@@ -299,7 +306,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void TickActivationNoise(float deltaTime)
         {
-            if (snapshot.Phase != PayloadMissionPhase.Activating)
+            if (snapshot.Phase != PayloadMissionPhase.Activating || !snapshot.IsActivationInputHeld)
             {
                 return;
             }

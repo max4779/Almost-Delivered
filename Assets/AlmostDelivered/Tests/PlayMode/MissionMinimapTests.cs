@@ -250,6 +250,60 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(targets.text, Does.Contain("4"));
         }
 
+        [Test]
+        public void ActivationCountdownShowsRemainingSecondsAndPausesWithInput()
+        {
+            var hudObject = new GameObject("Countdown HUD", typeof(MissionHud));
+            hudObject.transform.SetParent(root.transform, false);
+            var hud = hudObject.GetComponent<MissionHud>();
+            var countdown = Text("Activation Countdown", hudObject.transform);
+            hud.ConfigurePayload(mission, null, null, null, null, null);
+            hud.BindActivationCountdown(countdown);
+
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.Activating,
+                2f,
+                0f,
+                0f,
+                0,
+                -1,
+                0,
+                1,
+                0,
+                false,
+                false,
+                .25f,
+                true));
+            hud.Refresh();
+
+            Assert.That(countdown.gameObject.activeSelf, Is.True);
+            Assert.That(countdown.text, Does.Contain("CARGO STARTUP"));
+            Assert.That(countdown.text, Does.Contain("2.3"));
+
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.Activating,
+                3f,
+                0f,
+                0f,
+                0,
+                -1,
+                0,
+                1,
+                0,
+                false,
+                false,
+                .5f,
+                false));
+            hud.Refresh();
+
+            Assert.That(countdown.text, Does.Contain("HOLD E"));
+            Assert.That(countdown.text, Does.Contain("1.5"));
+
+            mission.ApplySnapshot(Snapshot(0f, 0));
+            hud.Refresh();
+            Assert.That(countdown.gameObject.activeSelf, Is.False);
+        }
+
         private static GameObject Actor(string name, CombatTeamId team)
         {
             var actor = new GameObject(name);

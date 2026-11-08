@@ -78,9 +78,10 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             EnsureVisuals();
             var active = mission != null && mission.Snapshot.Phase == PayloadMissionPhase.Activating;
+            var running = active && mission.Snapshot.IsActivationInputHeld;
             ring.enabled = active;
             label.gameObject.SetActive(active);
-            RefreshAudio(active);
+            RefreshAudio(running);
             if (!active)
             {
                 return;
@@ -91,7 +92,9 @@ namespace AlmostDelivered.Gameplay.Payload
             ring.startColor = color;
             ring.endColor = color;
             label.color = color;
-            label.text = $"CARGO STARTUP  {Mathf.RoundToInt(progress * 100f)}%";
+            label.text = running
+                ? $"CARGO STARTUP  {Mathf.RoundToInt(progress * 100f)}%"
+                : $"HOLD E  {Mathf.RoundToInt(progress * 100f)}%";
         }
 
         private void RefreshAudio(bool active)

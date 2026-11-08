@@ -54,6 +54,68 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void CargoAssaultMobHeadsForCargoThenPursuesVisiblePlayerWithoutExclamation()
+        {
+            var cargo = new GameObject("Cargo");
+            try
+            {
+                cargo.transform.position = new Vector3(0f, 0f, 10f);
+                target.transform.position = new Vector3(0f, 0f, 20f);
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                controller.ConfigureCargoAssault(cargo.transform);
+
+                controller.Tick(0f, .5f);
+                Assert.That(mob.transform.position.z, Is.EqualTo(2f).Within(.001f));
+                Assert.That(controller.IsPursuingPlayer, Is.False);
+
+                target.transform.position = new Vector3(2f, 0f, 5f);
+                Physics.SyncTransforms();
+                controller.Tick(.5f, .1f);
+                Assert.That(controller.IsPursuingPlayer, Is.True);
+                Assert.That(controller.IsAlerted, Is.False);
+                Assert.That(controller.AlertIndicator, Is.Null);
+                Assert.That(mob.transform.position.x, Is.GreaterThan(0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
+        public void ShootingCargoAssaultMobAlertsNearbyAssaultMobsWithoutExclamations()
+        {
+            var cargo = new GameObject("Cargo");
+            var ally = Actor("Assault Ally", CombatTeamId.Enemy, Vector3.right * 3f);
+            try
+            {
+                cargo.transform.position = Vector3.forward * 10f;
+                target.transform.position = Vector3.forward * 20f;
+                var attacked = mob.AddComponent<MissionMobController>();
+                var nearby = ally.AddComponent<MissionMobController>();
+                attacked.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                nearby.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                attacked.ConfigureCargoAssault(cargo.transform);
+                nearby.ConfigureCargoAssault(cargo.transform);
+
+                mob.GetComponent<ActorHealth>().ApplyDamage(5f);
+
+                Assert.That(attacked.IsPursuingPlayer, Is.True);
+                Assert.That(nearby.IsPursuingPlayer, Is.True);
+                Assert.That(attacked.IsAlerted, Is.False);
+                Assert.That(nearby.IsAlerted, Is.False);
+                Assert.That(attacked.AlertIndicator, Is.Null);
+                Assert.That(nearby.AlertIndicator, Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(ally);
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
         public void TrackingTurnsTowardTargetWithoutSnapping()
         {
             target.transform.position = Vector3.right * 10f;
@@ -180,7 +242,8 @@ namespace AlmostDelivered.Tests.PlayMode
                 CombatNoiseSystem.Emit(Vector3.right * 2f, 5f, CombatTeamId.Player);
 
                 Assert.That(nearController.IsGuardPostEngaged, Is.True);
-                Assert.That(nearController.IsAlerted, Is.True);
+                Assert.That(nearController.IsAlerted, Is.False);
+                Assert.That(nearController.AlertIndicator, Is.Null);
                 Assert.That(farController.IsGuardPostEngaged, Is.False);
                 Assert.That(farController.IsAlerted, Is.False);
             }
@@ -283,6 +346,39 @@ namespace AlmostDelivered.Tests.PlayMode
                 controller.Tick(step * .05f, .05f);
 
             Assert.That(mob.transform.position.y, Is.EqualTo(.08f).Within(.02f));
+        }
+
+        [Test]
+        public void CharacterControllerMobWalksAroundCargoToReachPlayer()
+        {
+            var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ground.name = "Ground";
+            ground.transform.position = new Vector3(0f, -.5f, 5f);
+            ground.transform.localScale = new Vector3(24f, 1f, 24f);
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Cargo";
+            floor.transform.position = new Vector3(0f, 1f, 5f);
+            floor.transform.localScale = new Vector3(2.2f, 2f, 2.7f);
+            var character = mob.AddComponent<CharacterController>();
+            character.height = 2f;
+            character.radius = .5f;
+            character.center = Vector3.up;
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            Physics.SyncTransforms();
+
+            try
+            {
+                for (var step = 0; step < 180; step++)
+                    controller.Tick(step * .05f, .05f);
+
+                Assert.That(mob.transform.position.z, Is.GreaterThan(7f));
+                Assert.That(target.GetComponent<ActorHealth>().CurrentHealth, Is.LessThan(100f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(ground);
+            }
         }
 
         private static GameObject Actor(string name, CombatTeamId team, Vector3 position)

@@ -66,6 +66,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private static readonly HashSet<MissionMobController> ActiveMobs = new HashSet<MissionMobController>();
 
         [SerializeField] private Transform target;
+        [SerializeField] private Transform cargoTarget;
         [SerializeField] private RangedAttackController rangedAttack;
         [SerializeField, Min(1f)] private float turnSpeed = 360f;
         [SerializeField] private float gravity = -24f;
@@ -96,6 +97,12 @@ namespace AlmostDelivered.Gameplay.Payload
         private float alertTimeRemaining;
         private bool suppressDamageAlert;
         private GameObject alertIndicator;
+        private bool assaultingCargo;
+        private readonly RaycastHit[] navigationHits = new RaycastHit[24];
+        private Collider detourObstacle;
+        private Vector3 detourNear;
+        private Vector3 detourFar;
+        private bool headingToFar;
 
         public MissionMobDefinition Definition { get; private set; }
         public int WaveId { get; private set; } = -1;
@@ -104,6 +111,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool HasGuardPost => guardPostEnabled;
         public bool IsGuardPostEngaged => guardPostEngaged;
         public bool IsAlerted => alertTimeRemaining > 0f && alertIndicator != null && alertIndicator.activeSelf;
+        public bool IsPursuingPlayer => !assaultingCargo || guardPostEngaged;
         public GameObject AlertIndicator => alertIndicator;
 
         public event Action<MissionMobController> Removed;
@@ -178,6 +186,8 @@ namespace AlmostDelivered.Gameplay.Payload
             deathVisual = null;
             guardPostEnabled = false;
             guardPostEngaged = false;
+            assaultingCargo = false;
+            cargoTarget = null;
             alertTimeRemaining = 0f;
             if (alertIndicator != null)
             {
@@ -188,6 +198,7 @@ namespace AlmostDelivered.Gameplay.Payload
             health.ConfigureMaximum(definition.MaxHealth);
             lastKnownHealth = health.CurrentHealth;
             suppressDamageAlert = false;
+            ClearDetour();
         }
 
         public void ConfigureGuardPost(Vector3 position, float awarenessRadius)
@@ -196,6 +207,13 @@ namespace AlmostDelivered.Gameplay.Payload
             guardAwarenessRadius = Mathf.Max(0f, awarenessRadius);
             guardPostEnabled = true;
             guardPostEngaged = false;
+        }
+
+        public void ConfigureCargoAssault(Transform cargo)
+        {
+            cargoTarget = cargo;
+            assaultingCargo = cargo != null;
+            guardAwarenessRadius = 10f;
         }
 
         public void AssignIdentity(int waveId, int enemyId)
@@ -231,7 +249,13 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            var toTarget = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
+            var toPlayer = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
+            if (assaultingCargo && !guardPostEngaged && CanDetectTarget(toPlayer))
+                ReceiveAlert(false);
+
+            var pursuingPlayer = IsPursuingPlayer || cargoTarget == null;
+            var destination = pursuingPlayer ? target : cargoTarget;
+            var toTarget = Vector3.ProjectOnPlane(destination.position - transform.position, Vector3.up);
             if (guardPostEnabled && !guardPostEngaged)
             {
                 if (CanDetectTarget(toTarget))
@@ -264,20 +288,30 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var distance = toTarget.magnitude;
             var direction = toTarget / distance;
-            RotateTowards(direction, deltaTime);
+            if (!pursuingPlayer && distance <= 2.4f)
+            {
+                Move(Vector3.zero, deltaTime);
+                return;
+            }
+            Collider obstacle = null;
+            var blocked = characterController != null && FindBlockingObstacle(direction, distance, out obstacle);
+            if (blocked && detourObstacle != obstacle && detourObstacle == null)
+                PlanDetour(obstacle, direction);
+            var navigationDirection = NavigationDirection(direction);
+            RotateTowards(navigationDirection, deltaTime);
 
             if (IsRanged(Definition.Archetype))
             {
-                if (distance > Definition.StandOffRange)
+                if (distance > Definition.StandOffRange || blocked || detourObstacle != null)
                 {
-                    Move(direction, deltaTime);
+                    Move(navigationDirection, deltaTime);
                 }
-                else if (rangedAttack != null)
+                else if (pursuingPlayer && rangedAttack != null && !blocked && detourObstacle == null)
                 {
                     rangedAttack.TryFire(target.position, now);
                 }
 
-                if (distance <= Definition.StandOffRange)
+                if (distance <= Definition.StandOffRange && !blocked && detourObstacle == null)
                 {
                     Move(Vector3.zero, deltaTime);
                 }
@@ -285,19 +319,81 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (distance > Definition.ContactRange)
+            if (distance > Definition.ContactRange || blocked || detourObstacle != null)
             {
-                Move(direction, deltaTime);
+                Move(navigationDirection, deltaTime);
                 return;
             }
 
-            if (now >= nextContactTime)
+            if (pursuingPlayer && now >= nextContactTime)
             {
                 targetHealth.ApplyDamage(Definition.ContactDamage);
                 nextContactTime = now + Definition.ContactCooldown;
             }
 
             Move(Vector3.zero, deltaTime);
+        }
+
+        private bool FindBlockingObstacle(Vector3 direction, float distance, out Collider obstacle)
+        {
+            obstacle = null;
+            var origin = transform.position + Vector3.up;
+            var count = Physics.SphereCastNonAlloc(origin, .38f, direction, navigationHits,
+                Mathf.Max(0f, distance - .5f), Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            var nearest = float.PositiveInfinity;
+            for (var index = 0; index < count; index++)
+            {
+                var hit = navigationHits[index];
+                var candidate = hit.collider;
+                if (candidate == null || candidate.transform.IsChildOf(transform) ||
+                    candidate.transform == target || candidate.transform.IsChildOf(target) ||
+                    candidate.GetComponentInParent<ActorHealth>() != null || hit.distance >= nearest)
+                    continue;
+
+                nearest = hit.distance;
+                obstacle = candidate;
+            }
+
+            return obstacle != null;
+        }
+
+        private void PlanDetour(Collider obstacle, Vector3 targetDirection)
+        {
+            var bounds = obstacle.bounds;
+            var center = Vector3.ProjectOnPlane(bounds.center, Vector3.up);
+            var lateral = new Vector3(targetDirection.z, 0f, -targetDirection.x);
+            var side = Vector3.Dot(transform.position - center, lateral) >= 0f ? 1f : -1f;
+            var extent = bounds.extents;
+            var forwardRadius = Mathf.Abs(targetDirection.x) * extent.x + Mathf.Abs(targetDirection.z) * extent.z + .9f;
+            var sideRadius = Mathf.Abs(lateral.x) * extent.x + Mathf.Abs(lateral.z) * extent.z + 1f;
+            detourNear = center - targetDirection * forwardRadius + lateral * side * sideRadius;
+            detourFar = center + targetDirection * forwardRadius + lateral * side * sideRadius;
+            detourObstacle = obstacle;
+            headingToFar = false;
+        }
+
+        private Vector3 NavigationDirection(Vector3 direct)
+        {
+            if (detourObstacle == null)
+                return direct;
+
+            var here = Vector3.ProjectOnPlane(transform.position, Vector3.up);
+            if (!headingToFar && Vector3.Distance(here, detourNear) < .65f)
+                headingToFar = true;
+            if (headingToFar && Vector3.Distance(here, detourFar) < .7f)
+            {
+                ClearDetour();
+                return direct;
+            }
+
+            var waypoint = headingToFar ? detourFar : detourNear;
+            return (waypoint - here).normalized;
+        }
+
+        private void ClearDetour()
+        {
+            detourObstacle = null;
+            headingToFar = false;
         }
 
         private void Move(Vector3 direction, float deltaTime)
@@ -374,6 +470,8 @@ namespace AlmostDelivered.Gameplay.Payload
             lastKnownHealth = current;
             if (tookDamage)
             {
+                if (assaultingCargo)
+                    ReceiveAlert(false);
                 AlertNearbyMobs();
             }
         }
@@ -388,7 +486,7 @@ namespace AlmostDelivered.Gameplay.Payload
             var offset = Vector3.ProjectOnPlane(transform.position - noise.Position, Vector3.up);
             if (offset.sqrMagnitude <= noise.Radius * noise.Radius)
             {
-                ReceiveAlert();
+                ReceiveAlert(false);
             }
         }
 
@@ -442,14 +540,22 @@ namespace AlmostDelivered.Gameplay.Payload
                 var offset = Vector3.ProjectOnPlane(candidate.transform.position - center, Vector3.up);
                 if (offset.sqrMagnitude <= radiusSquared)
                 {
-                    candidate.ReceiveAlert();
+                    candidate.ReceiveAlert(!candidate.assaultingCargo);
                 }
             }
         }
 
-        private void ReceiveAlert()
+        private void ReceiveAlert(bool showIndicator = true)
         {
             guardPostEngaged = true;
+            ClearDetour();
+            if (assaultingCargo)
+                showIndicator = false;
+            if (!showIndicator)
+            {
+                return;
+            }
+
             alertTimeRemaining = Mathf.Max(alertTimeRemaining, alertIndicatorDuration);
             EnsureAlertIndicator();
             alertIndicator.SetActive(true);

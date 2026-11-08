@@ -73,7 +73,7 @@ namespace AlmostDelivered.Editor.Frontend
                 RouteCorridorWidth,
                 true,
                 6,
-                4f,
+                3f,
                 8);
 
             BuildPayloadEscortRadius(payload.transform, mission);
@@ -439,6 +439,17 @@ namespace AlmostDelivered.Editor.Frontend
             var checkpoint = HudText("Checkpoint", canvasObject.transform, new Vector2(24f, -190f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -234f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -278f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
+            var activationCountdown = HudText(
+                "Activation Countdown",
+                canvasObject.transform,
+                new Vector2(0f, -142f),
+                new Vector2(560f, 108f),
+                48,
+                TextAnchor.UpperCenter,
+                false,
+                true);
+            activationCountdown.fontStyle = FontStyle.Bold;
+            activationCountdown.gameObject.SetActive(false);
 
             var minimapObject = new GameObject("Mission Minimap", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(RectMask2D), typeof(MissionMinimap));
             minimapObject.transform.SetParent(canvasObject.transform, false);
@@ -453,6 +464,73 @@ namespace AlmostDelivered.Editor.Frontend
             hud.BindViews(controls, playerHealth, targetCount);
             hud.Configure(health, Array.Empty<PrototypeBossController>());
             hud.ConfigurePayload(mission, phase, progress, checkpoint, escort, elapsed);
+            hud.BindActivationCountdown(activationCountdown);
+            BuildPlayerHealthBar(canvasObject.transform, health);
+
+            var damageFlashObject = new GameObject(
+                "Player Damage Flash",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image),
+                typeof(PlayerDamageFlashView));
+            damageFlashObject.transform.SetParent(canvasObject.transform, false);
+            var damageFlashRect = damageFlashObject.GetComponent<RectTransform>();
+            damageFlashRect.anchorMin = Vector2.zero;
+            damageFlashRect.anchorMax = Vector2.one;
+            damageFlashRect.offsetMin = Vector2.zero;
+            damageFlashRect.offsetMax = Vector2.zero;
+            damageFlashObject.GetComponent<PlayerDamageFlashView>().Configure(
+                health,
+                damageFlashObject.GetComponent<Image>());
+        }
+
+        private static void BuildPlayerHealthBar(Transform canvas, ActorHealth health)
+        {
+            var frameObject = new GameObject(
+                "Player Health Bar",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image),
+                typeof(PlayerHealthBarView));
+            frameObject.transform.SetParent(canvas, false);
+            var frameRect = frameObject.GetComponent<RectTransform>();
+            frameRect.anchorMin = frameRect.anchorMax = frameRect.pivot = new Vector2(.5f, 0f);
+            frameRect.anchoredPosition = new Vector2(0f, 38f);
+            frameRect.sizeDelta = new Vector2(620f, 48f);
+            frameObject.GetComponent<Image>().color = new Color(.015f, .025f, .04f, .94f);
+
+            var fillObject = new GameObject("Health Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            fillObject.transform.SetParent(frameObject.transform, false);
+            var fillRect = fillObject.GetComponent<RectTransform>();
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = Vector2.one;
+            fillRect.offsetMin = new Vector2(6f, 6f);
+            fillRect.offsetMax = new Vector2(-6f, -6f);
+
+            var label = HudText(
+                "Health Value",
+                frameObject.transform,
+                Vector2.zero,
+                new Vector2(620f, 48f),
+                27,
+                TextAnchor.MiddleCenter,
+                false,
+                true);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.pivot = new Vector2(.5f, .5f);
+            labelRect.anchoredPosition = Vector2.zero;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            label.fontStyle = FontStyle.Bold;
+            label.color = Color.white;
+
+            frameObject.GetComponent<PlayerHealthBarView>().Configure(
+                health,
+                fillObject.GetComponent<Image>(),
+                label,
+                frameRect);
         }
 
         private static GameObject Actor(string name, Transform parent, Vector3 position, CombatTeamId team, VisualArchetype archetype, bool lowerVisual)

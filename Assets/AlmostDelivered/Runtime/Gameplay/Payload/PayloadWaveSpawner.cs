@@ -13,6 +13,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private static readonly int[] CheckpointWaveCounts = { 10, 14, 18 };
 
         [SerializeField] private Transform playerTarget;
+        [SerializeField] private Transform cargoTarget;
         [SerializeField] private GameObject projectileTemplate;
         [SerializeField] private GameObject meleeVisualPrefab;
         [SerializeField] private GameObject rangedVisualPrefab;
@@ -50,6 +51,11 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public event Action<int, IReadOnlyCollection<int>> WaveStarted;
         public event Action<int, int> EnemyRemoved;
+
+        public void ConfigureCargoTarget(Transform cargo)
+        {
+            cargoTarget = cargo;
+        }
 
         public void Configure(
             Transform target,
@@ -331,6 +337,10 @@ namespace AlmostDelivered.Gameplay.Payload
             if (pendingEnemy.HasGuardPost)
             {
                 controller.ConfigureGuardPost(pendingEnemy.GuardPost, 10f);
+            }
+            else
+            {
+                controller.ConfigureCargoAssault(cargoTarget);
             }
 
             var visualPrefab = VisualFor(pendingEnemy.Definition.Archetype);

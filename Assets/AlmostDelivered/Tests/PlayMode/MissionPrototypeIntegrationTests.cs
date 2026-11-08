@@ -217,19 +217,22 @@ namespace AlmostDelivered.Tests.PlayMode
             var activationView = Object.FindObjectOfType<PayloadActivationView>(true);
             Assert.That(activationView, Is.Not.Null);
             mission.Tick(0f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+
+            mission.Tick(0f, true);
             Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(activationView.IsVisible, Is.True);
             Assert.That(activationView.Label.text, Does.Contain("0%"));
             Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
             Assert.That(waves.ActiveCount, Is.EqualTo(11));
 
-            mission.Tick(2f);
+            mission.Tick(1.5f, true);
             Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
             Assert.That(activationView.Label.text, Does.Contain("50%"));
             Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
             Assert.That(waves.ActiveCount, Is.EqualTo(14));
 
-            mission.Tick(2f);
+            mission.Tick(1.5f, true);
             Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
             Assert.That(activationView.IsVisible, Is.False);
         }
