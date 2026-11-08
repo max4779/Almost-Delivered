@@ -10,6 +10,8 @@ namespace AlmostDelivered.Gameplay.Payload
         private readonly float[] checkpointDistances;
         private readonly float movementSpeed;
         private readonly float deploymentDuration;
+        private readonly bool requiresRecovery;
+        private readonly float activationDuration;
         private readonly HashSet<int> remainingEnemies = new HashSet<int>();
 
         private PayloadMissionPhase phase;
@@ -22,20 +24,27 @@ namespace AlmostDelivered.Gameplay.Payload
         private int enemiesInRange;
         private bool isEscortActive;
         private bool isWaveRegistered;
+        private float activationElapsed;
 
         public PayloadMissionStateMachine(
             float routeLength,
             IReadOnlyList<float> checkpointDistances,
             float movementSpeed,
-            float deploymentDuration)
+            float deploymentDuration,
+            bool requiresCargoRecovery = false,
+            float cargoActivationDuration = 4f)
         {
             this.routeLength = IsFinite(routeLength) ? Mathf.Max(0f, routeLength) : 0f;
             this.movementSpeed = IsFinite(movementSpeed) ? Mathf.Max(0f, movementSpeed) : 0f;
             this.deploymentDuration = IsFinite(deploymentDuration) ? Mathf.Max(0f, deploymentDuration) : 0f;
+            requiresRecovery = requiresCargoRecovery;
+            activationDuration = IsFinite(cargoActivationDuration) ? Mathf.Max(0f, cargoActivationDuration) : 0f;
             this.checkpointDistances = SanitizeCheckpoints(checkpointDistances, this.routeLength);
             phase = this.deploymentDuration > 0f
                 ? PayloadMissionPhase.Deploying
-                : PayloadMissionPhase.Escorting;
+                : requiresRecovery
+                    ? PayloadMissionPhase.Recovering
+                    : PayloadMissionPhase.Escorting;
         }
 
         public event Action<PayloadWaveRequest> WaveRequested;
@@ -51,7 +60,12 @@ namespace AlmostDelivered.Gameplay.Payload
             playersInRange,
             enemiesInRange,
             isEscortActive,
-            isWaveRegistered);
+            isWaveRegistered,
+            requiresRecovery && (phase == PayloadMissionPhase.Activating || phase == PayloadMissionPhase.Escorting ||
+                                 phase == PayloadMissionPhase.CheckpointDefense || phase == PayloadMissionPhase.FinalDefense ||
+                                 phase == PayloadMissionPhase.Completed)
+                ? activationDuration <= Mathf.Epsilon ? 1f : Mathf.Clamp01(activationElapsed / activationDuration)
+                : 0f);
 
         public void Tick(float deltaTime, int playersInRange, int enemiesInRange)
         {
@@ -74,6 +88,39 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 if (elapsedTime >= deploymentDuration)
                 {
+                    phase = requiresRecovery
+                        ? PayloadMissionPhase.Recovering
+                        : PayloadMissionPhase.Escorting;
+                }
+
+                return;
+            }
+
+            if (phase == PayloadMissionPhase.Recovering)
+            {
+                if (isWaveRegistered && remainingEnemies.Count == 0 && this.playersInRange > 0)
+                {
+                    remainingEnemies.Clear();
+                    isWaveRegistered = false;
+                    activeWaveId = -1;
+                    activationElapsed = 0f;
+                    phase = PayloadMissionPhase.Activating;
+                }
+
+                return;
+            }
+
+            if (phase == PayloadMissionPhase.Activating)
+            {
+                if (this.playersInRange <= 0)
+                {
+                    return;
+                }
+
+                activationElapsed = Mathf.Min(activationDuration, activationElapsed + deltaTime);
+                if (activationDuration <= Mathf.Epsilon || activationElapsed + .0001f >= activationDuration)
+                {
+                    activationElapsed = activationDuration;
                     phase = PayloadMissionPhase.Escorting;
                 }
 
@@ -138,6 +185,41 @@ namespace AlmostDelivered.Gameplay.Payload
 
             isWaveRegistered = true;
             return true;
+        }
+
+        public bool RegisterRecoveryGuards(IReadOnlyCollection<int> enemyIds)
+        {
+            if (!requiresRecovery ||
+                (phase != PayloadMissionPhase.Deploying && phase != PayloadMissionPhase.Recovering) ||
+                isWaveRegistered)
+            {
+                return false;
+            }
+
+            remainingEnemies.Clear();
+            if (enemyIds != null)
+            {
+                foreach (var enemyId in enemyIds)
+                {
+                    remainingEnemies.Add(enemyId);
+                }
+            }
+
+            activeWaveId = PayloadWaveSpawner.RecoveryWaveId;
+            isWaveRegistered = true;
+            return true;
+        }
+
+        public bool ReportRecoveryGuardRemoved(int enemyId)
+        {
+            if (!requiresRecovery ||
+                (phase != PayloadMissionPhase.Deploying && phase != PayloadMissionPhase.Recovering) ||
+                !isWaveRegistered)
+            {
+                return false;
+            }
+
+            return remainingEnemies.Remove(enemyId);
         }
 
         public bool ReportEnemyRemoved(int waveId, int enemyId)

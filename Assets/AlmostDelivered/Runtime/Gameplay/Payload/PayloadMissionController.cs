@@ -1,4 +1,5 @@
 using System;
+using AlmostDelivered.Combat;
 using AlmostDelivered.MapGeneration;
 using UnityEngine;
 
@@ -20,16 +21,26 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private float configuredDeploymentDuration;
         [SerializeField] private float configuredCorridorWidth = 3f;
         [SerializeField] private int configuredInteriorPointCount = 5;
+        [SerializeField] private bool requiresCargoRecovery;
+        [SerializeField, Min(0)] private int configuredRecoveryGuardCount = 6;
+        [SerializeField, Min(0f)] private float configuredCargoActivationDuration = 4f;
+        [SerializeField, Min(0f)] private float configuredCargoNoiseRadius = 26f;
+        [SerializeField, Min(.1f)] private float configuredCargoNoiseInterval = .65f;
         private PayloadMissionStateMachine stateMachine;
         private PayloadEscortDirector escortDirector;
         private PayloadEscortEncounter? pendingEscortEncounter;
         [SerializeField] private float escortRadius;
         private PayloadMissionSnapshot snapshot;
+        private float activationNoiseCooldown;
+        private bool activationResponseSpawned;
 
         public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
         public PayloadMissionSnapshot Snapshot => snapshot;
         public bool HasPendingEscortEncounter => pendingEscortEncounter.HasValue;
+        public bool RequiresCargoRecovery => requiresCargoRecovery;
+        public int RecoveryGuardCount => configuredRecoveryGuardCount;
+        public float CargoActivationDuration => configuredCargoActivationDuration;
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
@@ -46,7 +57,10 @@ namespace AlmostDelivered.Gameplay.Payload
             float deploymentDuration,
             float radius,
             int interiorPointCount = 5,
-            float corridorWidth = 3f)
+            float corridorWidth = 3f,
+            bool requireCargoRecovery = false,
+            int recoveryGuardCount = 6,
+            float cargoActivationDuration = 4f)
         {
             if (stateMachine != null)
             {
@@ -67,6 +81,11 @@ namespace AlmostDelivered.Gameplay.Payload
             configuredDeploymentDuration = deploymentDuration;
             configuredInteriorPointCount = interiorPointCount;
             configuredCorridorWidth = corridorWidth;
+            requiresCargoRecovery = requireCargoRecovery;
+            configuredRecoveryGuardCount = Mathf.Max(0, recoveryGuardCount);
+            configuredCargoActivationDuration = IsFinite(cargoActivationDuration)
+                ? Mathf.Max(0f, cargoActivationDuration)
+                : 0f;
             Initialize();
         }
 
@@ -85,14 +104,16 @@ namespace AlmostDelivered.Gameplay.Payload
                 RoutePlan.TotalLength,
                 RoutePlan.CheckpointDistances,
                 configuredMovementSpeed,
-                configuredDeploymentDuration);
+                configuredDeploymentDuration,
+                requiresCargoRecovery,
+                configuredCargoActivationDuration);
             stateMachine.WaveRequested += HandleWaveRequested;
             escortDirector = authority && waveSpawner != null
                 ? new PayloadEscortDirector(configuredSeed)
                 : null;
             pendingEscortEncounter = null;
-            snapshot = stateMachine.Snapshot;
-
+            activationNoiseCooldown = 0f;
+            activationResponseSpawned = false;
             if (payloadTransform != null)
             {
                 payloadTransform.position = RoutePlan.Points[0];
@@ -104,6 +125,27 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             BindWaveSpawner();
+            var recoveryGuardIds = Array.Empty<int>();
+            if (requiresCargoRecovery && authority && waveSpawner != null && payloadTransform != null && Application.isPlaying)
+            {
+                var spawned = waveSpawner.SpawnRecoveryGuardGroup(
+                    payloadTransform.position,
+                    configuredRecoveryGuardCount,
+                    configuredBounds);
+                recoveryGuardIds = new int[spawned.Count];
+                var guardIndex = 0;
+                foreach (var guardId in spawned)
+                {
+                    recoveryGuardIds[guardIndex++] = guardId;
+                }
+            }
+
+            if (requiresCargoRecovery)
+            {
+                stateMachine.RegisterRecoveryGuards(recoveryGuardIds);
+            }
+
+            snapshot = stateMachine.Snapshot;
             SnapshotChanged?.Invoke(snapshot);
         }
 
@@ -132,8 +174,10 @@ namespace AlmostDelivered.Gameplay.Payload
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var previousPhase = snapshot.Phase;
             stateMachine.Tick(deltaTime, players, enemies);
+            HandleActivationTransition(previousPhase, stateMachine.Snapshot.Phase);
             payloadTransform.position = RoutePlan.EvaluateDistance(stateMachine.Snapshot.RouteDistance);
             PublishSnapshot(previousPhase);
+            TickActivationNoise(deltaTime);
             TickEscortDirector(deltaTime);
         }
 
@@ -191,6 +235,57 @@ namespace AlmostDelivered.Gameplay.Payload
             if (authority && waveSpawner != null)
             {
                 waveSpawner.SpawnWave(request.WaveId, request.CheckpointIndex, request.IsFinal);
+            }
+        }
+
+        private void HandleActivationTransition(PayloadMissionPhase previousPhase, PayloadMissionPhase currentPhase)
+        {
+            if (previousPhase == PayloadMissionPhase.Activating || currentPhase != PayloadMissionPhase.Activating)
+            {
+                return;
+            }
+
+            activationNoiseCooldown = configuredCargoNoiseInterval;
+            if (!activationResponseSpawned && waveSpawner != null && payloadTransform != null && RoutePlan != null)
+            {
+                var routeDirection = RoutePlan.Points.Count > 1
+                    ? RoutePlan.Points[1] - RoutePlan.Points[0]
+                    : Vector3.forward;
+                activationResponseSpawned = waveSpawner.SpawnActivationResponseGroup(
+                    payloadTransform.position,
+                    routeDirection,
+                    configuredBounds,
+                    escortRadius);
+            }
+
+            EmitCargoNoise();
+        }
+
+        private void TickActivationNoise(float deltaTime)
+        {
+            if (snapshot.Phase != PayloadMissionPhase.Activating)
+            {
+                return;
+            }
+
+            activationNoiseCooldown -= Mathf.Max(0f, deltaTime);
+            if (activationNoiseCooldown > 0f)
+            {
+                return;
+            }
+
+            EmitCargoNoise();
+            activationNoiseCooldown = configuredCargoNoiseInterval;
+        }
+
+        private void EmitCargoNoise()
+        {
+            if (payloadTransform != null)
+            {
+                CombatNoiseSystem.Emit(
+                    payloadTransform.position,
+                    configuredCargoNoiseRadius,
+                    CombatTeamId.Player);
             }
         }
 
@@ -260,7 +355,14 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             var previousPhase = snapshot.Phase;
-            stateMachine.ReportEnemyRemoved(waveId, enemyId);
+            if (waveId == PayloadWaveSpawner.RecoveryWaveId)
+            {
+                stateMachine.ReportRecoveryGuardRemoved(enemyId);
+            }
+            else
+            {
+                stateMachine.ReportEnemyRemoved(waveId, enemyId);
+            }
             PublishSnapshot(previousPhase);
         }
 
@@ -272,6 +374,11 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 PhaseChanged?.Invoke(previousPhase, snapshot.Phase);
             }
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

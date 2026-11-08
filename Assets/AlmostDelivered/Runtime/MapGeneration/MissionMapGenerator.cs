@@ -45,6 +45,11 @@ namespace AlmostDelivered.MapGeneration
         public int LastSeed { get; private set; }
         public Transform GeneratedRoot => generatedRoot;
 
+        public void SetTheme(MissionMapTheme value)
+        {
+            theme = value;
+        }
+
         public void Configure(
             MissionMapTheme valueTheme,
             Vector2 valueHalfExtents,

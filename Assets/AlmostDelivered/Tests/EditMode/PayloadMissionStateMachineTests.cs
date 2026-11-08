@@ -25,6 +25,43 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void RecoveryRequiresTimedCargoActivationBeforeEscort()
+        {
+            var mission = CreateMission(requiresRecovery: true, activationDuration: 4f);
+
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(mission.RegisterRecoveryGuards(new[] { 101, 102 }), Is.True);
+            mission.Tick(1f, 1, 2);
+            Assert.That(mission.Snapshot.RouteDistance, Is.Zero);
+            Assert.That(mission.Snapshot.RemainingEnemyCount, Is.EqualTo(2));
+
+            Assert.That(mission.ReportRecoveryGuardRemoved(101), Is.True);
+            Assert.That(mission.ReportRecoveryGuardRemoved(102), Is.True);
+            mission.Tick(1f, 0, 0);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+
+            mission.Tick(0f, 1, 0);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(mission.Snapshot.ActivationProgress, Is.Zero);
+            Assert.That(mission.Snapshot.RouteDistance, Is.Zero);
+
+            mission.Tick(2f, 1, 0);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
+
+            mission.Tick(1f, 0, 0);
+            Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
+
+            mission.Tick(2f, 1, 0);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(1f));
+            Assert.That(mission.Snapshot.RouteDistance, Is.Zero);
+
+            mission.Tick(1f, 1, 0);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(10f));
+        }
+
+        [Test]
         public void EscortRequiresPlayerAndStopsWhenEnemyContests()
         {
             var mission = CreateMission();
@@ -187,13 +224,18 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(mission.Snapshot.ElapsedTime, Is.EqualTo(1f));
         }
 
-        private static PayloadMissionStateMachine CreateMission(float deploymentDuration = 0f)
+        private static PayloadMissionStateMachine CreateMission(
+            float deploymentDuration = 0f,
+            bool requiresRecovery = false,
+            float activationDuration = 4f)
         {
             return new PayloadMissionStateMachine(
                 100f,
                 new[] { 25f, 50f, 75f },
                 10f,
-                deploymentDuration);
+                deploymentDuration,
+                requiresRecovery,
+                activationDuration);
         }
     }
 }

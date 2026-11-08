@@ -38,8 +38,24 @@ namespace AlmostDelivered.Tests.EditMode
         [Test]
         public void ValidShotCreatesOneActivePlanarProjectileAndFacesAim()
         {
+            CombatNoise heardNoise = default;
+            var heard = false;
+            void CaptureNoise(CombatNoise value)
+            {
+                heard = true;
+                heardNoise = value;
+            }
+
+            CombatNoiseSystem.NoiseEmitted += CaptureNoise;
             var facingBeforeShot = owner.transform.forward;
-            Assert.That(attack.TryFire(new Vector3(5f, 99f, 7f), 0f), Is.True);
+            try
+            {
+                Assert.That(attack.TryFire(new Vector3(5f, 99f, 7f), 0f), Is.True);
+            }
+            finally
+            {
+                CombatNoiseSystem.NoiseEmitted -= CaptureNoise;
+            }
 
             var shots = Object.FindObjectsOfType<CombatProjectile>(true)
                 .Where(projectile => projectile.gameObject != template && projectile.gameObject.activeSelf)
@@ -47,6 +63,10 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(shots.Length, Is.EqualTo(1));
             Assert.That(shots[0].Direction.y, Is.EqualTo(0f).Within(.0001f));
             Assert.That(owner.transform.forward, Is.EqualTo(facingBeforeShot));
+            Assert.That(heard, Is.True);
+            Assert.That(heardNoise.Position, Is.EqualTo(owner.transform.Find("Muzzle").position));
+            Assert.That(heardNoise.Radius, Is.EqualTo(14f));
+            Assert.That(heardNoise.SourceTeam, Is.EqualTo(CombatTeamId.Player));
         }
 
         [Test]

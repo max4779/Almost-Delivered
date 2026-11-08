@@ -58,8 +58,7 @@ namespace AlmostDelivered.Tests.PlayMode
             var payload = GameObject.Find("Payload").transform;
             mission.enabled = false;
 
-            mission.Tick(8f);
-            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            RecoverCargo(mission, waves, player, payload);
             for (var checkpoint = 0; checkpoint < 3; checkpoint++)
             {
                 MovePlayerIntoEscortRadius(player, payload);
@@ -86,20 +85,40 @@ namespace AlmostDelivered.Tests.PlayMode
         {
             yield return LoadMission();
             var mission = Object.FindObjectOfType<PayloadMissionController>();
+            var waves = Object.FindObjectOfType<PayloadWaveSpawner>();
+            var player = GameObject.Find("Player").transform;
+            var payload = GameObject.Find("Payload").transform;
             mission.enabled = false;
-            mission.Tick(8f);
             var minimap = Object.FindObjectOfType<MissionMinimap>();
             var hud = Object.FindObjectOfType<MissionHud>();
             hud.Refresh();
             minimap.Refresh();
 
             Assert.That(hud.HasPayloadViews, Is.True);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(mission.Snapshot.RemainingEnemyCount, Is.EqualTo(6));
             Assert.That(minimap.RouteSegmentCount, Is.GreaterThan(0));
             Assert.That(minimap.CheckpointMarkerCount, Is.EqualTo(4));
             Assert.That(minimap.PlayerIcon, Is.Not.Null);
             Assert.That(minimap.PayloadIcon, Is.Not.Null);
+            Assert.That(minimap.PayloadIcon.gameObject.activeSelf, Is.True);
+            Assert.That(minimap.EnemyIconCount, Is.EqualTo(6));
+            Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
             Assert.That(minimap.GetComponent<RectMask2D>(), Is.Not.Null);
+            Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true)
+                .Count(relay => relay.VisualState == PayloadRelayVisualState.Active), Is.Zero);
             var minimapRect = minimap.GetComponent<RectTransform>();
+
+            var escortRadius = Object.FindObjectOfType<PayloadEscortRadiusView>();
+            Assert.That(escortRadius, Is.Not.Null);
+            Assert.That(escortRadius.Radius, Is.EqualTo(4.5f));
+            Assert.That(escortRadius.GetComponent<LineRenderer>().enabled, Is.False);
+
+            RecoverCargo(mission, waves, player, payload);
+            hud.Refresh();
+            minimap.Refresh();
+
+            Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.True);
             foreach (var view in minimap.GetComponentsInChildren<RectTransform>()
                          .Where(item => item.name.StartsWith("Route Segment") ||
                                         item.name.StartsWith("Checkpoint") ||
@@ -109,9 +128,7 @@ namespace AlmostDelivered.Tests.PlayMode
                 view.GetWorldCorners(corners);
                 Assert.That(corners.All(corner => minimapRect.rect.Contains(minimapRect.InverseTransformPoint(corner))), Is.True, view.name);
             }
-            var escortRadius = Object.FindObjectOfType<PayloadEscortRadiusView>();
-            Assert.That(escortRadius, Is.Not.Null);
-            Assert.That(escortRadius.Radius, Is.EqualTo(4.5f));
+            Assert.That(escortRadius.GetComponent<LineRenderer>().enabled, Is.True);
             Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Count(relay => relay.VisualState == PayloadRelayVisualState.Active), Is.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true).Single(relay => relay.CheckpointIndex == 0).VisualState, Is.EqualTo(PayloadRelayVisualState.Active));
@@ -133,7 +150,7 @@ namespace AlmostDelivered.Tests.PlayMode
             var firstCargo = payload.Find("Collected Cargo 1").gameObject;
             mission.enabled = false;
 
-            mission.Tick(8f);
+            RecoverCargo(mission, waves, player, payload);
             mission.Tick(8f);
             minimap.Refresh();
 
@@ -178,6 +195,34 @@ namespace AlmostDelivered.Tests.PlayMode
             player.position = payload.position + Vector3.right * 3f;
             character.enabled = true;
             Physics.SyncTransforms();
+        }
+
+        private static void RecoverCargo(
+            PayloadMissionController mission,
+            PayloadWaveSpawner waves,
+            Transform player,
+            Transform payload)
+        {
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId),
+                Is.EqualTo(6));
+            ClearWave(waves);
+            MovePlayerIntoEscortRadius(player, payload);
+            var activationView = Object.FindObjectOfType<PayloadActivationView>(true);
+            Assert.That(activationView, Is.Not.Null);
+            mission.Tick(0f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(activationView.IsVisible, Is.True);
+            Assert.That(activationView.Label.text, Does.Contain("0%"));
+            Assert.That(waves.ActiveCount, Is.EqualTo(4));
+
+            mission.Tick(2f);
+            Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
+            Assert.That(activationView.Label.text, Does.Contain("50%"));
+
+            mission.Tick(2f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(activationView.IsVisible, Is.False);
         }
 
         private static IEnumerator LoadMission()

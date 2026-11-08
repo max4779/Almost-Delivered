@@ -113,6 +113,13 @@ namespace AlmostDelivered.Gameplay.Payload
                 return PayloadRelayVisualState.Future;
             }
 
+            if (snapshot.Phase == PayloadMissionPhase.Deploying ||
+                snapshot.Phase == PayloadMissionPhase.Recovering ||
+                snapshot.Phase == PayloadMissionPhase.Activating)
+            {
+                return PayloadRelayVisualState.Future;
+            }
+
             if (!finalDestination && snapshot.NextCheckpointIndex > checkpointIndex)
             {
                 return PayloadRelayVisualState.Completed;

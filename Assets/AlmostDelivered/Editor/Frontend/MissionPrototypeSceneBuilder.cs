@@ -35,14 +35,23 @@ namespace AlmostDelivered.Editor.Frontend
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             var root = new GameObject("Mission Prototype");
             var route = PayloadRoutePlanner.Generate(MissionSeed, MissionBounds, 5, RouteCorridorWidth);
+            var environmentTheme = AssetDatabase.LoadAssetAtPath<MissionEnvironmentTheme>(
+                MissionMapAssetFactory.GrasslandEnvironmentThemePath);
+            if (environmentTheme == null)
+                throw new InvalidOperationException("Missing grassland environment theme.");
 
-            BuildArena(root.transform);
-            BuildPayloadRoad(root.transform, route);
+            var groundRenderer = BuildArena(root.transform, environmentTheme);
+            var road = BuildPayloadRoad(root.transform, route, environmentTheme);
             var projectileTemplate = BuildProjectile(root.transform);
-            var routeDirection = (route.Points[1] - route.Points[0]).normalized;
-            var player = BuildPlayer(root.transform, route.Points[0] + routeDirection * 3f + Vector3.up, projectileTemplate);
+            var recoveryDropPosition = RecoveryDropPosition(route);
+            var player = BuildPlayer(root.transform, recoveryDropPosition + Vector3.up, projectileTemplate);
             var payload = BuildPayload(root.transform, route.Points[0]);
-            var mapGenerator = BuildMapGenerator(root.transform);
+            var mapGenerator = BuildMapGenerator(root.transform, environmentTheme.MapTheme, recoveryDropPosition);
+            root.AddComponent<MissionEnvironmentThemeApplier>().Configure(
+                environmentTheme,
+                groundRenderer,
+                road.GetComponent<MeshRenderer>(),
+                mapGenerator);
             var anchors = BuildSpawnAnchors(root.transform, route);
             var waveSpawner = BuildWaveSpawner(root.transform, player.transform, projectileTemplate, anchors);
 
@@ -58,12 +67,15 @@ namespace AlmostDelivered.Editor.Frontend
                 mapGenerator,
                 waveSpawner,
                 .35f,
-                8f,
+                0f,
                 4.5f,
                 5,
-                RouteCorridorWidth);
+                RouteCorridorWidth,
+                true,
+                6);
 
             BuildPayloadEscortRadius(payload.transform, mission);
+            BuildPayloadActivationView(payload.transform, mission);
             BuildSupplyRelays(root.transform, payload.transform, mission, route);
 
             BuildCamera(player.transform);
@@ -74,32 +86,40 @@ namespace AlmostDelivered.Editor.Frontend
             Debug.Log("MISSION_PROTOTYPE_BUILT " + ScenePath);
         }
 
-        private static void BuildArena(Transform parent)
+        private static Renderer BuildArena(Transform parent, MissionEnvironmentTheme environmentTheme)
         {
-            var floor = Material("Floor");
             var dark = Material("Dark");
-            Cube("Mission Floor", parent, new Vector3(0f, -.5f, 0f), new Vector3(56f, 1f, 100f), floor);
+            var floor = Cube(
+                "Mission Floor",
+                parent,
+                new Vector3(0f, -.5f, 0f),
+                new Vector3(56f, 1f, 100f),
+                environmentTheme.GroundMaterial);
             Cube("North Boundary", parent, new Vector3(0f, 1f, 50f), new Vector3(56f, 2f, .6f), dark);
             Cube("South Boundary", parent, new Vector3(0f, 1f, -50f), new Vector3(56f, 2f, .6f), dark);
             Cube("West Boundary", parent, new Vector3(-28f, 1f, 0f), new Vector3(.6f, 2f, 100f), dark);
             Cube("East Boundary", parent, new Vector3(28f, 1f, 0f), new Vector3(.6f, 2f, 100f), dark);
+            return floor.GetComponent<Renderer>();
         }
 
-        private static void BuildPayloadRoad(Transform parent, PayloadRoutePlan route)
+        private static PayloadRoadView BuildPayloadRoad(
+            Transform parent,
+            PayloadRoutePlan route,
+            MissionEnvironmentTheme environmentTheme)
         {
             var roadObject = new GameObject("Payload Road", typeof(MeshFilter), typeof(MeshRenderer), typeof(PayloadRoadView));
             roadObject.transform.SetParent(parent, false);
-            var earth = AssetDatabase.LoadAssetAtPath<Material>($"{MissionMapAssetFactory.MaterialRoot}/Earth.mat");
-            var moss = AssetDatabase.LoadAssetAtPath<Material>($"{MissionMapAssetFactory.MaterialRoot}/Moss.mat");
             var grass = AssetDatabase.LoadAssetAtPath<GameObject>($"{MissionMapAssetFactory.PrefabRoot}/Foliage/GrassPatch.prefab");
             var tallGrass = AssetDatabase.LoadAssetAtPath<GameObject>($"{MissionMapAssetFactory.PrefabRoot}/Foliage/TallGrass.prefab");
-            roadObject.GetComponent<PayloadRoadView>().Configure(
+            var road = roadObject.GetComponent<PayloadRoadView>();
+            road.Configure(
                 route,
                 MissionSeed,
                 RoadWidth,
-                earth,
-                moss,
+                environmentTheme.RoadMaterial,
+                environmentTheme.RoadShoulderMaterial,
                 new[] { grass, tallGrass });
+            return road;
         }
 
         private static GameObject BuildProjectile(Transform parent)
@@ -145,6 +165,17 @@ namespace AlmostDelivered.Editor.Frontend
             var radiusObject = new GameObject("Payload Escort Radius", typeof(LineRenderer), typeof(PayloadEscortRadiusView));
             radiusObject.transform.SetParent(payload, false);
             radiusObject.GetComponent<PayloadEscortRadiusView>().Configure(mission, 4.5f, Material("Cyan"));
+        }
+
+        private static void BuildPayloadActivationView(Transform payload, PayloadMissionController mission)
+        {
+            var viewObject = new GameObject(
+                "Payload Activation",
+                typeof(LineRenderer),
+                typeof(AudioSource),
+                typeof(PayloadActivationView));
+            viewObject.transform.SetParent(payload, false);
+            viewObject.GetComponent<PayloadActivationView>().Configure(mission, Material("Amber"));
         }
 
         private static void BuildSupplyRelays(
@@ -275,22 +306,44 @@ namespace AlmostDelivered.Editor.Frontend
             return cargo;
         }
 
-        private static MissionMapGenerator BuildMapGenerator(Transform parent)
+        private static MissionMapGenerator BuildMapGenerator(
+            Transform parent,
+            MissionMapTheme theme,
+            Vector3 recoveryDropPosition)
         {
             var mapObject = new GameObject("Mission Map Generator");
             mapObject.transform.SetParent(parent, false);
             var generator = mapObject.AddComponent<MissionMapGenerator>();
             generator.Configure(
-                AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath),
+                theme,
                 new Vector2(28f, 50f), 0, 6, 28, 42,
                 new[]
                 {
                     new MissionMapProtectedZone(new Vector2(0f, -46f), new Vector2(8f, 8f)),
-                    new MissionMapProtectedZone(new Vector2(0f, 46f), new Vector2(8f, 8f))
+                    new MissionMapProtectedZone(new Vector2(0f, 46f), new Vector2(8f, 8f)),
+                    new MissionMapProtectedZone(
+                        new Vector2(recoveryDropPosition.x, recoveryDropPosition.z),
+                        new Vector2(9f, 9f))
                 },
                 false,
                 6000);
             return generator;
+        }
+
+        private static Vector3 RecoveryDropPosition(PayloadRoutePlan route)
+        {
+            var cargoPosition = route.Points[0];
+            var routeDirection = Vector3.ProjectOnPlane(route.Points[1] - cargoPosition, Vector3.up).normalized;
+            if (routeDirection.sqrMagnitude < .0001f)
+            {
+                routeDirection = Vector3.forward;
+            }
+
+            var lateral = new Vector3(-routeDirection.z, 0f, routeDirection.x);
+            var candidate = cargoPosition + lateral * 17f + routeDirection * 2f;
+            candidate.x = Mathf.Clamp(candidate.x, MissionBounds.xMin + 3f, MissionBounds.xMax - 3f);
+            candidate.z = Mathf.Clamp(candidate.z, MissionBounds.yMin + 3f, MissionBounds.yMax - 3f);
+            return candidate;
         }
 
         private static Transform[] BuildSpawnAnchors(Transform parent, PayloadRoutePlan route)

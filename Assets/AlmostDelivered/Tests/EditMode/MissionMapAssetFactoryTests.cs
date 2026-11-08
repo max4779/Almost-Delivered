@@ -1,3 +1,4 @@
+using System.Linq;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.MapGeneration;
 using NUnit.Framework;
@@ -39,6 +40,49 @@ namespace AlmostDelivered.Tests.EditMode
             {
                 Assert.That(piece.Prefab.GetComponentsInChildren<Collider>(true), Is.Empty, piece.Prefab.name);
             }
+        }
+
+        [Test]
+        public void GrasslandEnvironmentThemeSeparatesGroundRoadAndShoulderMaterials()
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<MissionEnvironmentTheme>(
+                MissionMapAssetFactory.GrasslandEnvironmentThemePath);
+
+            Assert.That(theme, Is.Not.Null);
+            Assert.That(theme.DisplayName, Is.EqualTo("Grassland"));
+            Assert.That(theme.GroundMaterial, Is.Not.Null);
+            Assert.That(theme.RoadMaterial, Is.Not.Null);
+            Assert.That(theme.RoadShoulderMaterial, Is.Not.Null);
+            Assert.That(theme.GroundMaterial.name, Is.EqualTo("GrasslandGround"));
+            Assert.That(theme.RoadMaterial.name, Is.EqualTo("Earth"));
+            Assert.That(theme.RoadShoulderMaterial.name, Is.EqualTo("Moss"));
+            Assert.That(theme.GroundMaterial, Is.Not.SameAs(theme.RoadMaterial));
+            Assert.That(theme.MapTheme, Is.Not.Null);
+
+            var grasslandObstacles = theme.MapTheme.BlockingObstacles
+                .Select(piece => piece.Prefab.name)
+                .ToArray();
+            Assert.That(grasslandObstacles, Does.Contain("LargeTree"));
+            Assert.That(grasslandObstacles, Does.Contain("SmallTree"));
+            Assert.That(grasslandObstacles, Does.Contain("FallenLog"));
+            Assert.That(grasslandObstacles, Does.Contain("BoulderCluster"));
+            Assert.That(grasslandObstacles, Does.Contain("Thicket"));
+            Assert.That(grasslandObstacles, Does.Not.Contain("CargoCrate"));
+            foreach (var piece in theme.MapTheme.BlockingObstacles)
+            {
+                Assert.That(piece.Prefab.GetComponentsInChildren<Collider>(true), Is.Not.Empty,
+                    $"{piece.Prefab.name} must block player and payload movement.");
+            }
+
+            Assert.That(theme.MapTheme.Foliage.Count, Is.GreaterThanOrEqualTo(3));
+            foreach (var piece in theme.MapTheme.Foliage)
+            {
+                Assert.That(piece.Prefab.GetComponentsInChildren<Collider>(true), Is.Empty,
+                    $"{piece.Prefab.name} should remain traversable decoration.");
+            }
+
+            var industrialTheme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath);
+            Assert.That(industrialTheme.BlockingObstacles.Select(piece => piece.Prefab.name), Does.Contain("CargoCrate"));
         }
 
         [Test]

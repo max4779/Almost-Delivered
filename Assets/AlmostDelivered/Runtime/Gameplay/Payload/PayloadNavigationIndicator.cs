@@ -49,7 +49,11 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Refresh()
         {
-            if (mission == null || relayTargets.Count == 0 || mission.Snapshot.Phase == PayloadMissionPhase.Completed)
+            if (mission == null || relayTargets.Count == 0 ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Deploying ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Recovering ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Activating ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Completed)
             {
                 ActiveTarget = null;
                 SetChildrenActive(false);

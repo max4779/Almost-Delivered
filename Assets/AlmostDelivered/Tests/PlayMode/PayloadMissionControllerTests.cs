@@ -70,6 +70,70 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void RecoveryMissionSpawnsCargoGuardsAndStartsOnlyAfterTheyAreCleared()
+        {
+            var spawner = CreateSpawner(713);
+            var controller = NewController();
+            controller.Configure(
+                true,
+                713,
+                Bounds(),
+                player.transform,
+                payload.transform,
+                null,
+                spawner,
+                10f,
+                0f,
+                4.5f,
+                5,
+                3f,
+                true,
+                6);
+
+            Assert.That(controller.RequiresCargoRecovery, Is.True);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(controller.Snapshot.RemainingEnemyCount, Is.EqualTo(6));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(6));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId), Is.EqualTo(6));
+            Assert.That(spawner.LivingEnemies.Any(enemy => enemy.Definition.Archetype == MissionMobArchetype.CommanderBoss), Is.False);
+            Assert.That(spawner.LivingEnemies.All(enemy => enemy.HasGuardPost), Is.True);
+            Assert.That(spawner.LivingEnemies.All(enemy => Vector3.Distance(enemy.transform.position, payload.transform.position) <= 9f), Is.True);
+
+            var sentry = spawner.LivingEnemies.First();
+            var sentryPosition = sentry.transform.position;
+            player.transform.position = payload.transform.position + Vector3.forward * 30f;
+            sentry.Tick(0f, 1f);
+            Assert.That(
+                Vector2.Distance(
+                    new Vector2(sentry.transform.position.x, sentry.transform.position.z),
+                    new Vector2(sentryPosition.x, sentryPosition.z)),
+                Is.LessThan(.01f));
+
+            player.transform.position = payload.transform.position + Vector3.forward * 15f;
+            foreach (var enemy in spawner.LivingEnemies.ToArray())
+            {
+                enemy.GetComponent<ActorHealth>().ApplyDamage(10000f);
+            }
+
+            controller.Tick(0f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(controller.Snapshot.RemainingEnemyCount, Is.Zero);
+
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(0f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(4));
+
+            controller.Tick(2f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(controller.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
+
+            controller.Tick(2f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+        }
+
+        [Test]
         public void WaveStartAndEnemyDeathsAdvanceCheckpointDefense()
         {
             var projectile = new GameObject("Projectile", typeof(CombatProjectile));

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AlmostDelivered.Combat;
 using UnityEngine;
 
@@ -62,6 +63,8 @@ namespace AlmostDelivered.Gameplay.Payload
     [RequireComponent(typeof(ActorHealth), typeof(CombatTeam))]
     public sealed class MissionMobController : MonoBehaviour
     {
+        private static readonly HashSet<MissionMobController> ActiveMobs = new HashSet<MissionMobController>();
+
         [SerializeField] private Transform target;
         [SerializeField] private RangedAttackController rangedAttack;
         [SerializeField, Min(1f)] private float turnSpeed = 360f;
@@ -70,6 +73,10 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField, Min(.1f)] private float deathDuration = 1f;
         [SerializeField] private float deathFallAngle = -82f;
         [SerializeField, Min(0f)] private float deathSinkDepth = 1.35f;
+        [SerializeField, Min(0f)] private float alertRadius = 7f;
+        [SerializeField, Min(.1f)] private float alertIndicatorDuration = 1.25f;
+        [SerializeField, Range(1f, 180f)] private float sightFieldOfView = 110f;
+        [SerializeField, Min(0f)] private float closeAwarenessRadius = 2.5f;
 
         private ActorHealth health;
         private CharacterController characterController;
@@ -81,11 +88,23 @@ namespace AlmostDelivered.Gameplay.Payload
         private Transform deathVisual;
         private Vector3 deathStartPosition;
         private Quaternion deathStartRotation;
+        private bool guardPostEnabled;
+        private bool guardPostEngaged;
+        private Vector3 guardPost;
+        private float guardAwarenessRadius;
+        private float lastKnownHealth;
+        private float alertTimeRemaining;
+        private bool suppressDamageAlert;
+        private GameObject alertIndicator;
 
         public MissionMobDefinition Definition { get; private set; }
         public int WaveId { get; private set; } = -1;
         public int EnemyId { get; private set; } = -1;
         public bool IsDefeated => health != null && health.IsDead;
+        public bool HasGuardPost => guardPostEnabled;
+        public bool IsGuardPostEngaged => guardPostEngaged;
+        public bool IsAlerted => alertTimeRemaining > 0f && alertIndicator != null && alertIndicator.activeSelf;
+        public GameObject AlertIndicator => alertIndicator;
 
         public event Action<MissionMobController> Removed;
 
@@ -93,11 +112,21 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             health = GetComponent<ActorHealth>();
             characterController = GetComponent<CharacterController>();
+            lastKnownHealth = health.CurrentHealth;
+            health.HealthChanged += HandleHealthChanged;
             health.Died += HandleDeath;
+        }
+
+        private void OnEnable()
+        {
+            ActiveMobs.Add(this);
+            CombatNoiseSystem.NoiseEmitted += HandleNoise;
         }
 
         private void OnDisable()
         {
+            ActiveMobs.Remove(this);
+            CombatNoiseSystem.NoiseEmitted -= HandleNoise;
             if (health != null && !health.IsDead)
             {
                 NotifyRemoved();
@@ -106,8 +135,11 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void OnDestroy()
         {
+            ActiveMobs.Remove(this);
+            CombatNoiseSystem.NoiseEmitted -= HandleNoise;
             if (health != null)
             {
+                health.HealthChanged -= HandleHealthChanged;
                 health.Died -= HandleDeath;
             }
 
@@ -117,6 +149,20 @@ namespace AlmostDelivered.Gameplay.Payload
         private void Update()
         {
             Tick(Time.time, Time.deltaTime);
+        }
+
+        private void LateUpdate()
+        {
+            if (alertIndicator == null || !alertIndicator.activeSelf || Camera.main == null)
+            {
+                return;
+            }
+
+            var direction = alertIndicator.transform.position - Camera.main.transform.position;
+            if (direction.sqrMagnitude > .0001f)
+            {
+                alertIndicator.transform.rotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            }
         }
 
         public void Configure(MissionMobDefinition definition, Transform combatTarget, RangedAttackController attack)
@@ -130,7 +176,26 @@ namespace AlmostDelivered.Gameplay.Payload
             deathAnimating = false;
             deathElapsed = 0f;
             deathVisual = null;
+            guardPostEnabled = false;
+            guardPostEngaged = false;
+            alertTimeRemaining = 0f;
+            if (alertIndicator != null)
+            {
+                alertIndicator.SetActive(false);
+            }
+
+            suppressDamageAlert = true;
             health.ConfigureMaximum(definition.MaxHealth);
+            lastKnownHealth = health.CurrentHealth;
+            suppressDamageAlert = false;
+        }
+
+        public void ConfigureGuardPost(Vector3 position, float awarenessRadius)
+        {
+            guardPost = position;
+            guardAwarenessRadius = Mathf.Max(0f, awarenessRadius);
+            guardPostEnabled = true;
+            guardPostEngaged = false;
         }
 
         public void AssignIdentity(int waveId, int enemyId)
@@ -145,6 +210,8 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 return;
             }
+
+            TickAlertIndicator(deltaTime);
 
             if (deathAnimating)
             {
@@ -165,6 +232,30 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             var toTarget = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
+            if (guardPostEnabled && !guardPostEngaged)
+            {
+                if (CanDetectTarget(toTarget))
+                {
+                    ReceiveAlert();
+                }
+                else
+                {
+                    var toGuardPost = Vector3.ProjectOnPlane(guardPost - transform.position, Vector3.up);
+                    if (toGuardPost.sqrMagnitude > .25f)
+                    {
+                        var guardDirection = toGuardPost.normalized;
+                        RotateTowards(guardDirection, deltaTime);
+                        Move(guardDirection, deltaTime);
+                    }
+                    else
+                    {
+                        Move(Vector3.zero, deltaTime);
+                    }
+
+                    return;
+                }
+            }
+
             if (toTarget.sqrMagnitude <= .0001f)
             {
                 Move(Vector3.zero, deltaTime);
@@ -244,6 +335,12 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void HandleDeath()
         {
+            alertTimeRemaining = 0f;
+            if (alertIndicator != null)
+            {
+                alertIndicator.SetActive(false);
+            }
+
             if (rangedAttack != null)
             {
                 rangedAttack.enabled = false;
@@ -269,6 +366,127 @@ namespace AlmostDelivered.Gameplay.Payload
             deathElapsed = 0f;
             deathAnimating = true;
             NotifyRemoved();
+        }
+
+        private void HandleHealthChanged(float current, float maximum)
+        {
+            var tookDamage = !suppressDamageAlert && current + .0001f < lastKnownHealth;
+            lastKnownHealth = current;
+            if (tookDamage)
+            {
+                AlertNearbyMobs();
+            }
+        }
+
+        private void HandleNoise(CombatNoise noise)
+        {
+            if (!isActiveAndEnabled || IsDefeated)
+            {
+                return;
+            }
+
+            var offset = Vector3.ProjectOnPlane(transform.position - noise.Position, Vector3.up);
+            if (offset.sqrMagnitude <= noise.Radius * noise.Radius)
+            {
+                ReceiveAlert();
+            }
+        }
+
+        private bool CanDetectTarget(Vector3 toTarget)
+        {
+            var distanceSquared = toTarget.sqrMagnitude;
+            if (distanceSquared <= closeAwarenessRadius * closeAwarenessRadius)
+            {
+                return true;
+            }
+
+            if (distanceSquared > guardAwarenessRadius * guardAwarenessRadius || distanceSquared <= .0001f)
+            {
+                return false;
+            }
+
+            var direction = toTarget.normalized;
+            var minimumDot = Mathf.Cos(sightFieldOfView * .5f * Mathf.Deg2Rad);
+            if (Vector3.Dot(transform.forward, direction) < minimumDot)
+            {
+                return false;
+            }
+
+            return HasLineOfSight(direction, Mathf.Sqrt(distanceSquared));
+        }
+
+        private bool HasLineOfSight(Vector3 planarDirection, float distance)
+        {
+            var eye = transform.position + Vector3.up;
+            if (!Physics.Raycast(eye, planarDirection, out var hit, distance, Physics.DefaultRaycastLayers,
+                    QueryTriggerInteraction.Ignore))
+            {
+                return true;
+            }
+
+            return hit.transform == target || hit.transform.IsChildOf(target);
+        }
+
+        private void AlertNearbyMobs()
+        {
+            var center = transform.position;
+            var radiusSquared = alertRadius * alertRadius;
+            var snapshot = new List<MissionMobController>(ActiveMobs);
+            foreach (var candidate in snapshot)
+            {
+                if (candidate == null || !candidate.isActiveAndEnabled || candidate.IsDefeated)
+                {
+                    continue;
+                }
+
+                var offset = Vector3.ProjectOnPlane(candidate.transform.position - center, Vector3.up);
+                if (offset.sqrMagnitude <= radiusSquared)
+                {
+                    candidate.ReceiveAlert();
+                }
+            }
+        }
+
+        private void ReceiveAlert()
+        {
+            guardPostEngaged = true;
+            alertTimeRemaining = Mathf.Max(alertTimeRemaining, alertIndicatorDuration);
+            EnsureAlertIndicator();
+            alertIndicator.SetActive(true);
+        }
+
+        private void TickAlertIndicator(float deltaTime)
+        {
+            if (alertTimeRemaining <= 0f)
+            {
+                return;
+            }
+
+            alertTimeRemaining = Mathf.Max(0f, alertTimeRemaining - deltaTime);
+            if (alertTimeRemaining <= 0f && alertIndicator != null)
+            {
+                alertIndicator.SetActive(false);
+            }
+        }
+
+        private void EnsureAlertIndicator()
+        {
+            if (alertIndicator != null)
+            {
+                return;
+            }
+
+            alertIndicator = new GameObject("Alert Indicator", typeof(TextMesh));
+            alertIndicator.transform.SetParent(transform, false);
+            alertIndicator.transform.localPosition = new Vector3(0f, 2.85f, 0f);
+            var text = alertIndicator.GetComponent<TextMesh>();
+            text.text = "!";
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.fontSize = 64;
+            text.characterSize = .16f;
+            text.fontStyle = FontStyle.Bold;
+            text.color = new Color(1f, .86f, .08f, 1f);
         }
 
         private void TickDeath(float deltaTime)

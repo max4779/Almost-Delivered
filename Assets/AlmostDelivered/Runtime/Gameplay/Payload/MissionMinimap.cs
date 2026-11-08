@@ -104,9 +104,11 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             var mapRect = panel.rect;
+            RefreshRouteVisibility();
             RefreshRouteColors();
             UpdateIcon(playerIcon, player, mapRect);
             UpdateIcon(payloadIcon, payload, mapRect);
+            RefreshPayloadIcon();
             RefreshEnemyIcons(mapRect);
         }
 
@@ -191,6 +193,50 @@ namespace AlmostDelivered.Gameplay.Payload
                     : index == nextCheckpointIndex
                         ? ActiveCheckpointColor
                         : FutureCheckpointColor;
+            }
+        }
+
+        private void RefreshRouteVisibility()
+        {
+            var revealRoute = mission == null ||
+                              (mission.Snapshot.Phase != PayloadMissionPhase.Deploying &&
+                               mission.Snapshot.Phase != PayloadMissionPhase.Recovering &&
+                               mission.Snapshot.Phase != PayloadMissionPhase.Activating);
+            foreach (var segment in routeSegments)
+            {
+                if (segment != null && segment.gameObject.activeSelf != revealRoute)
+                {
+                    segment.gameObject.SetActive(revealRoute);
+                }
+            }
+
+            foreach (var marker in checkpointMarkers)
+            {
+                if (marker != null && marker.gameObject.activeSelf != revealRoute)
+                {
+                    marker.gameObject.SetActive(revealRoute);
+                }
+            }
+        }
+
+        private void RefreshPayloadIcon()
+        {
+            if (payloadIcon == null)
+            {
+                return;
+            }
+
+            var recovering = mission != null &&
+                             (mission.Snapshot.Phase == PayloadMissionPhase.Deploying ||
+                              mission.Snapshot.Phase == PayloadMissionPhase.Recovering ||
+                              mission.Snapshot.Phase == PayloadMissionPhase.Activating);
+            payloadIcon.sizeDelta = Vector2.one * (recovering ? 16f : 12f);
+            var image = payloadIcon.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = recovering
+                    ? new Color(1f, .28f, .12f, 1f)
+                    : new Color(1f, .75f, .15f, 1f);
             }
         }
 

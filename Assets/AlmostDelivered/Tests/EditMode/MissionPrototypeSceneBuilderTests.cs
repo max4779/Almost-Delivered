@@ -26,16 +26,25 @@ namespace AlmostDelivered.Tests.EditMode
             var player = Find(scene, "Player");
             var payload = Find(scene, "Payload");
             var camera = Find(scene, "Main Camera");
+            var mission = Object.FindObjectOfType<PayloadMissionController>(true);
 
             Assert.That(player.GetComponent<MissionPlayerController>(), Is.Not.Null);
             Assert.That(player.GetComponent<RangedAttackController>(), Is.Not.Null);
             Assert.That(player.GetComponent<CombatTeam>().Team, Is.EqualTo(CombatTeamId.Player));
             Assert.That(Object.FindObjectsOfType<PayloadMissionController>(true), Has.Length.EqualTo(1));
-            Assert.That(Object.FindObjectOfType<PayloadMissionController>(true).IsAuthority, Is.True);
+            Assert.That(mission.IsAuthority, Is.True);
+            Assert.That(mission.RequiresCargoRecovery, Is.True);
+            Assert.That(mission.CargoActivationDuration, Is.EqualTo(4f));
+            Assert.That(Vector3.Distance(player.transform.position, payload.transform.position), Is.GreaterThan(12f));
             Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PayloadEscortRadiusView>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<PayloadEscortRadiusView>(true).Radius, Is.EqualTo(4.5f));
+            Assert.That(Object.FindObjectsOfType<PayloadActivationView>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<PayloadActivationView>(true).IsVisible, Is.False);
+            Assert.That(Object.FindObjectOfType<PayloadActivationView>(true).GetComponent<AudioSource>(), Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<MissionMinimap>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<MissionMinimap>(true).PayloadIcon.gameObject.activeSelf, Is.True);
+            Assert.That(Object.FindObjectOfType<MissionMinimap>(true).transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
             Assert.That(Object.FindObjectsOfType<MissionHud>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);
             Assert.That(Object.FindObjectsOfType<PrototypeBossController>(true), Is.Empty);
@@ -127,6 +136,37 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(roads[0].RoadsideFoliageCount, Is.InRange(8, 30));
             Assert.That(roads[0].GetComponentsInChildren<Collider>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
+        }
+
+        [Test]
+        public void BuildAppliesSelectableGrasslandEnvironmentTheme()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+            var appliers = Object.FindObjectsOfType<MissionEnvironmentThemeApplier>(true);
+            var floor = Find(scene, "Mission Floor").GetComponent<Renderer>();
+            var road = Object.FindObjectOfType<PayloadRoadView>(true).GetComponent<MeshRenderer>();
+            var mapGenerator = Object.FindObjectOfType<MissionMapGenerator>(true);
+
+            Assert.That(appliers, Has.Length.EqualTo(1));
+            Assert.That(appliers[0].Theme, Is.Not.Null);
+            Assert.That(appliers[0].Theme.DisplayName, Is.EqualTo("Grassland"));
+            Assert.That(floor.sharedMaterial, Is.SameAs(appliers[0].Theme.GroundMaterial));
+            Assert.That(road.sharedMaterials,
+                Is.EqualTo(new[]
+                {
+                    appliers[0].Theme.RoadMaterial,
+                    appliers[0].Theme.RoadShoulderMaterial
+                }));
+            Assert.That(mapGenerator.Theme, Is.SameAs(appliers[0].Theme.MapTheme));
+            var obstacleNames = mapGenerator.GeneratedRoot
+                .GetComponentsInChildren<MissionMapPieceInstance>(true)
+                .Where(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle)
+                .Select(piece => piece.name)
+                .Distinct()
+                .ToArray();
+            Assert.That(obstacleNames, Does.Contain("LargeTree"));
+            Assert.That(obstacleNames, Does.Not.Contain("CargoCrate"));
         }
 
         [Test]

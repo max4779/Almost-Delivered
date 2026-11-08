@@ -3,6 +3,8 @@ namespace AlmostDelivered.Gameplay.Payload
     public enum PayloadMissionPhase
     {
         Deploying,
+        Recovering,
+        Activating,
         Escorting,
         CheckpointDefense,
         FinalDefense,
@@ -39,7 +41,8 @@ namespace AlmostDelivered.Gameplay.Payload
             int playersInRange,
             int enemiesInRange,
             bool isEscortActive,
-            bool isWaveRegistered)
+            bool isWaveRegistered,
+            float activationProgress = 0f)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -52,6 +55,7 @@ namespace AlmostDelivered.Gameplay.Payload
             EnemiesInRange = enemiesInRange;
             IsEscortActive = isEscortActive;
             IsWaveRegistered = isWaveRegistered;
+            ActivationProgress = activationProgress;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -75,5 +79,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool IsEscortActive { get; }
 
         public bool IsWaveRegistered { get; }
+
+        public float ActivationProgress { get; }
     }
 }

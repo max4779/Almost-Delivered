@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 173e90c8dea479a4faf770c8c82960a3, type: 3}
+  m_Name: Grassland
+  m_EditorClassIdentifier: 
+  terrainDetails: []
+  traversableTerrain:
+  - prefab: {fileID: 3113888887474246733, guid: bd7aee1843b31424ca4ab0e67067c94b, type: 3}
+    footprint: {x: 5.8, y: 4.8}
+  - prefab: {fileID: 1476674938283849958, guid: cf8da488b4d56cf4d9e249f8b7936cc5, type: 3}
+    footprint: {x: 4.4, y: 3.8}
+  blockingObstacles:
+  - prefab: {fileID: 8860205032715483009, guid: 220acab6c8a6aa04d9a58635f1fa85a7, type: 3}
+    footprint: {x: 3.4, y: 3.4}
+  - prefab: {fileID: 808110758781923415, guid: 9d68c71a2eb7caa49b506f802a546f33, type: 3}
+    footprint: {x: 2.5, y: 2.5}
+  - prefab: {fileID: 3494470698187044208, guid: 2d0eb9930746168449f444284f1442eb, type: 3}
+    footprint: {x: 4.2, y: 1.7}
+  - prefab: {fileID: 7860212508012875169, guid: 09ff436c2cb3a15429881d2e1f0bf1bf, type: 3}
+    footprint: {x: 3.2, y: 2.7}
+  - prefab: {fileID: 3343466704687436394, guid: 11ca493e0bc465649851aea03673251c, type: 3}
+    footprint: {x: 3.6, y: 2.8}
+  foliage:
+  - prefab: {fileID: 7841736741358928749, guid: d3b7c91bb50e4c14ab0733148e5da2af, type: 3}
+    footprint: {x: 2.1, y: 2.1}
+  - prefab: {fileID: 363318068338538282, guid: 65dcba2060b7dc241ad3b5082b694409, type: 3}
+    footprint: {x: 1.8, y: 1.8}
+  - prefab: {fileID: 8491481275381766453, guid: 2d5db37d35593d9478c57ef1f4ab1966, type: 3}
+    footprint: {x: 1.6, y: 1.6}

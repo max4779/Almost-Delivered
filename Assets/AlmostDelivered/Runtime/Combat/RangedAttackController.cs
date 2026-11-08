@@ -11,6 +11,7 @@ namespace AlmostDelivered.Combat
         [SerializeField] private float cooldown = .25f;
         [SerializeField] private float projectileSpeed = 24f;
         [SerializeField] private float projectileLifetime = 2f;
+        [SerializeField, Min(0f)] private float shotNoiseRadius = 14f;
 
         private ActorHealth ownerHealth;
         private CombatTeam ownerTeam;
@@ -27,7 +28,8 @@ namespace AlmostDelivered.Combat
             float shotDamage,
             float shotCooldown,
             float shotSpeed,
-            float shotLifetime)
+            float shotLifetime,
+            float noiseRadius = 14f)
         {
             if (template == null || template.GetComponent<CombatProjectile>() == null)
                 throw new ArgumentException("A CombatProjectile template is required.", nameof(template));
@@ -41,6 +43,8 @@ namespace AlmostDelivered.Combat
                 throw new ArgumentOutOfRangeException(nameof(shotSpeed));
             if (!IsFinite(shotLifetime) || shotLifetime <= 0f)
                 throw new ArgumentOutOfRangeException(nameof(shotLifetime));
+            if (!IsFinite(noiseRadius) || noiseRadius < 0f)
+                throw new ArgumentOutOfRangeException(nameof(noiseRadius));
 
             projectileTemplate = template;
             muzzle = muzzleTransform;
@@ -48,6 +52,7 @@ namespace AlmostDelivered.Combat
             cooldown = shotCooldown;
             projectileSpeed = shotSpeed;
             projectileLifetime = shotLifetime;
+            shotNoiseRadius = noiseRadius;
             CacheOwnerComponents();
             nextFireTime = 0f;
         }
@@ -79,6 +84,7 @@ namespace AlmostDelivered.Combat
                 projectileLifetime);
             clone.SetActive(true);
             nextFireTime = now + cooldown;
+            CombatNoiseSystem.Emit(muzzle.position, shotNoiseRadius, ownerTeam.Team);
             return true;
         }
 

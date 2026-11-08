@@ -68,6 +68,129 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void DamageAlertsOnlyNearbyGuardsAndShowsTemporaryYellowExclamation()
+        {
+            target.transform.position = new Vector3(0f, 0f, 20f);
+            var nearby = Actor("Nearby Guard", CombatTeamId.Enemy, new Vector3(0f, 0f, 6f));
+            var distant = Actor("Distant Guard", CombatTeamId.Enemy, new Vector3(0f, 0f, 8f));
+            try
+            {
+                var attackedController = mob.AddComponent<MissionMobController>();
+                var nearbyController = nearby.AddComponent<MissionMobController>();
+                var distantController = distant.AddComponent<MissionMobController>();
+                attackedController.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                nearbyController.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                distantController.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                attackedController.ConfigureGuardPost(mob.transform.position, 1f);
+                nearbyController.ConfigureGuardPost(nearby.transform.position, 1f);
+                distantController.ConfigureGuardPost(distant.transform.position, 1f);
+
+                mob.GetComponent<ActorHealth>().ApplyDamage(1f);
+
+                Assert.That(attackedController.IsAlerted, Is.True);
+                Assert.That(nearbyController.IsAlerted, Is.True);
+                Assert.That(nearbyController.IsGuardPostEngaged, Is.True);
+                Assert.That(distantController.IsAlerted, Is.False);
+                Assert.That(distantController.IsGuardPostEngaged, Is.False);
+                Assert.That(nearbyController.AlertIndicator, Is.Not.Null);
+                Assert.That(nearbyController.AlertIndicator.activeSelf, Is.True);
+                var alertText = nearbyController.AlertIndicator.GetComponent<TextMesh>();
+                Assert.That(alertText.text, Is.EqualTo("!"));
+                Assert.That(alertText.color.r, Is.GreaterThan(.9f));
+                Assert.That(alertText.color.g, Is.GreaterThan(.7f));
+                Assert.That(alertText.color.b, Is.LessThan(.3f));
+
+                var nearbyStart = nearby.transform.position;
+                var distantStart = distant.transform.position;
+                nearbyController.Tick(0f, .5f);
+                distantController.Tick(0f, .5f);
+                Assert.That(nearby.transform.position.z, Is.GreaterThan(nearbyStart.z));
+                Assert.That(distant.transform.position.z, Is.EqualTo(distantStart.z).Within(.001f));
+
+                nearbyController.Tick(2f, 2f);
+                Assert.That(nearbyController.AlertIndicator.activeSelf, Is.False);
+                Assert.That(nearbyController.IsGuardPostEngaged, Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(nearby);
+                Object.DestroyImmediate(distant);
+            }
+        }
+
+        [Test]
+        public void GuardUsesForwardSightAndOmnidirectionalCloseAwareness()
+        {
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            controller.ConfigureGuardPost(mob.transform.position, 10f);
+            mob.transform.forward = Vector3.back;
+
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.False);
+
+            mob.transform.forward = Vector3.forward;
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.True);
+            Assert.That(controller.IsAlerted, Is.True);
+
+            controller.ConfigureGuardPost(mob.transform.position, 10f);
+            mob.transform.forward = Vector3.back;
+            target.transform.position = Vector3.forward * 2f;
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.True);
+        }
+
+        [Test]
+        public void SolidObstacleBlocksGuardSight()
+        {
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Sight Blocker";
+            floor.transform.position = new Vector3(0f, 1f, 5f);
+            floor.transform.localScale = new Vector3(3f, 3f, 1f);
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            controller.ConfigureGuardPost(mob.transform.position, 10f);
+            mob.transform.forward = Vector3.forward;
+            Physics.SyncTransforms();
+
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.False);
+
+            floor.transform.position = Vector3.right * 20f;
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.True);
+        }
+
+        [Test]
+        public void NoiseAlertsOnlyGuardsInsideHearingRadius()
+        {
+            target.transform.position = Vector3.forward * 20f;
+            var farGuard = Actor("Far Guard", CombatTeamId.Enemy, Vector3.right * 8f);
+            try
+            {
+                var nearController = mob.AddComponent<MissionMobController>();
+                var farController = farGuard.AddComponent<MissionMobController>();
+                nearController.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                farController.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                nearController.ConfigureGuardPost(mob.transform.position, 1f);
+                farController.ConfigureGuardPost(farGuard.transform.position, 1f);
+
+                CombatNoiseSystem.Emit(Vector3.right * 2f, 5f, CombatTeamId.Player);
+
+                Assert.That(nearController.IsGuardPostEngaged, Is.True);
+                Assert.That(nearController.IsAlerted, Is.True);
+                Assert.That(farController.IsGuardPostEngaged, Is.False);
+                Assert.That(farController.IsAlerted, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(farGuard);
+            }
+        }
+
+        [Test]
         public void RangedApproachesStandOffRangeThenFires()
         {
             projectileTemplate = new GameObject("Projectile Template", typeof(CombatProjectile));

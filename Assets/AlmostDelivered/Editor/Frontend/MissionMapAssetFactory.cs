@@ -10,9 +10,14 @@ namespace AlmostDelivered.Editor.Frontend
     public static class MissionMapAssetFactory
     {
         public const string ThemePath = "Assets/AlmostDelivered/Configs/MapThemes/IndustrialDock.asset";
+        public const string GrasslandMapThemePath = "Assets/AlmostDelivered/Configs/MapThemes/Grassland.asset";
+        public const string GrasslandEnvironmentThemePath =
+            "Assets/AlmostDelivered/Configs/EnvironmentThemes/Grassland.asset";
         public const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/MapThemes/IndustrialDock";
         public const string MeshRoot = "Assets/AlmostDelivered/Art/Meshes/MapThemes/IndustrialDock";
         public const string PrefabRoot = "Assets/AlmostDelivered/Prefabs/MapThemes/IndustrialDock";
+        public const string GrasslandMaterialRoot = "Assets/AlmostDelivered/Art/Materials/MapThemes/Grassland";
+        public const string GrasslandPrefabRoot = "Assets/AlmostDelivered/Prefabs/MapThemes/Grassland";
 
         public static void CreateOrUpdateAll()
         {
@@ -28,7 +33,11 @@ namespace AlmostDelivered.Editor.Frontend
             Directory.CreateDirectory(PrefabRoot + "/Landscape");
             Directory.CreateDirectory(PrefabRoot + "/Obstacles");
             Directory.CreateDirectory(PrefabRoot + "/Foliage");
+            Directory.CreateDirectory(GrasslandMaterialRoot);
+            Directory.CreateDirectory(GrasslandPrefabRoot + "/Obstacles");
+            Directory.CreateDirectory(GrasslandPrefabRoot + "/Foliage");
             Directory.CreateDirectory(Path.GetDirectoryName(ThemePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(GrasslandEnvironmentThemePath));
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
             var floor = Material("DockFloor", shader, new Color(.12f, .16f, .19f), .35f);
@@ -41,6 +50,12 @@ namespace AlmostDelivered.Editor.Frontend
             var moss = Material("Moss", shader, new Color(.19f, .32f, .12f), .08f, 0f);
             var grass = Material("GrassGreen", shader, new Color(.24f, .48f, .13f), .05f, 0f);
             var dryGrass = Material("DryGrass", shader, new Color(.5f, .46f, .19f), .04f, 0f);
+            var grasslandGround = Material("GrasslandGround", shader, new Color(.16f, .3f, .09f), .06f, 0f);
+            var bark = Material(GrasslandMaterialRoot, "TreeBark", shader, new Color(.25f, .12f, .055f), .12f, 0f);
+            var leaves = Material(GrasslandMaterialRoot, "LeafGreen", shader, new Color(.12f, .38f, .08f), .08f, 0f);
+            var leavesLight = Material(GrasslandMaterialRoot, "LeafLight", shader, new Color(.28f, .52f, .12f), .08f, 0f);
+            var stone = Material(GrasslandMaterialRoot, "FieldStone", shader, new Color(.28f, .31f, .27f), .18f, 0f);
+            var shrub = Material(GrasslandMaterialRoot, "ShrubGreen", shader, new Color(.16f, .44f, .1f), .06f, 0f);
 
             BuildDockPlate(floor, darkMetal);
             BuildHazardStripe(hazard, darkMetal);
@@ -54,6 +69,13 @@ namespace AlmostDelivered.Editor.Frontend
             BuildHill("Landscape/RockyMound", SaveMesh("RockyMound", RadialHillMesh("RockyMound", 2.1f, 1.8f, 1.1f)), earth);
             BuildFoliage("Foliage/GrassPatch", SaveMesh("GrassPatch", GrassClusterMesh("GrassPatch", 9, .65f, .18f, .8f, 1801)), grass);
             BuildFoliage("Foliage/TallGrass", SaveMesh("TallGrass", GrassClusterMesh("TallGrass", 11, 1f, .16f, .7f, 2903)), dryGrass);
+
+            BuildLargeTree(bark, leaves, leavesLight);
+            BuildSmallTree(bark, leavesLight);
+            BuildFallenLog(bark, moss);
+            BuildBoulderCluster(stone, moss);
+            BuildThicket(bark, shrub, leavesLight);
+            BuildBushPatch(shrub, leavesLight);
 
             var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(ThemePath);
             if (theme == null)
@@ -88,19 +110,89 @@ namespace AlmostDelivered.Editor.Frontend
                     Piece("Foliage/TallGrass", new Vector2(1.6f, 1.6f))
                 });
             EditorUtility.SetDirty(theme);
+            var grasslandMapTheme = CreateOrUpdateGrasslandMapTheme();
+            CreateOrUpdateEnvironmentTheme(grasslandGround, earth, moss, grasslandMapTheme);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
+        private static void CreateOrUpdateEnvironmentTheme(
+            Material ground,
+            Material road,
+            Material roadShoulder,
+            MissionMapTheme mapTheme)
+        {
+            var environmentTheme = AssetDatabase.LoadAssetAtPath<MissionEnvironmentTheme>(
+                GrasslandEnvironmentThemePath);
+            if (environmentTheme == null)
+            {
+                environmentTheme = ScriptableObject.CreateInstance<MissionEnvironmentTheme>();
+                AssetDatabase.CreateAsset(environmentTheme, GrasslandEnvironmentThemePath);
+            }
+
+            environmentTheme.Configure("Grassland", ground, road, roadShoulder, mapTheme);
+            EditorUtility.SetDirty(environmentTheme);
+        }
+
+        private static MissionMapTheme CreateOrUpdateGrasslandMapTheme()
+        {
+            var theme = AssetDatabase.LoadAssetAtPath<MissionMapTheme>(GrasslandMapThemePath);
+            if (theme == null)
+            {
+                theme = ScriptableObject.CreateInstance<MissionMapTheme>();
+                AssetDatabase.CreateAsset(theme, GrasslandMapThemePath);
+            }
+
+            theme.Configure(
+                Array.Empty<MissionMapPiece>(),
+                new[]
+                {
+                    Piece(PrefabRoot, "Landscape/GrassHill", new Vector2(5.8f, 4.8f)),
+                    Piece(PrefabRoot, "Landscape/RockyMound", new Vector2(4.4f, 3.8f))
+                },
+                new[]
+                {
+                    Piece(GrasslandPrefabRoot, "Obstacles/LargeTree", new Vector2(3.4f, 3.4f)),
+                    Piece(GrasslandPrefabRoot, "Obstacles/SmallTree", new Vector2(2.5f, 2.5f)),
+                    Piece(GrasslandPrefabRoot, "Obstacles/FallenLog", new Vector2(4.2f, 1.7f)),
+                    Piece(GrasslandPrefabRoot, "Obstacles/BoulderCluster", new Vector2(3.2f, 2.7f)),
+                    Piece(GrasslandPrefabRoot, "Obstacles/Thicket", new Vector2(3.6f, 2.8f))
+                },
+                new[]
+                {
+                    Piece(GrasslandPrefabRoot, "Foliage/BushPatch", new Vector2(2.1f, 2.1f)),
+                    Piece(PrefabRoot, "Foliage/GrassPatch", new Vector2(1.8f, 1.8f)),
+                    Piece(PrefabRoot, "Foliage/TallGrass", new Vector2(1.6f, 1.6f))
+                });
+            EditorUtility.SetDirty(theme);
+            return theme;
+        }
+
         private static MissionMapPiece Piece(string relativePath, Vector2 footprint)
         {
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{PrefabRoot}/{relativePath}.prefab");
+            return Piece(PrefabRoot, relativePath, footprint);
+        }
+
+        private static MissionMapPiece Piece(string root, string relativePath, Vector2 footprint)
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>($"{root}/{relativePath}.prefab");
             return new MissionMapPiece(prefab, footprint);
         }
 
         private static Material Material(string name, Shader shader, Color color, float smoothness, float metallic = .15f)
         {
-            var path = $"{MaterialRoot}/{name}.mat";
+            return Material(MaterialRoot, name, shader, color, smoothness, metallic);
+        }
+
+        private static Material Material(
+            string root,
+            string name,
+            Shader shader,
+            Color color,
+            float smoothness,
+            float metallic = .15f)
+        {
+            var path = $"{root}/{name}.mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (material == null)
             {
@@ -202,6 +294,92 @@ namespace AlmostDelivered.Editor.Frontend
 
                 Part(root, "Band Left", PrimitiveType.Cube, new Vector3(-.9f, .72f, 0f), new Vector3(.12f, 1.4f, 1.6f), band, false);
                 Part(root, "Band Right", PrimitiveType.Cube, new Vector3(.9f, .72f, 0f), new Vector3(.12f, 1.4f, 1.6f), band, false);
+            });
+        }
+
+        private static void BuildLargeTree(Material bark, Material leaves, Material highlights)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Obstacles/LargeTree", root =>
+            {
+                Part(root, "Trunk", PrimitiveType.Cylinder, new Vector3(0f, 2.15f, 0f),
+                    new Vector3(.52f, 2.15f, .52f), bark, true);
+                Part(root, "Lower Crown", PrimitiveType.Sphere, new Vector3(0f, 4.35f, 0f),
+                    new Vector3(3.15f, 2.35f, 3.15f), leaves, false);
+                Part(root, "Upper Crown", PrimitiveType.Sphere, new Vector3(-.2f, 5.45f, .1f),
+                    new Vector3(2.35f, 1.9f, 2.35f), highlights, false);
+                Part(root, "Side Crown", PrimitiveType.Sphere, new Vector3(1.25f, 4.35f, -.45f),
+                    new Vector3(1.75f, 1.45f, 1.75f), leaves, false);
+            });
+        }
+
+        private static void BuildSmallTree(Material bark, Material leaves)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Obstacles/SmallTree", root =>
+            {
+                Part(root, "Trunk", PrimitiveType.Cylinder, new Vector3(0f, 1.45f, 0f),
+                    new Vector3(.36f, 1.45f, .36f), bark, true);
+                Part(root, "Crown", PrimitiveType.Sphere, new Vector3(0f, 3.1f, 0f),
+                    new Vector3(2.25f, 2f, 2.25f), leaves, false);
+                Part(root, "Crown Highlight", PrimitiveType.Sphere, new Vector3(-.65f, 3.65f, .25f),
+                    new Vector3(1.25f, 1.1f, 1.25f), leaves, false);
+            });
+        }
+
+        private static void BuildFallenLog(Material bark, Material moss)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Obstacles/FallenLog", root =>
+            {
+                Part(root, "Log", PrimitiveType.Cylinder, new Vector3(0f, .62f, 0f),
+                    new Vector3(.58f, 2f, .58f), bark, true, Quaternion.Euler(0f, 0f, 90f));
+                Part(root, "Moss", PrimitiveType.Sphere, new Vector3(-.25f, 1.06f, -.04f),
+                    new Vector3(2.3f, .22f, .72f), moss, false);
+                Part(root, "Broken Branch", PrimitiveType.Cylinder, new Vector3(.8f, 1f, .35f),
+                    new Vector3(.18f, .7f, .18f), bark, false, Quaternion.Euler(42f, 0f, 18f));
+            });
+        }
+
+        private static void BuildBoulderCluster(Material stone, Material moss)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Obstacles/BoulderCluster", root =>
+            {
+                Part(root, "Boulder Large", PrimitiveType.Sphere, new Vector3(-.45f, .8f, 0f),
+                    new Vector3(1.85f, 1.55f, 1.65f), stone, true, Quaternion.Euler(0f, 24f, -8f));
+                Part(root, "Boulder Medium", PrimitiveType.Sphere, new Vector3(.85f, .55f, .35f),
+                    new Vector3(1.35f, 1.05f, 1.2f), stone, true, Quaternion.Euler(0f, -16f, 11f));
+                Part(root, "Boulder Small", PrimitiveType.Sphere, new Vector3(.45f, .35f, -1f),
+                    new Vector3(.85f, .7f, .78f), stone, true);
+                Part(root, "Moss Cap", PrimitiveType.Sphere, new Vector3(-.48f, 1.5f, -.05f),
+                    new Vector3(1.25f, .18f, 1.08f), moss, false);
+            });
+        }
+
+        private static void BuildThicket(Material bark, Material leaves, Material highlights)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Obstacles/Thicket", root =>
+            {
+                Part(root, "Dense Core", PrimitiveType.Sphere, new Vector3(0f, .85f, 0f),
+                    new Vector3(2.5f, 1.65f, 2f), leaves, true);
+                Part(root, "Bush Left", PrimitiveType.Sphere, new Vector3(-1.05f, .72f, .2f),
+                    new Vector3(1.55f, 1.35f, 1.6f), leaves, false);
+                Part(root, "Bush Right", PrimitiveType.Sphere, new Vector3(1.05f, .68f, -.1f),
+                    new Vector3(1.7f, 1.25f, 1.5f), highlights, false);
+                Part(root, "Branch Left", PrimitiveType.Cylinder, new Vector3(-.72f, .85f, .15f),
+                    new Vector3(.1f, .85f, .1f), bark, false, Quaternion.Euler(0f, 0f, -36f));
+                Part(root, "Branch Right", PrimitiveType.Cylinder, new Vector3(.7f, .78f, -.1f),
+                    new Vector3(.1f, .75f, .1f), bark, false, Quaternion.Euler(0f, 0f, 42f));
+            });
+        }
+
+        private static void BuildBushPatch(Material leaves, Material highlights)
+        {
+            BuildPrefab(GrasslandPrefabRoot, "Foliage/BushPatch", root =>
+            {
+                Part(root, "Bush A", PrimitiveType.Sphere, new Vector3(-.4f, .42f, 0f),
+                    new Vector3(1.2f, .8f, 1.1f), leaves, false);
+                Part(root, "Bush B", PrimitiveType.Sphere, new Vector3(.45f, .34f, .2f),
+                    new Vector3(1.05f, .65f, .9f), highlights, false);
+                Part(root, "Bush C", PrimitiveType.Sphere, new Vector3(.1f, .3f, -.55f),
+                    new Vector3(.8f, .55f, .75f), leaves, false);
             });
         }
 
@@ -381,12 +559,17 @@ namespace AlmostDelivered.Editor.Frontend
 
         private static void BuildPrefab(string relativePath, Action<Transform> build)
         {
+            BuildPrefab(PrefabRoot, relativePath, build);
+        }
+
+        private static void BuildPrefab(string prefabRoot, string relativePath, Action<Transform> build)
+        {
             var name = Path.GetFileName(relativePath);
             var root = new GameObject(name);
             try
             {
                 build(root.transform);
-                PrefabUtility.SaveAsPrefabAsset(root, $"{PrefabRoot}/{relativePath}.prefab");
+                PrefabUtility.SaveAsPrefabAsset(root, $"{prefabRoot}/{relativePath}.prefab");
             }
             finally
             {

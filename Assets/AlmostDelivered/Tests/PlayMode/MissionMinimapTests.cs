@@ -138,6 +138,69 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void RecoveryShowsCargoAndGuardsWhileHidingTheDeliveryRoute()
+        {
+            payload.position = new Vector3(-12f, 0f, 24f);
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.Recovering,
+                15f,
+                0f,
+                0f,
+                0,
+                PayloadWaveSpawner.RecoveryWaveId,
+                10,
+                0,
+                10,
+                false,
+                true));
+
+            minimap.Refresh();
+
+            var panelRect = minimap.GetComponent<RectTransform>().rect;
+            Assert.That(minimap.PayloadIcon.gameObject.activeSelf, Is.True);
+            Assert.That(minimap.PayloadIcon.anchoredPosition,
+                Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, bounds, panelRect)));
+            Assert.That(minimap.EnemyIconCount, Is.EqualTo(10));
+            Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
+            Assert.That(minimap.transform.Find("Checkpoint 1").gameObject.activeSelf, Is.False);
+
+            var hudObject = new GameObject("Recovery HUD", typeof(MissionHud));
+            hudObject.transform.SetParent(root.transform, false);
+            var phase = Text("Recovery Phase", hudObject.transform);
+            var objective = Text("Recovery Objective", hudObject.transform);
+            hudObject.GetComponent<MissionHud>().ConfigurePayload(mission, phase, null, null, objective, null);
+            hudObject.GetComponent<MissionHud>().Refresh();
+            Assert.That(phase.text, Does.Contain("RECOVER LOST CARGO"));
+            Assert.That(objective.text, Does.Contain("CLEAR CARGO GUARDS"));
+
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.Activating,
+                17f,
+                0f,
+                0f,
+                0,
+                -1,
+                0,
+                1,
+                0,
+                false,
+                false,
+                .5f));
+            minimap.Refresh();
+            hudObject.GetComponent<MissionHud>().Refresh();
+            Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
+            Assert.That(minimap.transform.Find("Checkpoint 1").gameObject.activeSelf, Is.False);
+            Assert.That(phase.text, Does.Contain("STARTING CARGO"));
+            Assert.That(objective.text, Does.Contain("50%"));
+
+            mission.ApplySnapshot(Snapshot(0f, 0));
+            minimap.Refresh();
+
+            Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.True);
+            Assert.That(minimap.transform.Find("Checkpoint 1").gameObject.activeSelf, Is.True);
+        }
+
+        [Test]
         public void DeadEnemyIconDisappearsOnRefresh()
         {
             var enemy = waves.LivingEnemies.First();

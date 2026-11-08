@@ -90,7 +90,10 @@ namespace AlmostDelivered.Gameplay
             if (payloadCheckpointText != null)
                 payloadCheckpointText.text = $"CHECKPOINT  {Mathf.Clamp(state.NextCheckpointIndex + 1, 1, 3)} / 3";
             if (payloadEscortText != null)
-                payloadEscortText.text = $"ESCORT  {EscortLabel(state)}";
+                payloadEscortText.text = state.Phase == PayloadMissionPhase.Recovering ||
+                                         state.Phase == PayloadMissionPhase.Activating
+                    ? $"OBJECTIVE  {RecoveryLabel(state)}"
+                    : $"ESCORT  {EscortLabel(state)}";
             if (payloadElapsedText != null)
             {
                 var totalSeconds = Mathf.Max(0, Mathf.FloorToInt(state.ElapsedTime));
@@ -110,6 +113,10 @@ namespace AlmostDelivered.Gameplay
                     return "DELIVERED";
                 case PayloadMissionPhase.Deploying:
                     return "DEPLOYING";
+                case PayloadMissionPhase.Recovering:
+                    return "RECOVER LOST CARGO";
+                case PayloadMissionPhase.Activating:
+                    return "STARTING CARGO";
                 case PayloadMissionPhase.Failed:
                     return "FAILED";
                 default:
@@ -128,6 +135,22 @@ namespace AlmostDelivered.Gameplay
             if (state.IsEscortActive)
                 return "MOVING";
             return "WAITING";
+        }
+
+        private static string RecoveryLabel(PayloadMissionSnapshot state)
+        {
+            if (state.Phase == PayloadMissionPhase.Activating)
+            {
+                return state.PlayersInRange > 0
+                    ? $"CARGO STARTUP {Mathf.RoundToInt(state.ActivationProgress * 100f)}%"
+                    : "RETURN TO CARGO";
+            }
+
+            if (state.RemainingEnemyCount > 0)
+                return "CLEAR CARGO GUARDS";
+            if (state.PlayersInRange > 0)
+                return "RESTARTING CARGO";
+            return "APPROACH CARGO";
         }
     }
 }

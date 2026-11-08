@@ -7,6 +7,7 @@ namespace AlmostDelivered.Gameplay.Payload
 {
     public sealed class PayloadWaveSpawner : MonoBehaviour
     {
+        public const int RecoveryWaveId = 0;
         private static readonly int[] CheckpointWaveCounts = { 10, 14, 18 };
 
         [SerializeField] private Transform playerTarget;
@@ -23,6 +24,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private readonly Queue<PendingEnemy> pending = new Queue<PendingEnemy>();
         private readonly Dictionary<int, MissionMobController> living = new Dictionary<int, MissionMobController>();
         private readonly HashSet<int> checkpointEnemyIds = new HashSet<int>();
+        private readonly HashSet<int> recoveryEnemyIds = new HashSet<int>();
         private int activeCheckpointWaveId = -1;
         private bool shuttingDown;
 
@@ -96,6 +98,43 @@ namespace AlmostDelivered.Gameplay.Payload
             SpawnUntilCap();
         }
 
+        public IReadOnlyCollection<int> SpawnRecoveryGuardGroup(
+            Vector3 cargoPosition,
+            int requestedCount,
+            Rect missionBounds)
+        {
+            if (!IsFinite(cargoPosition) || requestedCount <= 0 || recoveryEnemyIds.Count > 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            var count = Mathf.Max(0, requestedCount);
+            var identifiers = new int[count];
+            var random = new System.Random(unchecked(missionSeed * 486187739 + 17041));
+            for (var index = 0; index < count; index++)
+            {
+                var enemyId = 101 + index;
+                var guardPosition = RecoveryGuardPosition(
+                    random,
+                    cargoPosition,
+                    index,
+                    count,
+                    missionBounds);
+                identifiers[index] = enemyId;
+                recoveryEnemyIds.Add(enemyId);
+                pending.Enqueue(new PendingEnemy(
+                    RecoveryWaveId,
+                    enemyId,
+                    MissionMobDefinition.For(SelectRecoveryArchetype(random, index)),
+                    guardPosition,
+                    true,
+                    guardPosition));
+            }
+
+            SpawnUntilCap();
+            return Array.AsReadOnly(identifiers);
+        }
+
         public bool SpawnTravelGroup(
             PayloadEscortEncounter encounter,
             Vector3 payloadPosition,
@@ -152,6 +191,20 @@ namespace AlmostDelivered.Gameplay.Payload
             return true;
         }
 
+        public bool SpawnActivationResponseGroup(
+            Vector3 payloadPosition,
+            Vector3 routeDirection,
+            Rect missionBounds,
+            float exclusionRadius)
+        {
+            return SpawnTravelGroup(
+                new PayloadEscortEncounter(997, 4, PayloadAssaultPattern.RearPursuit),
+                payloadPosition,
+                routeDirection,
+                missionBounds,
+                exclusionRadius);
+        }
+
         private void OnDisable()
         {
             shuttingDown = true;
@@ -171,6 +224,7 @@ namespace AlmostDelivered.Gameplay.Payload
             living.Clear();
             pending.Clear();
             checkpointEnemyIds.Clear();
+            recoveryEnemyIds.Clear();
             activeCheckpointWaveId = -1;
         }
 
@@ -215,6 +269,10 @@ namespace AlmostDelivered.Gameplay.Payload
             var controller = actor.AddComponent<MissionMobController>();
             controller.AssignIdentity(pendingEnemy.WaveId, pendingEnemy.EnemyId);
             controller.Configure(pendingEnemy.Definition, playerTarget, rangedAttack);
+            if (pendingEnemy.HasGuardPost)
+            {
+                controller.ConfigureGuardPost(pendingEnemy.GuardPost, 12f);
+            }
 
             var visualPrefab = VisualFor(pendingEnemy.Definition.Archetype);
             if (visualPrefab != null)
@@ -243,6 +301,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
             enemy.Removed -= HandleRemoved;
             living.Remove(enemy.EnemyId);
+            recoveryEnemyIds.Remove(enemy.EnemyId);
             if (checkpointEnemyIds.Remove(enemy.EnemyId) && checkpointEnemyIds.Count == 0)
             {
                 activeCheckpointWaveId = -1;
@@ -286,7 +345,7 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             if (finalWave && index == 0)
             {
-                return MissionMobArchetype.CommanderBoss;
+                return MissionMobArchetype.Shield;
             }
 
             if (finalWave && index == 1)
@@ -295,6 +354,46 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             return (MissionMobArchetype)random.Next(0, 3);
+        }
+
+        private static MissionMobArchetype SelectRecoveryArchetype(System.Random random, int index)
+        {
+            if (index == 0)
+            {
+                return MissionMobArchetype.Shield;
+            }
+
+            if (index == 1)
+            {
+                return MissionMobArchetype.Ranged;
+            }
+
+            if (index == 2)
+            {
+                return MissionMobArchetype.Melee;
+            }
+
+            return (MissionMobArchetype)random.Next(0, 3);
+        }
+
+        private static Vector3 RecoveryGuardPosition(
+            System.Random random,
+            Vector3 cargoPosition,
+            int index,
+            int count,
+            Rect missionBounds)
+        {
+            var baseAngle = count > 0 ? index * Mathf.PI * 2f / count : 0f;
+            var angle = baseAngle + ((float)random.NextDouble() - .5f) * .35f;
+            var radius = 5.5f + (float)random.NextDouble() * 2f;
+            var position = cargoPosition + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+            if (missionBounds.width > 0f && missionBounds.height > 0f)
+            {
+                position.x = Mathf.Clamp(position.x, missionBounds.xMin + 1f, missionBounds.xMax - 1f);
+                position.z = Mathf.Clamp(position.z, missionBounds.yMin + 1f, missionBounds.yMax - 1f);
+            }
+
+            return position;
         }
 
         private static Vector3 SpawnPosition(System.Random random, Transform anchor)
@@ -471,18 +570,28 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private readonly struct PendingEnemy
         {
-            public PendingEnemy(int waveId, int enemyId, MissionMobDefinition definition, Vector3 position)
+            public PendingEnemy(
+                int waveId,
+                int enemyId,
+                MissionMobDefinition definition,
+                Vector3 position,
+                bool hasGuardPost = false,
+                Vector3 guardPost = default)
             {
                 WaveId = waveId;
                 EnemyId = enemyId;
                 Definition = definition;
                 Position = position;
+                HasGuardPost = hasGuardPost;
+                GuardPost = guardPost;
             }
 
             public int WaveId { get; }
             public int EnemyId { get; }
             public MissionMobDefinition Definition { get; }
             public Vector3 Position { get; }
+            public bool HasGuardPost { get; }
+            public Vector3 GuardPost { get; }
         }
     }
 }

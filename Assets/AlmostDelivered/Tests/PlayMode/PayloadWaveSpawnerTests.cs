@@ -59,7 +59,7 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void FinalWaveIncludesBossesAndQueuesAboveActiveCap()
+        public void FinalWaveKeepsChargerButOmitsCommanderAndQueuesAboveActiveCap()
         {
             var spawner = CreateSpawner(root.transform, 91, 18);
             IReadOnlyCollection<int> startedIds = null;
@@ -70,7 +70,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(startedIds, Has.Count.EqualTo(22));
             Assert.That(spawner.ActiveCount, Is.EqualTo(18));
             Assert.That(spawner.PendingCount, Is.EqualTo(4));
-            Assert.That(spawner.LivingEnemies.Any(enemy => enemy.Definition.Archetype == MissionMobArchetype.CommanderBoss), Is.True);
+            Assert.That(spawner.LivingEnemies.Any(enemy => enemy.Definition.Archetype == MissionMobArchetype.CommanderBoss), Is.False);
             Assert.That(spawner.LivingEnemies.Any(enemy => enemy.Definition.Archetype == MissionMobArchetype.ChargerBoss), Is.True);
         }
 
