@@ -1,37 +1,41 @@
 # Almost Delivered
 
-Almost Delivered is a quarter-view co-op PvE defense game prototype built with **Unity 2021.3.45f2**. The current player-facing flow starts at a pre-game menu and enters an industrial departure hub inspired by mission-staging spaces.
+**Almost Delivered**는 우주 배경의 쿼터뷰 협동 PvE 화물 호위 게임을 목표로 하는 Unity 프로젝트입니다. 현재는 혼자 플레이할 수 있는 프로토타입으로, 실종된 화물을 찾아 기동한 뒤 중계 지점을 거쳐 목적지까지 호위하는 흐름을 구현하고 있습니다.
 
-Open `Assets/AlmostDelivered/Scenes/Frontend.unity` and enter Play mode:
+## 실행 방법
 
-- Select `작전 준비` to enter the departure hub.
-- Move the placeholder player with WASD or the arrow keys.
-- Press Escape to return to the frontend.
-- `설정 · 준비 중` is intentionally disabled while the settings flow is out of scope.
+1. Unity Hub에서 저장소 폴더를 프로젝트로 추가하고 **Unity 2021.3.45f2**로 엽니다.
+2. `Assets/AlmostDelivered/Scenes/Frontend.unity` 씬을 열고 Play를 누릅니다.
+3. 시작 화면에서 **작전 준비**를 선택해 출발 기지로 이동합니다.
+4. 기지의 출발 게이트에서 **E**를 눌러 미션에 진입합니다.
 
-The mission terminal, equipment bay, deployment gate, and room dressing are visual layout placeholders. Character selection, inventory, matchmaking, combat, and mission launch interactions are not implemented in this slice. See the [departure hub guide](docs/frontend/departure-hub.md) for scene generation, hierarchy, controls, and verification.
+미션만 확인하려면 `Assets/AlmostDelivered/Scenes/MissionPrototype.unity`를 직접 실행할 수 있습니다. 최초 실행 시 Unity가 `Packages/manifest.json`에 지정된 패키지를 가져오고 로컬 `Library` 폴더를 생성합니다.
 
-## Commander AI prototype
+## 조작
 
-A local Unity prototype where a visible, killable commander turns squad observations into explainable Utility AI tactics and role-based orders. Killing the commander permanently breaks squad coordination while survivors retain basic combat behavior.
+| 위치 | 조작 | 동작 |
+| --- | --- | --- |
+| 출발 기지 | WASD 또는 방향키 | 이동 |
+| 출발 기지 | E | 출발 게이트에서 미션 시작 |
+| 미션 | WASD | 이동 |
+| 미션 | 마우스 커서 / 좌클릭 | 조준 / 원거리 공격 |
+| 미션 | E를 3초간 누르기 | 화물 근처에서 기동 |
+| 미션 | Esc | 출발 기지로 돌아가기 |
 
-Open with **Unity 2021.3.45f2** and run [CommanderAITest.unity](Assets/AlmostDelivered/Scenes/CommanderAITest.unity). The arena contains one controllable player, two instrumented dummies, one commander, and eight ordinary monsters. WASD/arrows move, click deals damage, and Space stuns nearby monsters. The overlay exposes formations, observed support tags, difficulty, commander death, score components, telegraphs, and member orders.
+## 현재 구현된 내용
 
-To open a fresh clone, add the repository root in Unity Hub and select **Unity 2021.3.45f2**. Let Unity restore the packages pinned in `Packages/manifest.json` and `Packages/packages-lock.json`, then open `Assets/AlmostDelivered/Scenes/Frontend.unity` as the first scene and enter Play mode. `ProjectSettings` is tracked; Unity creates `Library` and local editor settings on first open.
+- 시작 화면 → 출발 기지 → 화물 호위 미션으로 이어지는 기본 흐름
+- 화물 탐색과 경계병 전투, 3초 기동, 이동 중 지속 전투, 중계 비콘과 보급 지점
+- 시드에 따라 생성되는 화물 경로·미니맵·지형·장애물과 Grassland 환경 테마
+- 플레이어 체력바·피격 효과, 적 체력 표시와 사망 연출
+- 화물로 접근하다 플레이어를 인지하면 추적하는 웨이브 적, 시야·근접·소음에 반응하는 사전 배치 적, 장애물 우회 이동
 
-Shader Graph and its Render Pipeline Core dependency are pinned to **12.1.15**, matching this Unity 2021.3 editor. The generated phase-1 visuals use Built-in `Standard` and `Unlit/Color` shaders.
+별도의 `Assets/AlmostDelivered/Scenes/CommanderAITest.unity` 씬에는 **처치 가능한 지휘관 AI 실험장**이 있습니다. 몬스터의 관찰 정보를 바탕으로 전술을 고르고 역할별 위치를 배정하며, 지휘관을 처치하면 분대의 조직적인 전술이 중단됩니다. 이 실험장은 현재 화물 미션과 별개입니다. 자세한 구조와 검증 기록은 [지휘관 AI 아키텍처](docs/commander-ai/architecture.md), [테스트 방법](docs/commander-ai/tests.md), [포트폴리오 시연](docs/commander-ai/portfolio-demo.md)을 참고하세요.
 
-The locally imported SimpleNaturePack, BrokenVector FreeLowPolyPack, and PixPlays elemental effects packs are optional and excluded from this public repository while redistribution permission remains unverified. Phase-1 generated visuals require no external art package. See the [third-party notice](Assets/ThirdParty/NOTICE.md) for the inclusion rule.
+## 개발 상태와 계획
 
-- [Approved design spec](docs/superpowers/specs/2026-11-01-commander-ai-design.md)
-- [Implementation plan](docs/superpowers/plans/2026-11-01-commander-ai-implementation.md)
-- [Architecture and later authority boundary](docs/commander-ai/architecture.md)
-- [Test and arena generation commands](docs/commander-ai/tests.md)
-- [Measured one-squad and five-squad CPU evidence](docs/commander-ai/profiling.md)
-- [Deterministic portfolio demonstration](docs/commander-ai/portfolio-demo.md)
+현재 저장소는 **프로토타입**입니다. 멀티플레이, 장기 성장, 완성된 직업·특성 시스템은 아직 구현되지 않았습니다. 화물의 체력·수리, 화물 외형과 이동 방향 연출도 후속 작업입니다. 현재 화물 기동 방식은 E키를 3초간 누르는 방식이며, 전투 중 상호작용 규칙은 추가 검토 중입니다.
 
-The initial tactics are Objective Blockade, Pincer, and Focus Support. Shield, Ranged, Charger, and Support currently provide tactical positioning and simple attacks. Multiplayer and full role abilities are future work, alongside cargo/control-point gameplay, progression, production presentation, and coordinated multi-squad strategy.
+Unity EditMode **232/232**, PlayMode **202/202** 테스트를 통과했습니다(2026-11-09 기준). [프로젝트 설계 문서](docs/superpowers/specs/2026-11-01-commander-ai-design.md)와 [로우폴리 시각 에셋 안내](docs/art/low-poly-visual-set.md)도 저장소에 포함되어 있습니다.
 
-Automated scene, logic, lifecycle, navigation, and stress verification is recorded in the linked evidence. The frontend-to-hub flow has also been manually verified in the Unity Game view.
-
-- [Phase-1 low-poly visual set and rebuild instructions](docs/art/low-poly-visual-set.md)
+공개 저장소에는 재배포 권한을 확인하지 않은 외부 에셋 팩을 포함하지 않았습니다. 기본 프로토타입은 프로젝트에서 생성한 로우폴리 시각 요소로 실행됩니다. 자세한 내용은 [서드파티 에셋 안내](Assets/ThirdParty/NOTICE.md)를 참고하세요.
