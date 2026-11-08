@@ -282,7 +282,7 @@ namespace AlmostDelivered.Editor.Frontend
             var generator = mapObject.AddComponent<MissionMapGenerator>();
             generator.Configure(
                 AssetDatabase.LoadAssetAtPath<MissionMapTheme>(MissionMapAssetFactory.ThemePath),
-                new Vector2(28f, 50f), 40, 6, 28, 42,
+                new Vector2(28f, 50f), 0, 6, 28, 42,
                 new[]
                 {
                     new MissionMapProtectedZone(new Vector2(0f, -46f), new Vector2(8f, 8f)),

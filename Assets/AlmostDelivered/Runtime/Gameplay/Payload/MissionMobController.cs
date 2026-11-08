@@ -64,6 +64,7 @@ namespace AlmostDelivered.Gameplay.Payload
     {
         [SerializeField] private Transform target;
         [SerializeField] private RangedAttackController rangedAttack;
+        [SerializeField, Min(1f)] private float turnSpeed = 360f;
         [SerializeField] private float gravity = -24f;
         [SerializeField] private float groundedVerticalSpeed = -2f;
 
@@ -150,7 +151,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var distance = toTarget.magnitude;
             var direction = toTarget / distance;
-            transform.forward = direction;
+            RotateTowards(direction, deltaTime);
 
             if (IsRanged(Definition.Archetype))
             {
@@ -205,6 +206,18 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 transform.position += horizontalVelocity * deltaTime;
             }
+        }
+
+        private void RotateTowards(Vector3 direction, float deltaTime)
+        {
+            if (direction.sqrMagnitude <= .0001f || deltaTime <= 0f)
+                return;
+
+            var targetRotation = Quaternion.LookRotation(direction, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                turnSpeed * deltaTime);
         }
 
         private void HandleDeath()

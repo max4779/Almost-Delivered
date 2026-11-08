@@ -139,14 +139,22 @@ namespace AlmostDelivered.Tests.PlayMode
         [Test]
         public void SpawnedEnemiesUseTerrainAwareCharacterControllers()
         {
-            var spawner = CreateSpawner(root.transform, 444, 18);
+            var visualPrefab = new GameObject("Test Enemy Visual");
+            visualPrefab.transform.SetParent(root.transform, false);
+            var spawner = CreateSpawner(root.transform, 444, 18, visualPrefab);
 
             spawner.SpawnWave(2, 0, false);
 
             foreach (var enemy in spawner.LivingEnemies)
             {
-                Assert.That(enemy.GetComponent<CharacterController>(), Is.Not.Null, enemy.name);
+                var character = enemy.GetComponent<CharacterController>();
+                var visual = enemy.transform.Find("VisualRoot");
+                Assert.That(character, Is.Not.Null, enemy.name);
                 Assert.That(enemy.GetComponent<CapsuleCollider>(), Is.Null, enemy.name);
+                Assert.That(character.center, Is.EqualTo(Vector3.up), enemy.name);
+                Assert.That(character.height, Is.EqualTo(2f), enemy.name);
+                Assert.That(visual, Is.Not.Null, enemy.name);
+                Assert.That(visual.localPosition, Is.EqualTo(Vector3.zero), enemy.name);
             }
         }
 
@@ -292,7 +300,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(spawner.PendingCount, Is.Zero);
         }
 
-        private PayloadWaveSpawner CreateSpawner(Transform parent, int seed, int activeCap)
+        private PayloadWaveSpawner CreateSpawner(Transform parent, int seed, int activeCap, GameObject visualPrefab = null)
         {
             var spawnerObject = new GameObject("Payload Wave Spawner");
             spawnerObject.transform.SetParent(parent, false);
@@ -300,11 +308,11 @@ namespace AlmostDelivered.Tests.PlayMode
             spawner.Configure(
                 player.transform,
                 projectileTemplate,
-                null,
-                null,
-                null,
-                null,
-                null,
+                visualPrefab,
+                visualPrefab,
+                visualPrefab,
+                visualPrefab,
+                visualPrefab,
                 anchors,
                 seed,
                 activeCap);

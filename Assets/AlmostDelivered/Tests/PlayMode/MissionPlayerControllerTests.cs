@@ -47,14 +47,38 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void MoveNormalizesDiagonalAndFacesDirection()
+        public void MoveNormalizesDiagonalWithoutChangingAimDirection()
         {
+            player.transform.forward = Vector3.left;
             var before = player.transform.position;
             Assert.That(missionPlayer.Move(Vector2.one, 1f), Is.True);
             var displacement = player.transform.position - before;
 
             Assert.That(new Vector2(displacement.x, displacement.z).magnitude, Is.EqualTo(6f).Within(.01f));
-            Assert.That(Vector3.Dot(player.transform.forward, new Vector3(1f, 0f, 1f).normalized), Is.GreaterThan(.999f));
+            Assert.That(Vector3.Dot(player.transform.forward, Vector3.left), Is.GreaterThan(.999f));
+        }
+
+        [Test]
+        public void AimAtCursorTurnsWithoutFiring()
+        {
+            player.transform.forward = Vector3.forward;
+
+            Assert.That(missionPlayer.AimAt(Vector3.right * 10f, .05f), Is.True);
+
+            Assert.That(Vector3.Angle(Vector3.forward, player.transform.forward), Is.GreaterThan(1f));
+            Assert.That(Vector3.Angle(player.transform.forward, Vector3.right), Is.GreaterThan(1f));
+            Assert.That(Object.FindObjectsOfType<CombatProjectile>(), Is.Empty);
+        }
+
+        [Test]
+        public void AimTurnsTowardCursorWithoutSnappingBeforeShot()
+        {
+            player.transform.forward = Vector3.forward;
+
+            Assert.That(missionPlayer.AimAndFire(Vector3.right * 10f, 0f, .05f), Is.True);
+
+            Assert.That(Vector3.Angle(Vector3.forward, player.transform.forward), Is.GreaterThan(1f));
+            Assert.That(Vector3.Angle(player.transform.forward, Vector3.right), Is.GreaterThan(1f));
         }
 
         [Test]

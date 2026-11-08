@@ -66,7 +66,8 @@ namespace AlmostDelivered.Tests.EditMode
 
             Assert.That(generator.Theme, Is.Not.Null);
             Assert.That(generator.RandomizeOnStart, Is.False);
-            Assert.That(generator.TerrainDetailCount, Is.EqualTo(40));
+            Assert.That(generator.TerrainDetailCount, Is.Zero,
+                "Large rectangular floor-detail prefabs read as stray squares in the outdoor mission.");
             Assert.That(generator.TraversableTerrainCount, Is.EqualTo(6));
             Assert.That(generator.BlockingObstacleCount, Is.EqualTo(28));
             Assert.That(generator.FoliageCount, Is.EqualTo(42));
@@ -78,7 +79,8 @@ namespace AlmostDelivered.Tests.EditMode
 
             var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 8f);
             var generatedPieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true);
-            Assert.That(generatedPieces, Has.Length.EqualTo(116), "Generated map pieces must survive a saved-scene reload.");
+            Assert.That(generatedPieces, Has.Length.EqualTo(76), "Generated map pieces must survive a saved-scene reload.");
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.Zero);
             Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.EqualTo(6));
             Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.EqualTo(28));
             Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.EqualTo(42));

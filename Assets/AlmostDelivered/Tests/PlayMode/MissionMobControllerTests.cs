@@ -52,6 +52,20 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void TrackingTurnsTowardTargetWithoutSnapping()
+        {
+            target.transform.position = Vector3.right * 10f;
+            mob.transform.forward = Vector3.forward;
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+
+            controller.Tick(0f, .05f);
+
+            Assert.That(Vector3.Angle(Vector3.forward, mob.transform.forward), Is.GreaterThan(1f));
+            Assert.That(Vector3.Angle(mob.transform.forward, Vector3.right), Is.GreaterThan(1f));
+        }
+
+        [Test]
         public void RangedApproachesStandOffRangeThenFires()
         {
             projectileTemplate = new GameObject("Projectile Template", typeof(CombatProjectile));

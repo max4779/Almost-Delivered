@@ -8,6 +8,7 @@ namespace AlmostDelivered.Gameplay
     public sealed class MissionPlayerController : MonoBehaviour
     {
         [SerializeField, Min(.1f)] private float moveSpeed = 6f;
+        [SerializeField, Min(1f)] private float turnSpeed = 540f;
         [SerializeField] private float gravity = -24f;
         [SerializeField] private float groundedVerticalSpeed = -2f;
         [SerializeField] private RangedAttackController rangedAttack;
@@ -37,8 +38,13 @@ namespace AlmostDelivered.Gameplay
         {
             Move(new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")), Time.deltaTime);
 
-            if (Input.GetMouseButton(0) && TryGetMouseAim(out var aimPoint))
-                AimAndFire(aimPoint, Time.time);
+            if (TryGetMouseAim(out var aimPoint))
+            {
+                if (Input.GetMouseButton(0))
+                    AimAndFire(aimPoint, Time.time, Time.deltaTime);
+                else
+                    AimAt(aimPoint, Time.deltaTime);
+            }
 
             if (Input.GetKeyDown(KeyCode.Escape))
                 GameSceneFlow.LoadDepartureHub();
@@ -64,14 +70,30 @@ namespace AlmostDelivered.Gameplay
             if ((collisionFlags & CollisionFlags.Below) != 0)
                 verticalVelocity = groundedVerticalSpeed;
 
-            if (hasMovementInput)
-                transform.forward = direction.normalized;
             return hasMovementInput;
+        }
+
+        public bool AimAt(Vector3 aimPoint, float deltaTime)
+        {
+            if (!CanAct() || !IsFinite(aimPoint) || !IsFinite(deltaTime) || deltaTime <= 0f)
+                return false;
+
+            RotateTowards(aimPoint - transform.position, deltaTime);
+            return true;
         }
 
         public bool AimAndFire(Vector3 aimPoint, float now)
         {
-            return CanAct() && IsFinite(aimPoint) && rangedAttack != null && rangedAttack.TryFire(aimPoint, now);
+            return AimAndFire(aimPoint, now, Time.deltaTime);
+        }
+
+        public bool AimAndFire(Vector3 aimPoint, float now, float deltaTime)
+        {
+            if (!CanAct() || !IsFinite(aimPoint) || rangedAttack == null)
+                return false;
+
+            AimAt(aimPoint, deltaTime);
+            return rangedAttack.TryFire(aimPoint, now);
         }
 
         private bool TryGetMouseAim(out Vector3 aimPoint)
@@ -82,12 +104,38 @@ namespace AlmostDelivered.Gameplay
                 return false;
 
             var ray = camera.ScreenPointToRay(Input.mousePosition);
+            if (Physics.Raycast(ray, out var hit, 250f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            {
+                var targetHealth = hit.collider.GetComponentInParent<ActorHealth>();
+                var targetTeam = hit.collider.GetComponentInParent<CombatTeam>();
+                var ownTeam = GetComponent<CombatTeam>();
+                if (targetHealth != null && !targetHealth.IsDead && targetTeam != null &&
+                    (ownTeam == null || targetTeam.Team != ownTeam.Team))
+                {
+                    aimPoint = hit.collider.bounds.center;
+                    return IsFinite(aimPoint);
+                }
+            }
+
             var plane = new Plane(Vector3.up, transform.position);
             if (!plane.Raycast(ray, out var distance))
                 return false;
 
             aimPoint = ray.GetPoint(distance);
             return IsFinite(aimPoint);
+        }
+
+        private void RotateTowards(Vector3 direction, float deltaTime)
+        {
+            direction = Vector3.ProjectOnPlane(direction, Vector3.up);
+            if (direction.sqrMagnitude <= .0001f || !IsFinite(deltaTime) || deltaTime <= 0f)
+                return;
+
+            var targetRotation = Quaternion.LookRotation(direction.normalized, Vector3.up);
+            transform.rotation = Quaternion.RotateTowards(
+                transform.rotation,
+                targetRotation,
+                turnSpeed * deltaTime);
         }
 
         private bool CanAct() => enabled && (health == null || !health.IsDead);

@@ -66,7 +66,6 @@ namespace AlmostDelivered.Combat
                 return false;
 
             planarDirection.Normalize();
-            transform.forward = planarDirection;
 
             var clone = Instantiate(projectileTemplate, muzzle.position, Quaternion.LookRotation(planarDirection));
             clone.name = projectileTemplate.name + " (Shot)";

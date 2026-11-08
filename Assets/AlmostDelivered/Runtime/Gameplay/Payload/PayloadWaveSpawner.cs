@@ -221,7 +221,7 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 var visual = Instantiate(visualPrefab, actor.transform);
                 visual.name = "VisualRoot";
-                visual.transform.localPosition = Vector3.down;
+                visual.transform.localPosition = Vector3.zero;
                 visual.transform.localRotation = Quaternion.identity;
             }
 

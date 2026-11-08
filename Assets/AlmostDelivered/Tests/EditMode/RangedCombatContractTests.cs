@@ -38,6 +38,7 @@ namespace AlmostDelivered.Tests.EditMode
         [Test]
         public void ValidShotCreatesOneActivePlanarProjectileAndFacesAim()
         {
+            var facingBeforeShot = owner.transform.forward;
             Assert.That(attack.TryFire(new Vector3(5f, 99f, 7f), 0f), Is.True);
 
             var shots = Object.FindObjectsOfType<CombatProjectile>(true)
@@ -45,7 +46,7 @@ namespace AlmostDelivered.Tests.EditMode
                 .ToArray();
             Assert.That(shots.Length, Is.EqualTo(1));
             Assert.That(shots[0].Direction.y, Is.EqualTo(0f).Within(.0001f));
-            Assert.That(Vector3.Dot(owner.transform.forward, shots[0].Direction), Is.GreaterThan(.999f));
+            Assert.That(owner.transform.forward, Is.EqualTo(facingBeforeShot));
         }
 
         [Test]
