@@ -102,7 +102,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(minimap.PlayerIcon, Is.Not.Null);
             Assert.That(minimap.PayloadIcon, Is.Not.Null);
             Assert.That(minimap.PayloadIcon.gameObject.activeSelf, Is.True);
-            Assert.That(minimap.EnemyIconCount, Is.EqualTo(6));
+            Assert.That(minimap.EnemyIconCount, Is.EqualTo(14));
             Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
             Assert.That(minimap.GetComponent<RectMask2D>(), Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<PayloadRelayBeaconView>(true)
@@ -206,7 +206,13 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
             Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId),
                 Is.EqualTo(6));
-            ClearWave(waves);
+            foreach (var guard in waves.LivingEnemies
+                         .Where(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId)
+                         .ToArray())
+            {
+                guard.GetComponent<AlmostDelivered.Combat.ActorHealth>().ApplyDamage(10000f);
+            }
+            Assert.That(mission.Snapshot.RemainingEnemyCount, Is.Zero);
             MovePlayerIntoEscortRadius(player, payload);
             var activationView = Object.FindObjectOfType<PayloadActivationView>(true);
             Assert.That(activationView, Is.Not.Null);
@@ -214,11 +220,14 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(activationView.IsVisible, Is.True);
             Assert.That(activationView.Label.text, Does.Contain("0%"));
-            Assert.That(waves.ActiveCount, Is.EqualTo(4));
+            Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
+            Assert.That(waves.ActiveCount, Is.EqualTo(11));
 
             mission.Tick(2f);
             Assert.That(mission.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
             Assert.That(activationView.Label.text, Does.Contain("50%"));
+            Assert.That(waves.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
+            Assert.That(waves.ActiveCount, Is.EqualTo(14));
 
             mission.Tick(2f);
             Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));

@@ -35,6 +35,7 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(mission.IsAuthority, Is.True);
             Assert.That(mission.RequiresCargoRecovery, Is.True);
             Assert.That(mission.CargoActivationDuration, Is.EqualTo(4f));
+            Assert.That(mission.PreplacedSentryCount, Is.EqualTo(8));
             Assert.That(Vector3.Distance(player.transform.position, payload.transform.position), Is.GreaterThan(12f));
             Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PayloadEscortRadiusView>(true), Has.Length.EqualTo(1));

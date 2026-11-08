@@ -93,11 +93,17 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(controller.RequiresCargoRecovery, Is.True);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
             Assert.That(controller.Snapshot.RemainingEnemyCount, Is.EqualTo(6));
-            Assert.That(spawner.ActiveCount, Is.EqualTo(6));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(14));
             Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId), Is.EqualTo(6));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.PreplacedSentryWaveId), Is.EqualTo(8));
             Assert.That(spawner.LivingEnemies.Any(enemy => enemy.Definition.Archetype == MissionMobArchetype.CommanderBoss), Is.False);
             Assert.That(spawner.LivingEnemies.All(enemy => enemy.HasGuardPost), Is.True);
-            Assert.That(spawner.LivingEnemies.All(enemy => Vector3.Distance(enemy.transform.position, payload.transform.position) <= 9f), Is.True);
+            Assert.That(spawner.LivingEnemies
+                .Where(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId)
+                .All(enemy => Vector3.Distance(enemy.transform.position, payload.transform.position) <= 9f), Is.True);
+            Assert.That(spawner.LivingEnemies
+                .Where(enemy => enemy.WaveId == PayloadWaveSpawner.PreplacedSentryWaveId)
+                .Any(enemy => Vector3.Distance(enemy.transform.position, payload.transform.position) > 10f), Is.True);
 
             var sentry = spawner.LivingEnemies.First();
             var sentryPosition = sentry.transform.position;
@@ -110,7 +116,9 @@ namespace AlmostDelivered.Tests.PlayMode
                 Is.LessThan(.01f));
 
             player.transform.position = payload.transform.position + Vector3.forward * 15f;
-            foreach (var enemy in spawner.LivingEnemies.ToArray())
+            foreach (var enemy in spawner.LivingEnemies
+                         .Where(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId)
+                         .ToArray())
             {
                 enemy.GetComponent<ActorHealth>().ApplyDamage(10000f);
             }
@@ -123,11 +131,14 @@ namespace AlmostDelivered.Tests.PlayMode
             Physics.SyncTransforms();
             controller.Tick(0f);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
-            Assert.That(spawner.ActiveCount, Is.EqualTo(4));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(11));
 
             controller.Tick(2f);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(controller.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(14));
 
             controller.Tick(2f);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));

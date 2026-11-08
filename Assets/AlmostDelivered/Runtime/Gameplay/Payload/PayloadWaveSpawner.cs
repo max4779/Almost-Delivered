@@ -8,6 +8,8 @@ namespace AlmostDelivered.Gameplay.Payload
     public sealed class PayloadWaveSpawner : MonoBehaviour
     {
         public const int RecoveryWaveId = 0;
+        public const int PreplacedSentryWaveId = -2000;
+        private const int ActivationSequenceBase = 900;
         private static readonly int[] CheckpointWaveCounts = { 10, 14, 18 };
 
         [SerializeField] private Transform playerTarget;
@@ -25,6 +27,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private readonly Dictionary<int, MissionMobController> living = new Dictionary<int, MissionMobController>();
         private readonly HashSet<int> checkpointEnemyIds = new HashSet<int>();
         private readonly HashSet<int> recoveryEnemyIds = new HashSet<int>();
+        private readonly HashSet<int> preplacedSentryIds = new HashSet<int>();
         private int activeCheckpointWaveId = -1;
         private bool shuttingDown;
 
@@ -38,6 +41,11 @@ namespace AlmostDelivered.Gameplay.Payload
             return finalWave
                 ? 22
                 : CheckpointWaveCounts[Mathf.Clamp(checkpointIndex, 0, CheckpointWaveCounts.Length - 1)];
+        }
+
+        public static int ActivationWaveId(int waveIndex)
+        {
+            return -(ActivationSequenceBase + Mathf.Max(0, waveIndex) + 1);
         }
 
         public event Action<int, IReadOnlyCollection<int>> WaveStarted;
@@ -128,11 +136,50 @@ namespace AlmostDelivered.Gameplay.Payload
                     MissionMobDefinition.For(SelectRecoveryArchetype(random, index)),
                     guardPosition,
                     true,
-                    guardPosition));
+                    guardPosition,
+                    guardPosition - cargoPosition));
             }
 
             SpawnUntilCap();
             return Array.AsReadOnly(identifiers);
+        }
+
+        public IReadOnlyCollection<int> SpawnPreplacedSentries(
+            IReadOnlyList<Vector3> positions,
+            IReadOnlyList<Vector3> facingDirections)
+        {
+            if (positions == null || positions.Count == 0 || preplacedSentryIds.Count > 0)
+            {
+                return Array.Empty<int>();
+            }
+
+            var random = new System.Random(unchecked(missionSeed * 486187739 + 29063));
+            var identifiers = new List<int>(positions.Count);
+            for (var index = 0; index < positions.Count; index++)
+            {
+                if (!IsFinite(positions[index]))
+                {
+                    continue;
+                }
+
+                var enemyId = unchecked(PreplacedSentryWaveId * 1000 - index - 1);
+                var facing = facingDirections != null && index < facingDirections.Count
+                    ? facingDirections[index]
+                    : Vector3.forward;
+                identifiers.Add(enemyId);
+                preplacedSentryIds.Add(enemyId);
+                pending.Enqueue(new PendingEnemy(
+                    PreplacedSentryWaveId,
+                    enemyId,
+                    MissionMobDefinition.For(SelectRecoveryArchetype(random, index)),
+                    positions[index],
+                    true,
+                    positions[index],
+                    facing));
+            }
+
+            SpawnUntilCap();
+            return identifiers.AsReadOnly();
         }
 
         public bool SpawnTravelGroup(
@@ -179,7 +226,10 @@ namespace AlmostDelivered.Gameplay.Payload
                     -(encounter.SequenceId + 1),
                     enemyId,
                     MissionMobDefinition.For(SelectArchetype(random, false, index)),
-                    candidate));
+                    candidate,
+                    false,
+                    default,
+                    payloadPosition - candidate));
             }
 
             foreach (var enemy in travelGroup)
@@ -191,14 +241,21 @@ namespace AlmostDelivered.Gameplay.Payload
             return true;
         }
 
-        public bool SpawnActivationResponseGroup(
+        public bool SpawnActivationResponseWave(
+            int waveIndex,
             Vector3 payloadPosition,
             Vector3 routeDirection,
             Rect missionBounds,
             float exclusionRadius)
         {
+            var sanitizedWaveIndex = Mathf.Max(0, waveIndex);
             return SpawnTravelGroup(
-                new PayloadEscortEncounter(997, 4, PayloadAssaultPattern.RearPursuit),
+                new PayloadEscortEncounter(
+                    ActivationSequenceBase + sanitizedWaveIndex,
+                    3,
+                    sanitizedWaveIndex % 2 == 0
+                        ? PayloadAssaultPattern.LeftAmbush
+                        : PayloadAssaultPattern.RightAmbush),
                 payloadPosition,
                 routeDirection,
                 missionBounds,
@@ -225,6 +282,7 @@ namespace AlmostDelivered.Gameplay.Payload
             pending.Clear();
             checkpointEnemyIds.Clear();
             recoveryEnemyIds.Clear();
+            preplacedSentryIds.Clear();
             activeCheckpointWaveId = -1;
         }
 
@@ -244,6 +302,7 @@ namespace AlmostDelivered.Gameplay.Payload
             var actor = new GameObject($"Wave {pendingEnemy.WaveId} Enemy {pendingEnemy.EnemyId}");
             actor.transform.SetParent(transform, false);
             actor.transform.position = pendingEnemy.Position;
+            actor.transform.forward = HorizontalDirection(pendingEnemy.FacingDirection, Vector3.forward);
 
             var health = actor.AddComponent<ActorHealth>();
             actor.AddComponent<CombatTeam>().Team = CombatTeamId.Enemy;
@@ -271,7 +330,7 @@ namespace AlmostDelivered.Gameplay.Payload
             controller.Configure(pendingEnemy.Definition, playerTarget, rangedAttack);
             if (pendingEnemy.HasGuardPost)
             {
-                controller.ConfigureGuardPost(pendingEnemy.GuardPost, 12f);
+                controller.ConfigureGuardPost(pendingEnemy.GuardPost, 10f);
             }
 
             var visualPrefab = VisualFor(pendingEnemy.Definition.Archetype);
@@ -302,6 +361,7 @@ namespace AlmostDelivered.Gameplay.Payload
             enemy.Removed -= HandleRemoved;
             living.Remove(enemy.EnemyId);
             recoveryEnemyIds.Remove(enemy.EnemyId);
+            preplacedSentryIds.Remove(enemy.EnemyId);
             if (checkpointEnemyIds.Remove(enemy.EnemyId) && checkpointEnemyIds.Count == 0)
             {
                 activeCheckpointWaveId = -1;
@@ -576,7 +636,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 MissionMobDefinition definition,
                 Vector3 position,
                 bool hasGuardPost = false,
-                Vector3 guardPost = default)
+                Vector3 guardPost = default,
+                Vector3 facingDirection = default)
             {
                 WaveId = waveId;
                 EnemyId = enemyId;
@@ -584,6 +645,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 Position = position;
                 HasGuardPost = hasGuardPost;
                 GuardPost = guardPost;
+                FacingDirection = facingDirection;
             }
 
             public int WaveId { get; }
@@ -592,6 +654,7 @@ namespace AlmostDelivered.Gameplay.Payload
             public Vector3 Position { get; }
             public bool HasGuardPost { get; }
             public Vector3 GuardPost { get; }
+            public Vector3 FacingDirection { get; }
         }
     }
 }

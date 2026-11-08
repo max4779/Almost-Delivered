@@ -24,6 +24,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private bool requiresCargoRecovery;
         [SerializeField, Min(0)] private int configuredRecoveryGuardCount = 6;
         [SerializeField, Min(0f)] private float configuredCargoActivationDuration = 4f;
+        [SerializeField, Min(0)] private int configuredPreplacedSentryCount = 8;
         [SerializeField, Min(0f)] private float configuredCargoNoiseRadius = 26f;
         [SerializeField, Min(.1f)] private float configuredCargoNoiseInterval = .65f;
         private PayloadMissionStateMachine stateMachine;
@@ -32,7 +33,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private float escortRadius;
         private PayloadMissionSnapshot snapshot;
         private float activationNoiseCooldown;
-        private bool activationResponseSpawned;
+        private int activationWaveMask;
 
         public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
@@ -41,6 +42,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool RequiresCargoRecovery => requiresCargoRecovery;
         public int RecoveryGuardCount => configuredRecoveryGuardCount;
         public float CargoActivationDuration => configuredCargoActivationDuration;
+        public int PreplacedSentryCount => configuredPreplacedSentryCount;
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
@@ -60,7 +62,8 @@ namespace AlmostDelivered.Gameplay.Payload
             float corridorWidth = 3f,
             bool requireCargoRecovery = false,
             int recoveryGuardCount = 6,
-            float cargoActivationDuration = 4f)
+            float cargoActivationDuration = 4f,
+            int preplacedSentryCount = 8)
         {
             if (stateMachine != null)
             {
@@ -86,6 +89,7 @@ namespace AlmostDelivered.Gameplay.Payload
             configuredCargoActivationDuration = IsFinite(cargoActivationDuration)
                 ? Mathf.Max(0f, cargoActivationDuration)
                 : 0f;
+            configuredPreplacedSentryCount = Mathf.Max(0, preplacedSentryCount);
             Initialize();
         }
 
@@ -113,7 +117,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 : null;
             pendingEscortEncounter = null;
             activationNoiseCooldown = 0f;
-            activationResponseSpawned = false;
+            activationWaveMask = 0;
             if (payloadTransform != null)
             {
                 payloadTransform.position = RoutePlan.Points[0];
@@ -138,6 +142,12 @@ namespace AlmostDelivered.Gameplay.Payload
                 {
                     recoveryGuardIds[guardIndex++] = guardId;
                 }
+
+                BuildPreplacedSentryPoints(
+                    configuredPreplacedSentryCount,
+                    out var sentryPositions,
+                    out var sentryFacings);
+                waveSpawner.SpawnPreplacedSentries(sentryPositions, sentryFacings);
             }
 
             if (requiresCargoRecovery)
@@ -174,7 +184,9 @@ namespace AlmostDelivered.Gameplay.Payload
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var previousPhase = snapshot.Phase;
             stateMachine.Tick(deltaTime, players, enemies);
-            HandleActivationTransition(previousPhase, stateMachine.Snapshot.Phase);
+            var currentState = stateMachine.Snapshot;
+            HandleActivationTransition(previousPhase, currentState.Phase);
+            TickActivationWaves(previousPhase, currentState);
             payloadTransform.position = RoutePlan.EvaluateDistance(stateMachine.Snapshot.RouteDistance);
             PublishSnapshot(previousPhase);
             TickActivationNoise(deltaTime);
@@ -246,19 +258,43 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             activationNoiseCooldown = configuredCargoNoiseInterval;
-            if (!activationResponseSpawned && waveSpawner != null && payloadTransform != null && RoutePlan != null)
+            TrySpawnActivationWave(0);
+            EmitCargoNoise();
+        }
+
+        private void TickActivationWaves(PayloadMissionPhase previousPhase, PayloadMissionSnapshot currentState)
+        {
+            if (previousPhase != PayloadMissionPhase.Activating && currentState.Phase != PayloadMissionPhase.Activating)
             {
-                var routeDirection = RoutePlan.Points.Count > 1
-                    ? RoutePlan.Points[1] - RoutePlan.Points[0]
-                    : Vector3.forward;
-                activationResponseSpawned = waveSpawner.SpawnActivationResponseGroup(
+                return;
+            }
+
+            if (currentState.ActivationProgress >= .5f)
+            {
+                TrySpawnActivationWave(1);
+            }
+        }
+
+        private void TrySpawnActivationWave(int waveIndex)
+        {
+            var mask = 1 << Mathf.Clamp(waveIndex, 0, 30);
+            if ((activationWaveMask & mask) != 0 || waveSpawner == null || payloadTransform == null || RoutePlan == null)
+            {
+                return;
+            }
+
+            var routeDirection = RoutePlan.Points.Count > 1
+                ? RoutePlan.Points[1] - RoutePlan.Points[0]
+                : Vector3.forward;
+            if (waveSpawner.SpawnActivationResponseWave(
+                    waveIndex,
                     payloadTransform.position,
                     routeDirection,
                     configuredBounds,
-                    escortRadius);
+                    escortRadius))
+            {
+                activationWaveMask |= mask;
             }
-
-            EmitCargoNoise();
         }
 
         private void TickActivationNoise(float deltaTime)
@@ -286,6 +322,41 @@ namespace AlmostDelivered.Gameplay.Payload
                     payloadTransform.position,
                     configuredCargoNoiseRadius,
                     CombatTeamId.Player);
+            }
+        }
+
+        private void BuildPreplacedSentryPoints(
+            int requestedCount,
+            out Vector3[] positions,
+            out Vector3[] facings)
+        {
+            var count = Mathf.Max(0, requestedCount);
+            positions = new Vector3[count];
+            facings = new Vector3[count];
+            if (count == 0 || RoutePlan == null)
+            {
+                return;
+            }
+
+            var campCount = Mathf.CeilToInt(count / 2f);
+            for (var index = 0; index < count; index++)
+            {
+                var campIndex = index / 2;
+                var campT = (campIndex + 1f) / (campCount + 1f);
+                var routeDistance = RoutePlan.TotalLength * Mathf.Lerp(.18f, .82f, campT);
+                var routeCenter = RoutePlan.EvaluateDistance(routeDistance);
+                var before = RoutePlan.EvaluateDistance(Mathf.Max(0f, routeDistance - 1f));
+                var after = RoutePlan.EvaluateDistance(Mathf.Min(RoutePlan.TotalLength, routeDistance + 1f));
+                var forward = HorizontalDirection(after - before, Vector3.forward);
+                var right = new Vector3(forward.z, 0f, -forward.x);
+                var side = campIndex % 2 == 0 ? 1f : -1f;
+                var slotOffset = index % 2 == 0 ? -1.4f : 1.4f;
+                var position = routeCenter + right * side * 6f + forward * slotOffset;
+                position.x = Mathf.Clamp(position.x, configuredBounds.xMin + 1f, configuredBounds.xMax - 1f);
+                position.z = Mathf.Clamp(position.z, configuredBounds.yMin + 1f, configuredBounds.yMax - 1f);
+                position.y = 0f;
+                positions[index] = position;
+                facings[index] = HorizontalDirection(routeCenter - position, -right * side);
             }
         }
 
@@ -379,6 +450,17 @@ namespace AlmostDelivered.Gameplay.Payload
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private static Vector3 HorizontalDirection(Vector3 value, Vector3 fallback)
+        {
+            value = Vector3.ProjectOnPlane(value, Vector3.up);
+            if (!IsFinite(value.x) || !IsFinite(value.y) || !IsFinite(value.z) || value.sqrMagnitude <= .0001f)
+            {
+                value = Vector3.ProjectOnPlane(fallback, Vector3.up);
+            }
+
+            return value.sqrMagnitude <= .0001f ? Vector3.forward : value.normalized;
         }
     }
 }

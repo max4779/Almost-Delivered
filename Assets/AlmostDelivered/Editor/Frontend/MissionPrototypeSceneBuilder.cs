@@ -72,7 +72,9 @@ namespace AlmostDelivered.Editor.Frontend
                 5,
                 RouteCorridorWidth,
                 true,
-                6);
+                6,
+                4f,
+                8);
 
             BuildPayloadEscortRadius(payload.transform, mission);
             BuildPayloadActivationView(payload.transform, mission);

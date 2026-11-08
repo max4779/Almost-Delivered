@@ -210,6 +210,43 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void PreplacedSentriesUseDedicatedIdentityAndHoldGuardPosts()
+        {
+            var spawner = CreateSpawner(root.transform, 811, 18);
+            var positions = new[]
+            {
+                new Vector3(-8f, 0f, 12f),
+                new Vector3(-6f, 0f, 14f),
+                new Vector3(7f, 0f, 28f),
+                new Vector3(9f, 0f, 30f)
+            };
+            var facings = new[] { Vector3.right, Vector3.right, Vector3.left, Vector3.left };
+
+            var identifiers = spawner.SpawnPreplacedSentries(positions, facings);
+
+            Assert.That(identifiers, Has.Count.EqualTo(4));
+            Assert.That(identifiers.Distinct().Count(), Is.EqualTo(4));
+            Assert.That(spawner.LivingEnemies, Has.Count.EqualTo(4));
+            Assert.That(spawner.LivingEnemies.All(enemy => enemy.WaveId == PayloadWaveSpawner.PreplacedSentryWaveId), Is.True);
+            Assert.That(spawner.LivingEnemies.All(enemy => enemy.HasGuardPost), Is.True);
+            Assert.That(spawner.LivingEnemies.Select(enemy => enemy.transform.position), Is.EquivalentTo(positions));
+        }
+
+        [Test]
+        public void ActivationNoiseResponseArrivesAsDistinctThreeEnemyWaves()
+        {
+            var spawner = CreateSpawner(root.transform, 812, 18);
+            var bounds = new Rect(-28f, -50f, 56f, 100f);
+
+            Assert.That(spawner.SpawnActivationResponseWave(0, Vector3.zero, Vector3.forward, bounds, 4.5f), Is.True);
+            Assert.That(spawner.SpawnActivationResponseWave(1, Vector3.zero, Vector3.forward, bounds, 4.5f), Is.True);
+
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
+            Assert.That(spawner.LivingEnemies.Select(enemy => enemy.EnemyId).Distinct().Count(), Is.EqualTo(6));
+        }
+
+        [Test]
         public void CheckpointWaveCanJoinLivingTravelEnemies()
         {
             var spawner = CreateSpawner(root.transform, 909, 18);
