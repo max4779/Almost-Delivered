@@ -25,24 +25,25 @@ namespace AlmostDelivered.Tests.EditMode
         [Test] public void GeneratedRoleSilhouettes_HaveRequiredNamedPartsAndDistinctBounds() {
             LowPolyAssetFactory.CreateOrUpdateAll();
             foreach (var type in Types.Take(7)) { var p = LowPolyAssetFactory.LoadPrefab(type); foreach (var name in new[]{"Body", "Head", "Weapon"}) Assert.True(Has(p,name), type+" "+name); }
-            foreach (var pair in new[]{(VisualArchetype.Shield,"Shield"),(VisualArchetype.Ranged,"RangedWeapon"),(VisualArchetype.Charger,"Horns"),(VisualArchetype.Support,"Totem"),(VisualArchetype.Commander,"Cape"),(VisualArchetype.Commander,"Banner"),(VisualArchetype.Commander,"WarHorn"),(VisualArchetype.Payload,"Cart"),(VisualArchetype.Payload,"RuneCore"),(VisualArchetype.ObjectiveBeacon,"Beacon"),(VisualArchetype.ObjectiveBeacon,"RuneRing")}) Assert.True(Has(LowPolyAssetFactory.LoadPrefab(pair.Item1),pair.Item2), pair.ToString());
-            CollectionAssert.AreEquivalent(new[]{"WheelRearLeft", "WheelFrontLeft", "WheelRearRight", "WheelFrontRight"}, LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>().Where(t=>t.name.StartsWith("Wheel", StringComparison.Ordinal)).Select(t=>t.name));
+            foreach (var pair in new[]{(VisualArchetype.Shield,"Shield"),(VisualArchetype.Ranged,"RangedWeapon"),(VisualArchetype.Charger,"Horns"),(VisualArchetype.Support,"Totem"),(VisualArchetype.Commander,"Cape"),(VisualArchetype.Commander,"Banner"),(VisualArchetype.Commander,"WarHorn"),(VisualArchetype.Payload,"CargoHull"),(VisualArchetype.Payload,"EnergyCore"),(VisualArchetype.Payload,"HoverShadow"),(VisualArchetype.ObjectiveBeacon,"Beacon"),(VisualArchetype.ObjectiveBeacon,"RuneRing")}) Assert.True(Has(LowPolyAssetFactory.LoadPrefab(pair.Item1),pair.Item2), pair.ToString());
+            CollectionAssert.AreEquivalent(new[]{"ThrusterRearLeft", "ThrusterFrontLeft", "ThrusterRearRight", "ThrusterFrontRight"}, LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>().Where(t=>t.name.StartsWith("Thruster", StringComparison.Ordinal)).Select(t=>t.name));
+            Assert.That(LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>().Any(t=>t.name.StartsWith("Wheel", StringComparison.Ordinal) || t.name == "Cart"), Is.False);
             Assert.GreaterOrEqual(Size(VisualArchetype.Shield).x, Size(VisualArchetype.Ranged).x * 1.2f); foreach (var t in Types.Take(6)) Assert.Greater(Size(VisualArchetype.Commander).y, Size(t).y); Assert.Greater(Size(VisualArchetype.Charger).z, Size(VisualArchetype.Support).z); Assert.Greater(Size(VisualArchetype.Payload).magnitude, 0);
         }
         [Test] public void CreateOrUpdateAll_RepeatedRunPreservesGuidsAndChildCounts() {
             LowPolyAssetFactory.CreateOrUpdateAll(); var guids = Types.Select(t=>AssetDatabase.AssetPathToGUID(LowPolyAssetFactory.GetPrefabPath(t))).ToArray(); var counts = Types.Select(t=>LowPolyAssetFactory.LoadPrefab(t).GetComponentsInChildren<Transform>().Length).ToArray(); LowPolyAssetFactory.CreateOrUpdateAll(); CollectionAssert.AreEqual(guids, Types.Select(t=>AssetDatabase.AssetPathToGUID(LowPolyAssetFactory.GetPrefabPath(t))).ToArray()); CollectionAssert.AreEqual(counts, Types.Select(t=>LowPolyAssetFactory.LoadPrefab(t).GetComponentsInChildren<Transform>().Length).ToArray());
         }
-        [Test] public void CreateOrUpdateAll_RepeatedRunPreservesEachPayloadWheelLocalIds() {
+        [Test] public void CreateOrUpdateAll_RepeatedRunPreservesEachPayloadThrusterLocalIds() {
             LowPolyAssetFactory.CreateOrUpdateAll();
-            var before = PayloadWheelLocalIds();
+            var before = PayloadThrusterLocalIds();
             Assert.AreEqual(4, before.Count);
 
             LowPolyAssetFactory.CreateOrUpdateAll();
-            var after = PayloadWheelLocalIds();
+            var after = PayloadThrusterLocalIds();
 
             CollectionAssert.AreEquivalent(before.Keys, after.Keys);
-            foreach (var wheel in before)
-                CollectionAssert.AreEqual(wheel.Value, after[wheel.Key], "Wheel at " + wheel.Key + " lost its serialized object/component identities");
+            foreach (var thruster in before)
+                CollectionAssert.AreEqual(thruster.Value, after[thruster.Key], "Thruster at " + thruster.Key + " lost its serialized object/component identities");
         }
         [Test] public void InstantiateVisual_ReplacesExistingVisualOnlyAndPreservesRootComponents() {
             LowPolyAssetFactory.CreateOrUpdateAll(); var root = GameObject.CreatePrimitive(PrimitiveType.Cube); try { var collider = root.GetComponent<Collider>(); var renderer = root.GetComponent<Renderer>(); var other = new GameObject("Other"); other.transform.SetParent(root.transform); LowPolyAssetFactory.InstantiateVisual(root, VisualArchetype.Player); var visual = LowPolyAssetFactory.InstantiateVisual(root, VisualArchetype.Shield); Assert.AreEqual(1, root.transform.Cast<Transform>().Count(t=>t.name == "VisualRoot")); Assert.AreSame(collider,root.GetComponent<Collider>()); Assert.AreSame(renderer,root.GetComponent<Renderer>()); Assert.NotNull(root.transform.Find("Other")); Assert.AreEqual(VisualArchetype.Shield, visual.Archetype); } finally { UnityEngine.Object.DestroyImmediate(root); }
@@ -68,9 +69,9 @@ namespace AlmostDelivered.Tests.EditMode
             }
         }
         static bool Has(GameObject p,string n) => p.GetComponentsInChildren<Transform>().Any(t=>t.name==n);
-        static Dictionary<Vector3, long[]> PayloadWheelLocalIds() {
+        static Dictionary<Vector3, long[]> PayloadThrusterLocalIds() {
             return LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>()
-                .Where(t => t.name.StartsWith("Wheel", StringComparison.Ordinal))
+                .Where(t => t.name.StartsWith("Thruster", StringComparison.Ordinal))
                 .ToDictionary(t => t.localPosition, t => new UnityEngine.Object[]{t.gameObject, t, t.GetComponent<MeshFilter>(), t.GetComponent<MeshRenderer>()}
                     .Select(part => {
                         Assert.True(AssetDatabase.TryGetGUIDAndLocalFileIdentifier(part, out string guid, out long localId));

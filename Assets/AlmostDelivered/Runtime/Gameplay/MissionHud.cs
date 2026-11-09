@@ -20,6 +20,7 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadEscortText;
         [SerializeField] private Text payloadElapsedText;
         [SerializeField] private Text payloadActivationCountdownText;
+        [SerializeField] private Text cargoHealthText;
 
         public int RemainingBosses => bosses == null ? 0 : bosses.Count(boss => boss != null && !boss.IsDefeated);
         public bool HasPayloadViews => payloadMission != null && payloadPhaseText != null && payloadProgressText != null &&
@@ -63,6 +64,12 @@ namespace AlmostDelivered.Gameplay
             Refresh();
         }
 
+        public void BindCargoHealth(Text healthText)
+        {
+            cargoHealthText = healthText;
+            Refresh();
+        }
+
         private void Update()
         {
             Refresh();
@@ -71,7 +78,7 @@ namespace AlmostDelivered.Gameplay
         public void Refresh()
         {
             if (controlsText != null)
-                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 발사  |  E 화물 기동  |  ESC 귀환";
+                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 발사  |  E 화물 기동/수리  |  ESC 귀환";
             if (playerHealthText != null && playerHealth != null)
                 playerHealthText.text = $"PLAYER  {Mathf.CeilToInt(playerHealth.CurrentHealth)} / {Mathf.CeilToInt(playerHealth.MaxHealth)}";
             if (bossCountText != null)
@@ -98,7 +105,9 @@ namespace AlmostDelivered.Gameplay
             if (payloadCheckpointText != null)
                 payloadCheckpointText.text = $"CHECKPOINT  {Mathf.Clamp(state.NextCheckpointIndex + 1, 1, 3)} / 3";
             if (payloadEscortText != null)
-                payloadEscortText.text = state.Phase == PayloadMissionPhase.Recovering ||
+                payloadEscortText.text = payloadMission.CargoHealth != null && payloadMission.CargoHealth.IsBroken
+                    ? "ESCORT  CARGO BROKEN"
+                    : state.Phase == PayloadMissionPhase.Recovering ||
                                          state.Phase == PayloadMissionPhase.Activating
                     ? $"OBJECTIVE  {RecoveryLabel(state)}"
                     : $"ESCORT  {EscortLabel(state)}";
@@ -106,6 +115,19 @@ namespace AlmostDelivered.Gameplay
             {
                 var totalSeconds = Mathf.Max(0, Mathf.FloorToInt(state.ElapsedTime));
                 payloadElapsedText.text = $"TIME  {totalSeconds / 60:00}:{totalSeconds % 60:00}";
+            }
+
+            if (cargoHealthText != null && payloadMission.CargoHealth != null)
+            {
+                var cargo = payloadMission.CargoHealth;
+                cargoHealthText.text = cargo.IsBroken
+                    ? $"CARGO BROKEN  {Mathf.CeilToInt(cargo.CurrentHealth)} / {Mathf.CeilToInt(cargo.MaximumHealth)}  ·  HOLD E TO REPAIR"
+                    : $"CARGO HP  {Mathf.CeilToInt(cargo.CurrentHealth)} / {Mathf.CeilToInt(cargo.MaximumHealth)}";
+                cargoHealthText.color = cargo.IsBroken
+                    ? new Color(1f, .22f, .18f, 1f)
+                    : cargo.CurrentHealth <= cargo.MaximumHealth * .3f
+                        ? new Color(1f, .65f, .12f, 1f)
+                        : Color.white;
             }
 
             RefreshActivationCountdown(state);

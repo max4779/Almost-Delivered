@@ -55,6 +55,8 @@ namespace AlmostDelivered.Tests.PlayMode
             controller.Tick(1f);
             Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(10f));
             Assert.That(payload.transform.position, Is.EqualTo(controller.RoutePlan.EvaluateDistance(10f)));
+            Assert.That(Vector3.Angle(payload.transform.forward, controller.RoutePlan.EvaluateDirection(10f)),
+                Is.LessThan(.1f));
 
             player.transform.position = payload.transform.position;
             var enemy = Actor("Enemy", CombatTeamId.Enemy);
@@ -67,6 +69,30 @@ namespace AlmostDelivered.Tests.PlayMode
             enemy.GetComponent<ActorHealth>().ApplyDamage(1000f);
             controller.Tick(1f);
             Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(20f));
+        }
+
+        [Test]
+        public void BrokenCargoStopsEscortAndHoldingERepairsIt()
+        {
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = NewController();
+            controller.Configure(true, 12, Bounds(), player.transform, payload.transform, null, null, 10f, 0f, 4.5f);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            var stoppedAt = controller.Snapshot.RouteDistance;
+
+            integrity.ApplyDamage(integrity.MaximumHealth);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(integrity.IsBroken, Is.True);
+            Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(stoppedAt));
+
+            controller.Tick(2f, true);
+            Assert.That(integrity.IsBroken, Is.False);
+            Assert.That(integrity.CurrentHealth, Is.EqualTo(80f).Within(.001f));
+            Assert.That(controller.Snapshot.RouteDistance, Is.GreaterThan(stoppedAt));
         }
 
         [Test]
@@ -198,6 +224,21 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(controller.ApplySnapshot(applied), Is.True);
             Assert.That(controller.Snapshot, Is.EqualTo(applied));
             Assert.That(payload.transform.position, Is.EqualTo(controller.RoutePlan.EvaluateDistance(20f)));
+        }
+
+        [Test]
+        public void ReplicaAppliesAuthoritativeCargoIntegrity()
+        {
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = NewController();
+            controller.Configure(false, 91, Bounds(), player.transform, payload.transform, null, null, 10f, 0f, 4.5f);
+            var applied = new PayloadMissionSnapshot(
+                PayloadMissionPhase.Escorting, 12f, 20f, 20f / controller.RoutePlan.TotalLength,
+                0, -1, 0, 1, 0, false, false, 1f, false, 0f, 200f, true);
+
+            Assert.That(controller.ApplySnapshot(applied), Is.True);
+            Assert.That(integrity.CurrentHealth, Is.Zero);
+            Assert.That(integrity.IsBroken, Is.True);
         }
 
         [Test]

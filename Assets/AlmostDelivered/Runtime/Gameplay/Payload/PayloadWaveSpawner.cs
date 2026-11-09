@@ -20,6 +20,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private GameObject shieldVisualPrefab;
         [SerializeField] private GameObject commanderVisualPrefab;
         [SerializeField] private GameObject chargerVisualPrefab;
+        [SerializeField] private GameObject cargoSaboteurVisualPrefab;
         [SerializeField] private Transform[] spawnAnchors = Array.Empty<Transform>();
         [SerializeField] private int missionSeed;
         [SerializeField, Min(1)] private int activeCap = 18;
@@ -67,7 +68,8 @@ namespace AlmostDelivered.Gameplay.Payload
             GameObject chargerVisual,
             Transform[] anchors,
             int seed,
-            int maximumActiveEnemies)
+            int maximumActiveEnemies,
+            GameObject saboteurVisual = null)
         {
             playerTarget = target;
             projectileTemplate = projectile;
@@ -76,6 +78,7 @@ namespace AlmostDelivered.Gameplay.Payload
             shieldVisualPrefab = shieldVisual;
             commanderVisualPrefab = commanderVisual;
             chargerVisualPrefab = chargerVisual;
+            cargoSaboteurVisualPrefab = saboteurVisual;
             spawnAnchors = anchors ?? Array.Empty<Transform>();
             missionSeed = seed;
             activeCap = Mathf.Max(1, maximumActiveEnemies);
@@ -228,10 +231,13 @@ namespace AlmostDelivered.Gameplay.Payload
                 }
 
                 var enemyId = unchecked(-((encounter.SequenceId + 1) * 1000 + index + 1));
+                var standardArchetype = SelectStandardArchetype(random);
                 travelGroup.Add(new PendingEnemy(
                     -(encounter.SequenceId + 1),
                     enemyId,
-                    MissionMobDefinition.For(SelectArchetype(random, false, index)),
+                    MissionMobDefinition.For(index == 0 && encounter.SequenceId % 3 == 0
+                        ? MissionMobArchetype.CargoSaboteur
+                        : standardArchetype),
                     candidate,
                     false,
                     default,
@@ -305,7 +311,9 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private MissionMobController CreateEnemy(PendingEnemy pendingEnemy)
         {
-            var actor = new GameObject($"Wave {pendingEnemy.WaveId} Enemy {pendingEnemy.EnemyId}");
+            var actor = new GameObject(pendingEnemy.Definition.Archetype == MissionMobArchetype.CargoSaboteur
+                ? $"Wave {pendingEnemy.WaveId} Cargo Saboteur {pendingEnemy.EnemyId}"
+                : $"Wave {pendingEnemy.WaveId} Enemy {pendingEnemy.EnemyId}");
             actor.transform.SetParent(transform, false);
             actor.transform.position = pendingEnemy.Position;
             actor.transform.forward = HorizontalDirection(pendingEnemy.FacingDirection, Vector3.forward);
@@ -406,6 +414,8 @@ namespace AlmostDelivered.Gameplay.Payload
                     return commanderVisualPrefab;
                 case MissionMobArchetype.ChargerBoss:
                     return chargerVisualPrefab;
+                case MissionMobArchetype.CargoSaboteur:
+                    return cargoSaboteurVisualPrefab != null ? cargoSaboteurVisualPrefab : meleeVisualPrefab;
                 default:
                     return meleeVisualPrefab;
             }
@@ -423,8 +433,15 @@ namespace AlmostDelivered.Gameplay.Payload
                 return MissionMobArchetype.ChargerBoss;
             }
 
-            return (MissionMobArchetype)random.Next(0, 3);
+            var standardArchetype = SelectStandardArchetype(random);
+            if (index == (finalWave ? 2 : 0))
+                return MissionMobArchetype.CargoSaboteur;
+
+            return standardArchetype;
         }
+
+        private static MissionMobArchetype SelectStandardArchetype(System.Random random) =>
+            (MissionMobArchetype)random.Next(0, 3);
 
         private static MissionMobArchetype SelectRecoveryArchetype(System.Random random, int index)
         {

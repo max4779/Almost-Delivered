@@ -84,6 +84,56 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void CargoAssaultMobDamagesCargoAtContactRange()
+        {
+            var cargo = new GameObject("Cargo", typeof(CargoIntegrity));
+            try
+            {
+                cargo.transform.position = Vector3.forward * 4f;
+                target.transform.position = Vector3.forward * 20f;
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+                controller.ConfigureCargoAssault(cargo.transform);
+                controller.Tick(0f, .5f);
+                controller.Tick(.5f, .1f);
+                Assert.That(cargo.GetComponent<CargoIntegrity>().CurrentHealth, Is.LessThan(200f));
+                Assert.That(controller.IsPursuingPlayer, Is.False);
+            }
+            finally
+            {
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
+        public void CargoSaboteurIgnoresPlayerDamageAndNoiseToAttackCargo()
+        {
+            var cargo = new GameObject("Cargo", typeof(CargoIntegrity));
+            try
+            {
+                cargo.transform.position = Vector3.forward * 4f;
+                target.transform.position = Vector3.forward;
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.CargoSaboteur), target.transform, null);
+                controller.ConfigureCargoAssault(cargo.transform);
+
+                mob.GetComponent<ActorHealth>().ApplyDamage(5f);
+                CombatNoiseSystem.Emit(Vector3.zero, 5f, CombatTeamId.Player);
+                controller.Tick(0f, .5f);
+                controller.Tick(.5f, .1f);
+
+                Assert.That(controller.IsPursuingPlayer, Is.False);
+                Assert.That(controller.IsAlerted, Is.False);
+                Assert.That(cargo.GetComponent<CargoIntegrity>().CurrentHealth, Is.LessThan(200f));
+                Assert.That(target.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(100f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
         public void ShootingCargoAssaultMobAlertsNearbyAssaultMobsWithoutExclamations()
         {
             var cargo = new GameObject("Cargo");

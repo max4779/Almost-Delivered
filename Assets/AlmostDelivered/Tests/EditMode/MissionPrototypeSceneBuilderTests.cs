@@ -11,6 +11,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace AlmostDelivered.Tests.EditMode
 {
@@ -50,6 +51,14 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);
             Assert.That(Object.FindObjectsOfType<PlayerDamageFlashView>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PlayerHealthBarView>(true), Has.Length.EqualTo(1));
+            Assert.That(payload.GetComponent<CargoIntegrity>(), Is.Not.Null);
+            Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).GetComponent<RectTransform>().anchoredPosition.x,
+                Is.EqualTo(64f));
+            Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).GetComponent<RectMask2D>(), Is.Not.Null);
+            Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).Fill.rectTransform.offsetMin.x,
+                Is.EqualTo(8f).Within(.001f));
+            Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).Fill.rectTransform.offsetMax.x,
+                Is.EqualTo(-8f).Within(.001f));
             Assert.That(Object.FindObjectOfType<MissionHud>(true).ActivationCountdownText, Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<PrototypeBossController>(true), Is.Empty);
             Assert.That(Object.FindObjectsOfType<CombatProjectile>(true).Count(item => item.name == "Projectile Template"), Is.EqualTo(1));
@@ -117,7 +126,7 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(relays, Has.Length.EqualTo(4));
             Assert.That(relays.Count(relay => !relay.IsFinalDestination), Is.EqualTo(3));
             Assert.That(relays.Count(relay => relay.IsFinalDestination), Is.EqualTo(1));
-            Assert.That(Object.FindObjectsOfType<PayloadNavigationIndicator>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PayloadNavigationIndicator>(true), Is.Empty);
             Assert.That(relays.Count(relay => relay.transform.Find("Supply Cache") != null), Is.EqualTo(3));
             Assert.That(relays.Single(relay => relay.IsFinalDestination).name, Is.EqualTo("Final Destination Relay"));
             Assert.That(payload.transform.Cast<Transform>().Count(child => child.name.StartsWith("Collected Cargo ")), Is.EqualTo(3));

@@ -11,7 +11,8 @@ namespace AlmostDelivered.Gameplay.Payload
         Ranged,
         Shield,
         CommanderBoss,
-        ChargerBoss
+        ChargerBoss,
+        CargoSaboteur
     }
 
     public readonly struct MissionMobDefinition
@@ -54,6 +55,8 @@ namespace AlmostDelivered.Gameplay.Payload
                     return new MissionMobDefinition(archetype, 220f, 2.5f, 1.5f, 12f, 1f, 7f);
                 case MissionMobArchetype.ChargerBoss:
                     return new MissionMobDefinition(archetype, 300f, 3.8f, 1.7f, 16f, 1.1f, 0f);
+                case MissionMobArchetype.CargoSaboteur:
+                    return new MissionMobDefinition(archetype, 75f, 3.8f, 2.3f, 22f, 1.4f, 0f);
                 default:
                     return new MissionMobDefinition(MissionMobArchetype.Melee, 60f, 4f, 1.4f, 10f, 1f, 0f);
             }
@@ -111,7 +114,8 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool HasGuardPost => guardPostEnabled;
         public bool IsGuardPostEngaged => guardPostEngaged;
         public bool IsAlerted => alertTimeRemaining > 0f && alertIndicator != null && alertIndicator.activeSelf;
-        public bool IsPursuingPlayer => !assaultingCargo || guardPostEngaged;
+        public bool IsCargoSaboteur => Definition.Archetype == MissionMobArchetype.CargoSaboteur;
+        public bool IsPursuingPlayer => !IsCargoSaboteur && (!assaultingCargo || guardPostEngaged);
         public GameObject AlertIndicator => alertIndicator;
 
         public event Action<MissionMobController> Removed;
@@ -237,23 +241,31 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (IsDefeated || target == null)
+            if (IsDefeated || (target == null && !IsCargoSaboteur))
             {
                 return;
             }
 
-            var targetHealth = target.GetComponentInParent<ActorHealth>();
-            if (targetHealth == null || targetHealth.IsDead)
+            var targetHealth = target != null ? target.GetComponentInParent<ActorHealth>() : null;
+            if (!IsCargoSaboteur && (targetHealth == null || targetHealth.IsDead))
             {
                 Move(Vector3.zero, deltaTime);
                 return;
             }
 
-            var toPlayer = Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up);
-            if (assaultingCargo && !guardPostEngaged && CanDetectTarget(toPlayer))
+            var toPlayer = target != null
+                ? Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up)
+                : Vector3.zero;
+            if (assaultingCargo && !IsCargoSaboteur && !guardPostEngaged && CanDetectTarget(toPlayer))
                 ReceiveAlert(false);
 
-            var pursuingPlayer = IsPursuingPlayer || cargoTarget == null;
+            if (IsCargoSaboteur && cargoTarget == null)
+            {
+                Move(Vector3.zero, deltaTime);
+                return;
+            }
+
+            var pursuingPlayer = IsPursuingPlayer || (!IsCargoSaboteur && cargoTarget == null);
             var destination = pursuingPlayer ? target : cargoTarget;
             var toTarget = Vector3.ProjectOnPlane(destination.position - transform.position, Vector3.up);
             if (guardPostEnabled && !guardPostEngaged)
@@ -288,11 +300,6 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var distance = toTarget.magnitude;
             var direction = toTarget / distance;
-            if (!pursuingPlayer && distance <= 2.4f)
-            {
-                Move(Vector3.zero, deltaTime);
-                return;
-            }
             Collider obstacle = null;
             var blocked = characterController != null && FindBlockingObstacle(direction, distance, out obstacle);
             if (blocked && detourObstacle != obstacle && detourObstacle == null)
@@ -300,7 +307,7 @@ namespace AlmostDelivered.Gameplay.Payload
             var navigationDirection = NavigationDirection(direction);
             RotateTowards(navigationDirection, deltaTime);
 
-            if (IsRanged(Definition.Archetype))
+            if (IsRanged(Definition.Archetype) && pursuingPlayer)
             {
                 if (distance > Definition.StandOffRange || blocked || detourObstacle != null)
                 {
@@ -319,7 +326,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (distance > Definition.ContactRange || blocked || detourObstacle != null)
+            var contactRange = pursuingPlayer ? Definition.ContactRange : 2.3f;
+            if (distance > contactRange || (pursuingPlayer && blocked) || detourObstacle != null)
             {
                 Move(navigationDirection, deltaTime);
                 return;
@@ -328,6 +336,13 @@ namespace AlmostDelivered.Gameplay.Payload
             if (pursuingPlayer && now >= nextContactTime)
             {
                 targetHealth.ApplyDamage(Definition.ContactDamage);
+                nextContactTime = now + Definition.ContactCooldown;
+            }
+            else if (!pursuingPlayer && now >= nextContactTime)
+            {
+                var cargo = cargoTarget.GetComponent<CargoIntegrity>();
+                if (cargo != null)
+                    cargo.ApplyDamage(Definition.ContactDamage);
                 nextContactTime = now + Definition.ContactCooldown;
             }
 
@@ -347,6 +362,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 var candidate = hit.collider;
                 if (candidate == null || candidate.transform.IsChildOf(transform) ||
                     candidate.transform == target || candidate.transform.IsChildOf(target) ||
+                    (!IsPursuingPlayer && cargoTarget != null &&
+                     (candidate.transform == cargoTarget || candidate.transform.IsChildOf(cargoTarget))) ||
                     candidate.GetComponentInParent<ActorHealth>() != null || hit.distance >= nearest)
                     continue;
 
@@ -470,7 +487,7 @@ namespace AlmostDelivered.Gameplay.Payload
             lastKnownHealth = current;
             if (tookDamage)
             {
-                if (assaultingCargo)
+                if (assaultingCargo && !IsCargoSaboteur)
                     ReceiveAlert(false);
                 AlertNearbyMobs();
             }
@@ -478,7 +495,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void HandleNoise(CombatNoise noise)
         {
-            if (!isActiveAndEnabled || IsDefeated)
+            if (!isActiveAndEnabled || IsDefeated || IsCargoSaboteur)
             {
                 return;
             }
@@ -547,6 +564,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void ReceiveAlert(bool showIndicator = true)
         {
+            if (IsCargoSaboteur)
+                return;
             guardPostEngaged = true;
             ClearDetour();
             if (assaultingCargo)

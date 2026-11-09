@@ -39,11 +39,14 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(view.Fill.color.r, Is.GreaterThan(view.Fill.color.b));
             Assert.That(view.Fill.type, Is.EqualTo(Image.Type.Simple));
             Assert.That(view.Fill.rectTransform.localScale.x, Is.EqualTo(1f));
+            Assert.That(view.Fill.rectTransform.offsetMin.x, Is.EqualTo(8f).Within(.001f));
+            Assert.That(view.Fill.rectTransform.offsetMax.x, Is.EqualTo(-8f).Within(.001f));
             Assert.That(view.Label.text, Does.Contain("100 / 100"));
 
             health.ApplyDamage(50f);
             Assert.That(view.NormalizedHealth, Is.EqualTo(.5f));
             Assert.That(view.Fill.rectTransform.localScale.x, Is.EqualTo(.5f));
+            Assert.That(view.Fill.rectTransform.offsetMin.x, Is.EqualTo(8f).Within(.001f));
             Assert.That(view.Fill.color.r, Is.GreaterThan(.7f));
             Assert.That(view.Label.text, Does.Contain("50 / 100"));
 

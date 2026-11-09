@@ -112,7 +112,12 @@ namespace AlmostDelivered.Gameplay
             }
 
             fill.type = Image.Type.Simple;
-            fill.rectTransform.pivot = new Vector2(0f, .5f);
+            var rect = fill.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0f, .5f);
+            rect.offsetMin = new Vector2(8f, 8f);
+            rect.offsetMax = new Vector2(-8f, -8f);
             fill.raycastTarget = false;
         }
 

@@ -56,6 +56,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(startedIds, Has.Count.EqualTo(expectedCount));
             Assert.That(startedIds.Distinct().Count(), Is.EqualTo(expectedCount));
             Assert.That(spawner.LivingEnemies.Select(enemy => enemy.EnemyId), Is.EquivalentTo(startedIds));
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.IsCargoSaboteur), Is.EqualTo(1));
         }
 
         [Test]

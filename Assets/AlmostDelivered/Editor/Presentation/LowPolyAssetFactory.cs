@@ -28,7 +28,7 @@ namespace AlmostDelivered.Presentation.Editor
 
             AssetDatabase.StartAssetEditing();
             try {
-                var palette = new[] { Mat("Player", lit, new Color(.05f,.55f,.62f)), Mat("Dummy",lit,Color.gray), Mat("Shield",lit,new Color(.22f,.48f,.23f)), Mat("Ranged",lit,new Color(.95f,.43f,.12f)), Mat("Charger",lit,new Color(.68f,.12f,.1f)), Mat("Support",lit,new Color(.56f,.78f,.18f)), Mat("Commander",lit,new Color(.38f,.2f,.52f)), Mat("Payload",lit,new Color(.8f,.56f,.13f)), Mat("Beacon",lit,new Color(.04f,.52f,.49f)) };
+                var palette = new[] { Mat("Player", lit, new Color(.05f,.55f,.62f)), Mat("Dummy",lit,Color.gray), Mat("Shield",lit,new Color(.22f,.48f,.23f)), Mat("Ranged",lit,new Color(.95f,.43f,.12f)), Mat("Charger",lit,new Color(.68f,.12f,.1f)), Mat("Support",lit,new Color(.56f,.78f,.18f)), Mat("Commander",lit,new Color(.38f,.2f,.52f)), Mat("Payload",lit,new Color(.18f,.28f,.38f)), Mat("Beacon",lit,new Color(.04f,.52f,.49f)) };
                 var rust = Mat("EnemyRust",lit,new Color(.45f,.23f,.14f));
                 var gold = Mat("Gold",lit,new Color(.94f,.69f,.2f));
                 var glow = Mat("Rune",unlit,new Color(.15f,.9f,.8f));
@@ -53,12 +53,16 @@ namespace AlmostDelivered.Presentation.Editor
                 var body = Child(root.transform,"BodyPivot");
                 Transform left = null, right = null;
                 if (type == VisualArchetype.Payload) {
-                    Part(body,"Cart",PrimitiveType.Cube,new Vector3(0,.55f,0),new Vector3(1.8f,.5f,2.3f),color);
-                    Part(body,"WheelRearLeft",PrimitiveType.Cylinder,new Vector3(-.95f,.35f,-.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
-                    Part(body,"WheelFrontLeft",PrimitiveType.Cylinder,new Vector3(-.95f,.35f,.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
-                    Part(body,"WheelRearRight",PrimitiveType.Cylinder,new Vector3(.95f,.35f,-.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
-                    Part(body,"WheelFrontRight",PrimitiveType.Cylinder,new Vector3(.95f,.35f,.75f),new Vector3(.55f,.13f,.55f),rust,Quaternion.Euler(0,0,90));
-                    Part(body,"RuneCore",PrimitiveType.Sphere,new Vector3(0,1.05f,0),Vector3.one*.45f,glow);
+                    Part(root.transform,"HoverShadow",PrimitiveType.Cylinder,new Vector3(0,.035f,0),new Vector3(1.35f,.015f,1.65f),rust);
+                    Part(body,"CargoHull",PrimitiveType.Cube,new Vector3(0,1.1f,0),new Vector3(1.9f,.55f,2.4f),color);
+                    Part(body,"CargoCanister",PrimitiveType.Cube,new Vector3(0,1.55f,-.1f),new Vector3(1.5f,.42f,1.7f),color);
+                    Part(body,"ForwardSensor",PrimitiveType.Cube,new Vector3(0,1.28f,1.25f),new Vector3(.65f,.22f,.16f),glow);
+                    Part(body,"EnergyCore",PrimitiveType.Sphere,new Vector3(0,1.83f,-.1f),new Vector3(.58f,.16f,.58f),glow);
+                    foreach (var side in new[]{-1f,1f}) foreach (var end in new[]{-1f,1f}) {
+                        var suffix=(end<0f?"Rear":"Front")+(side<0f?"Left":"Right");
+                        Part(body,"Thruster"+suffix,PrimitiveType.Cylinder,new Vector3(side*.78f,.76f,end*.88f),new Vector3(.43f,.19f,.43f),color);
+                        Part(body,"Glow"+suffix,PrimitiveType.Cylinder,new Vector3(side*.78f,.54f,end*.88f),new Vector3(.42f,.035f,.42f),glow);
+                    }
                 } else if (type == VisualArchetype.ObjectiveBeacon) {
                     Part(body,"Beacon",PrimitiveType.Cylinder,new Vector3(0,.8f,0),new Vector3(.55f,.8f,.55f),color);
                     Part(body,"RuneRing",PrimitiveType.Cylinder,new Vector3(0,.1f,0),new Vector3(1.5f,.06f,1.5f),glow);
@@ -83,7 +87,7 @@ namespace AlmostDelivered.Presentation.Editor
                             Part(body,"WarHorn",PrimitiveType.Cylinder,new Vector3(-.65f,1.4f,.2f),new Vector3(.14f,.35f,.14f),gold,Quaternion.Euler(90,0,0)); break;
                     }
                 }
-                var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right);
+                var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right,type == VisualArchetype.Payload);
                 var visual = root.AddComponent<LowPolyVisual>(); visual.Configure(type,root.transform,root.GetComponentsInChildren<Renderer>(),left == null ? new[]{body} : new[]{body,left,right});
                 if (!visual.IsGameplayFree(out var reason)) throw new InvalidOperationException(reason);
                 PrefabUtility.SaveAsPrefabAsset(root,GetPrefabPath(type));

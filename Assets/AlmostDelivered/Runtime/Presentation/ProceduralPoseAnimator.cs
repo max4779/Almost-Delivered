@@ -13,12 +13,13 @@ namespace AlmostDelivered.Presentation
         [SerializeField] private NeutralPose leftArm;
         [SerializeField] private NeutralPose rightArm;
         [SerializeField] private Transform motionSource;
+        [SerializeField] private bool hovering;
         private Vector3 previousSourcePosition;
         private float movementPhase;
         private float attackRemaining;
         private float hitRemaining;
 
-        public void Configure(Transform body, Transform leftArm, Transform rightArm)
+        public void Configure(Transform body, Transform leftArm, Transform rightArm, bool hover = false)
         {
             if (body == null) throw new ArgumentNullException(nameof(body));
             ValidatePivot(body);
@@ -28,6 +29,7 @@ namespace AlmostDelivered.Presentation
             this.body = new NeutralPose(body);
             this.leftArm = new NeutralPose(leftArm);
             this.rightArm = new NeutralPose(rightArm);
+            hovering = hover;
             ResetMotion();
         }
 
@@ -71,7 +73,7 @@ namespace AlmostDelivered.Presentation
             var hit = Mathf.Sin(Mathf.PI * hitRemaining / HitDuration);
             var blend = 1f - Mathf.Exp(-IdleDamping * delta);
 
-            body.Apply(new Vector3(0f, Mathf.Abs(swing) * .025f, -hit * .035f),
+            body.Apply(new Vector3(0f, hovering ? Mathf.Sin(Time.time * 2f) * .1f : Mathf.Abs(swing) * .025f, -hit * .035f),
                 new Vector3(-hit * 14f, 0f, 0f), blend);
             leftArm.Apply(Vector3.zero, new Vector3(swing * 25f - attack * 15f, 0f, 0f), blend);
             rightArm.Apply(Vector3.zero, new Vector3(-swing * 25f - attack * 75f, 0f, 0f), blend);

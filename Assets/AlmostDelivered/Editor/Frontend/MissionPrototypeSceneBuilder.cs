@@ -156,8 +156,9 @@ namespace AlmostDelivered.Editor.Frontend
             payload.transform.SetParent(parent, false);
             payload.transform.position = position;
             var collider = payload.AddComponent<BoxCollider>();
-            collider.center = new Vector3(0f, .65f, 0f);
-            collider.size = new Vector3(2.2f, 1.4f, 2.7f);
+            collider.center = new Vector3(0f, 1.1f, 0f);
+            collider.size = new Vector3(2.2f, 1.8f, 2.7f);
+            payload.AddComponent<CargoIntegrity>();
             LowPolyAssetFactory.InstantiateVisual(payload, VisualArchetype.Payload);
             return payload;
         }
@@ -187,10 +188,9 @@ namespace AlmostDelivered.Editor.Frontend
             PayloadRoutePlan route)
         {
             var cargoProgress = BuildCargoProgress(payload);
-            var relayTargets = new List<Transform>(4);
             for (var index = 0; index < 3; index++)
             {
-                var relay = BuildRelay(
+                BuildRelay(
                     parent,
                     $"Supply Relay {index + 1}",
                     route.EvaluateDistance(route.CheckpointDistances[index]),
@@ -198,10 +198,9 @@ namespace AlmostDelivered.Editor.Frontend
                     false,
                     mission,
                     cargoProgress[index]);
-                relayTargets.Add(relay.transform);
             }
 
-            var destination = BuildRelay(
+            BuildRelay(
                 parent,
                 "Final Destination Relay",
                 route.Destination,
@@ -209,28 +208,6 @@ namespace AlmostDelivered.Editor.Frontend
                 true,
                 mission,
                 null);
-            relayTargets.Add(destination.transform);
-
-            var navigator = new GameObject("Payload Relay Navigator");
-            navigator.transform.SetParent(payload, false);
-            navigator.transform.localPosition = new Vector3(0f, 2.7f, 0f);
-            var antenna = Primitive(
-                PrimitiveType.Cube,
-                "Antenna",
-                navigator.transform,
-                new Vector3(0f, 0f, .72f),
-                new Vector3(.18f, .12f, 1.4f),
-                Material("Amber"));
-            antenna.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
-            var antennaTip = Primitive(
-                PrimitiveType.Cube,
-                "Antenna Tip",
-                navigator.transform,
-                new Vector3(0f, 0f, 1.55f),
-                new Vector3(.42f, .18f, .6f),
-                Material("Amber"));
-            antennaTip.transform.localRotation = Quaternion.Euler(0f, 45f, 0f);
-            navigator.AddComponent<PayloadNavigationIndicator>().Configure(mission, relayTargets);
         }
 
         private static GameObject BuildRelay(
@@ -392,7 +369,8 @@ namespace AlmostDelivered.Editor.Frontend
                 LowPolyAssetFactory.LoadPrefab(VisualArchetype.Charger),
                 anchors,
                 MissionSeed,
-                18);
+                18,
+                LowPolyAssetFactory.LoadPrefab(VisualArchetype.Support));
             return waves;
         }
 
@@ -439,6 +417,7 @@ namespace AlmostDelivered.Editor.Frontend
             var checkpoint = HudText("Checkpoint", canvasObject.transform, new Vector2(24f, -190f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -234f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -278f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
+            var cargoHealth = HudText("Cargo Health", canvasObject.transform, new Vector2(24f, -322f), new Vector2(760f, 42f), 24, TextAnchor.UpperLeft);
             var activationCountdown = HudText(
                 "Activation Countdown",
                 canvasObject.transform,
@@ -465,6 +444,7 @@ namespace AlmostDelivered.Editor.Frontend
             hud.Configure(health, Array.Empty<PrototypeBossController>());
             hud.ConfigurePayload(mission, phase, progress, checkpoint, escort, elapsed);
             hud.BindActivationCountdown(activationCountdown);
+            hud.BindCargoHealth(cargoHealth);
             BuildPlayerHealthBar(canvasObject.transform, health);
 
             var damageFlashObject = new GameObject(
@@ -495,17 +475,19 @@ namespace AlmostDelivered.Editor.Frontend
             frameObject.transform.SetParent(canvas, false);
             var frameRect = frameObject.GetComponent<RectTransform>();
             frameRect.anchorMin = frameRect.anchorMax = frameRect.pivot = new Vector2(.5f, 0f);
-            frameRect.anchoredPosition = new Vector2(0f, 38f);
+            frameRect.anchoredPosition = new Vector2(64f, 38f);
             frameRect.sizeDelta = new Vector2(620f, 48f);
             frameObject.GetComponent<Image>().color = new Color(.015f, .025f, .04f, .94f);
+            frameObject.AddComponent<RectMask2D>();
 
             var fillObject = new GameObject("Health Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             fillObject.transform.SetParent(frameObject.transform, false);
             var fillRect = fillObject.GetComponent<RectTransform>();
             fillRect.anchorMin = Vector2.zero;
             fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = new Vector2(6f, 6f);
-            fillRect.offsetMax = new Vector2(-6f, -6f);
+            fillRect.pivot = new Vector2(0f, .5f);
+            fillRect.offsetMin = new Vector2(8f, 8f);
+            fillRect.offsetMax = new Vector2(-8f, -8f);
 
             var label = HudText(
                 "Health Value",

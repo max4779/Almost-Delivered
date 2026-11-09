@@ -88,5 +88,18 @@ namespace AlmostDelivered.Gameplay.Payload
 
             return Destination;
         }
+
+        public Vector3 EvaluateDirection(float distance, float sampleRadius = 1.5f)
+        {
+            if (points.Count < 2 || TotalLength <= Mathf.Epsilon)
+                return Vector3.forward;
+
+            var radius = Mathf.Max(.01f, sampleRadius);
+            var center = float.IsNaN(distance) ? 0f : Mathf.Clamp(distance, 0f, TotalLength);
+            var before = EvaluateDistance(Mathf.Max(0f, center - radius));
+            var after = EvaluateDistance(Mathf.Min(TotalLength, center + radius));
+            var direction = Vector3.ProjectOnPlane(after - before, Vector3.up);
+            return direction.sqrMagnitude > .0001f ? direction.normalized : Vector3.forward;
+        }
     }
 }

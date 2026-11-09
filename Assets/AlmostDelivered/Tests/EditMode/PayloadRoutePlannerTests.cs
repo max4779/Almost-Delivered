@@ -88,6 +88,18 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void DirectionSamplingFollowsEachRouteSegment()
+        {
+            var route = PayloadRoutePlanner.Generate(303, MissionBounds, 5, 3f);
+            for (var index = 1; index < route.Points.Count; index++)
+            {
+                var midpoint = (route.CumulativeDistances[index - 1] + route.CumulativeDistances[index]) * .5f;
+                var expected = (route.Points[index] - route.Points[index - 1]).normalized;
+                Assert.That(Vector3.Angle(route.EvaluateDirection(midpoint), expected), Is.LessThan(1f));
+            }
+        }
+
+        [Test]
         public void CorridorExclusionsContainBothEndsOfEverySegment()
         {
             const float corridorWidth = 4f;

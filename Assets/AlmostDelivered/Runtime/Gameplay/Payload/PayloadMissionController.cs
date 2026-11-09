@@ -15,6 +15,8 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private Rect configuredBounds;
         [SerializeField] private Transform playerTransform;
         [SerializeField] private Transform payloadTransform;
+        [SerializeField] private CargoIntegrity cargoIntegrity;
+        [SerializeField, Min(0f)] private float cargoRepairPerSecond = 40f;
         [SerializeField] private MissionMapGenerator configuredMapGenerator;
         [SerializeField] private PayloadWaveSpawner waveSpawner;
         [SerializeField] private float configuredMovementSpeed;
@@ -43,6 +45,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public int RecoveryGuardCount => configuredRecoveryGuardCount;
         public float CargoActivationDuration => configuredCargoActivationDuration;
         public int PreplacedSentryCount => configuredPreplacedSentryCount;
+        public CargoIntegrity CargoHealth => cargoIntegrity;
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
@@ -77,6 +80,7 @@ namespace AlmostDelivered.Gameplay.Payload
             configuredBounds = missionBounds;
             playerTransform = player;
             payloadTransform = payload;
+            cargoIntegrity = payload != null ? payload.GetComponent<CargoIntegrity>() : null;
             configuredMapGenerator = mapGenerator;
             waveSpawner = waves;
             if (waveSpawner != null)
@@ -105,6 +109,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void Initialize()
         {
+            if (cargoIntegrity == null && payloadTransform != null)
+                cargoIntegrity = payloadTransform.GetComponent<CargoIntegrity>();
             RoutePlan = PayloadRoutePlanner.Generate(configuredSeed, configuredBounds, configuredInteriorPointCount, configuredCorridorWidth);
             stateMachine = new PayloadMissionStateMachine(
                 RoutePlan.TotalLength,
@@ -123,6 +129,7 @@ namespace AlmostDelivered.Gameplay.Payload
             if (payloadTransform != null)
             {
                 payloadTransform.position = RoutePlan.Points[0];
+                payloadTransform.rotation = Quaternion.LookRotation(RoutePlan.EvaluateDirection(0f), Vector3.up);
             }
 
             if (configuredMapGenerator != null)
@@ -157,7 +164,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 stateMachine.RegisterRecoveryGuards(recoveryGuardIds);
             }
 
-            snapshot = stateMachine.Snapshot;
+            snapshot = ComposeSnapshot();
             SnapshotChanged?.Invoke(snapshot);
         }
 
@@ -190,11 +197,20 @@ namespace AlmostDelivered.Gameplay.Payload
 
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var previousPhase = snapshot.Phase;
-            stateMachine.Tick(deltaTime, players, enemies, activationInputHeld);
+            if (cargoIntegrity != null && activationInputHeld &&
+                previousPhase != PayloadMissionPhase.Recovering && previousPhase != PayloadMissionPhase.Activating &&
+                previousPhase != PayloadMissionPhase.Deploying && previousPhase != PayloadMissionPhase.Completed &&
+                Vector3.Distance(playerTransform.position, payloadTransform.position) <= 3.5f)
+                cargoIntegrity.Repair(cargoRepairPerSecond * deltaTime);
+
+            stateMachine.Tick(deltaTime, cargoIntegrity != null && cargoIntegrity.IsBroken ? 0 : players,
+                enemies, activationInputHeld);
             var currentState = stateMachine.Snapshot;
             HandleActivationTransition(previousPhase, currentState.Phase);
             TickActivationWaves(previousPhase, currentState);
             payloadTransform.position = RoutePlan.EvaluateDistance(stateMachine.Snapshot.RouteDistance);
+            payloadTransform.rotation = Quaternion.LookRotation(
+                RoutePlan.EvaluateDirection(stateMachine.Snapshot.RouteDistance), Vector3.up);
             PublishSnapshot(previousPhase);
             TickActivationNoise(deltaTime);
             TickEscortDirector(deltaTime);
@@ -209,9 +225,13 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var previousPhase = snapshot.Phase;
             snapshot = value;
+            if (cargoIntegrity != null && value.CargoMaximumHealth > 0f && value.CargoHealth >= 0f)
+                cargoIntegrity.ApplySnapshot(value.CargoHealth, value.CargoMaximumHealth, value.IsCargoBroken);
             if (payloadTransform != null)
             {
                 payloadTransform.position = RoutePlan.EvaluateDistance(value.RouteDistance);
+                payloadTransform.rotation = Quaternion.LookRotation(
+                    RoutePlan.EvaluateDirection(value.RouteDistance), Vector3.up);
             }
 
             SnapshotChanged?.Invoke(snapshot);
@@ -446,12 +466,25 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void PublishSnapshot(PayloadMissionPhase previousPhase)
         {
-            snapshot = stateMachine.Snapshot;
+            snapshot = ComposeSnapshot();
             SnapshotChanged?.Invoke(snapshot);
             if (previousPhase != snapshot.Phase)
             {
                 PhaseChanged?.Invoke(previousPhase, snapshot.Phase);
             }
+        }
+
+        private PayloadMissionSnapshot ComposeSnapshot()
+        {
+            var state = stateMachine.Snapshot;
+            return new PayloadMissionSnapshot(
+                state.Phase, state.ElapsedTime, state.RouteDistance, state.NormalizedProgress,
+                state.NextCheckpointIndex, state.ActiveWaveId, state.RemainingEnemyCount,
+                state.PlayersInRange, state.EnemiesInRange, state.IsEscortActive, state.IsWaveRegistered,
+                state.ActivationProgress, state.IsActivationInputHeld,
+                cargoIntegrity != null ? cargoIntegrity.CurrentHealth : -1f,
+                cargoIntegrity != null ? cargoIntegrity.MaximumHealth : -1f,
+                cargoIntegrity != null && cargoIntegrity.IsBroken);
         }
 
         private static bool IsFinite(float value)

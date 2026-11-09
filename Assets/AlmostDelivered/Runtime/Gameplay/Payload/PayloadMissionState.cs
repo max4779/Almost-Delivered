@@ -43,7 +43,10 @@ namespace AlmostDelivered.Gameplay.Payload
             bool isEscortActive,
             bool isWaveRegistered,
             float activationProgress = 0f,
-            bool isActivationInputHeld = false)
+            bool isActivationInputHeld = false,
+            float cargoHealth = -1f,
+            float cargoMaximumHealth = -1f,
+            bool isCargoBroken = false)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -58,6 +61,9 @@ namespace AlmostDelivered.Gameplay.Payload
             IsWaveRegistered = isWaveRegistered;
             ActivationProgress = activationProgress;
             IsActivationInputHeld = isActivationInputHeld;
+            CargoHealth = cargoHealth;
+            CargoMaximumHealth = cargoMaximumHealth;
+            IsCargoBroken = isCargoBroken;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -85,5 +91,11 @@ namespace AlmostDelivered.Gameplay.Payload
         public float ActivationProgress { get; }
 
         public bool IsActivationInputHeld { get; }
+
+        public float CargoHealth { get; }
+
+        public float CargoMaximumHealth { get; }
+
+        public bool IsCargoBroken { get; }
     }
 }
