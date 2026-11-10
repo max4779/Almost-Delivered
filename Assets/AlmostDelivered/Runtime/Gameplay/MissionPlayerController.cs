@@ -12,10 +12,14 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private float gravity = -24f;
         [SerializeField] private float groundedVerticalSpeed = -2f;
         [SerializeField] private RangedAttackController rangedAttack;
+        [SerializeField] private MeleeAttackController meleeAttack;
+        [SerializeField] private PlayerWeaponType weaponType;
 
         private CharacterController characterController;
         private ActorHealth health;
         private float verticalVelocity;
+
+        public PlayerWeaponType WeaponType => weaponType;
 
         public void Configure(CharacterController controller, RangedAttackController attack, float speed)
         {
@@ -32,6 +36,23 @@ namespace AlmostDelivered.Gameplay
             health = GetComponent<ActorHealth>();
             if (rangedAttack == null)
                 rangedAttack = GetComponent<RangedAttackController>();
+            if (meleeAttack == null)
+                meleeAttack = GetComponent<MeleeAttackController>();
+        }
+
+        private void Start() => SetWeaponType(PlayerWeaponLoadout.Selected);
+
+        public void ConfigureMelee(MeleeAttackController attack)
+        {
+            meleeAttack = attack;
+        }
+
+        public void SetWeaponType(PlayerWeaponType selected)
+        {
+            weaponType = selected;
+            if (rangedAttack != null) rangedAttack.enabled = selected == PlayerWeaponType.Ranged;
+            if (meleeAttack != null) meleeAttack.enabled = selected == PlayerWeaponType.Melee;
+            PlayerWeaponLoadout.ApplyVisual(gameObject, selected);
         }
 
         private void Update()
@@ -89,11 +110,13 @@ namespace AlmostDelivered.Gameplay
 
         public bool AimAndFire(Vector3 aimPoint, float now, float deltaTime)
         {
-            if (!CanAct() || !IsFinite(aimPoint) || rangedAttack == null)
+            if (!CanAct() || !IsFinite(aimPoint))
                 return false;
 
             AimAt(aimPoint, deltaTime);
-            return rangedAttack.TryFire(aimPoint, now);
+            if (weaponType == PlayerWeaponType.Melee)
+                return meleeAttack != null && meleeAttack.TryAttack(now, aimPoint - transform.position);
+            return rangedAttack != null && rangedAttack.TryFire(aimPoint, now);
         }
 
         private bool TryGetMouseAim(out Vector3 aimPoint)

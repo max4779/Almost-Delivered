@@ -30,6 +30,7 @@ namespace AlmostDelivered.Editor.Frontend
         public static void BuildOrUpdate()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
+            Directory.CreateDirectory(MaterialRoot);
             MissionMapAssetFactory.CreateOrUpdateAll();
             LowPolyAssetFactory.CreateOrUpdateAll();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -146,7 +147,13 @@ namespace AlmostDelivered.Editor.Frontend
             character.radius = .5f;
             var attack = player.AddComponent<RangedAttackController>();
             attack.Configure(projectileTemplate, Child(player.transform, "Player Muzzle", new Vector3(0f, .65f, .85f)), 28f, .22f, 30f, 2.2f);
-            player.AddComponent<MissionPlayerController>().Configure(character, attack, 6.5f);
+            var melee = player.AddComponent<MeleeAttackController>();
+            melee.Configure(34f, 2.8f, 140f, .55f);
+            player.AddComponent<MeleeSlashVfx>().Configure(CreateSlashMaterial());
+            var controller = player.AddComponent<MissionPlayerController>();
+            controller.Configure(character, attack, 6.5f);
+            controller.ConfigureMelee(melee);
+            controller.SetWeaponType(PlayerWeaponType.Ranged);
             return player;
         }
 
@@ -585,5 +592,23 @@ namespace AlmostDelivered.Editor.Frontend
         }
 
         private static Material Material(string name) => AssetDatabase.LoadAssetAtPath<Material>($"{MaterialRoot}/{name}.mat");
+
+        private static Material CreateSlashMaterial()
+        {
+            var path = $"{MaterialRoot}/MeleeWind.mat";
+            var shader = Shader.Find("Sprites/Default");
+            if (shader == null)
+                throw new InvalidOperationException("Missing transparent sprite shader for melee wind effect.");
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.shader = shader;
+            material.color = Color.white;
+            EditorUtility.SetDirty(material);
+            return material;
+        }
     }
 }

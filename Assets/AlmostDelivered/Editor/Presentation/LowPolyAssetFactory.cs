@@ -51,7 +51,7 @@ namespace AlmostDelivered.Presentation.Editor
             var root = new GameObject("VisualRoot");
             try {
                 var body = Child(root.transform,"BodyPivot");
-                Transform left = null, right = null;
+                Transform left = null, right = null, leftLeg = null, rightLeg = null;
                 if (type == VisualArchetype.Payload) {
                     Part(root.transform,"HoverShadow",PrimitiveType.Cylinder,new Vector3(0,.035f,0),new Vector3(1.35f,.015f,1.65f),rust);
                     Part(body,"CargoHull",PrimitiveType.Cube,new Vector3(0,1.1f,0),new Vector3(1.9f,.55f,2.4f),color);
@@ -69,13 +69,23 @@ namespace AlmostDelivered.Presentation.Editor
                 } else {
                     Part(body,"Body",PrimitiveType.Cube,new Vector3(0,.95f,0),new Vector3(.7f,.9f,.45f),color);
                     Part(body,"Head",PrimitiveType.Sphere,new Vector3(0,1.65f,0),Vector3.one*.52f,color);
-                    Part(body,"LegLeft",PrimitiveType.Cube,new Vector3(-.2f,.3f,0),new Vector3(.23f,.6f,.3f),rust);
-                    Part(body,"LegRight",PrimitiveType.Cube,new Vector3(.2f,.3f,0),new Vector3(.23f,.6f,.3f),rust);
+                    leftLeg=Child(body,"LeftLegPivot"); rightLeg=Child(body,"RightLegPivot");
+                    leftLeg.localPosition=new Vector3(-.2f,.58f,0); rightLeg.localPosition=new Vector3(.2f,.58f,0);
+                    Part(leftLeg,"LegLeft",PrimitiveType.Cube,new Vector3(0,-.28f,0),new Vector3(.23f,.6f,.3f),rust);
+                    Part(rightLeg,"LegRight",PrimitiveType.Cube,new Vector3(0,-.28f,0),new Vector3(.23f,.6f,.3f),rust);
                     left=Child(body,"LeftArmPivot"); right=Child(body,"RightArmPivot");
                     left.localPosition = new Vector3(-.48f,1.3f,0); right.localPosition = new Vector3(.48f,1.3f,0);
                     Part(left,"LeftArm",PrimitiveType.Cube,new Vector3(0,-.3f,0),new Vector3(.22f,.7f,.24f),color);
                     Part(right,"RightArm",PrimitiveType.Cube,new Vector3(0,-.3f,0),new Vector3(.22f,.7f,.24f),color);
-                    Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
+                    if (type == VisualArchetype.Player) {
+                        var weapon=Child(right,"Weapon");
+                        Part(weapon,"RangedWeapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
+                        var blade=Child(right,"MeleeWeapon"); blade.gameObject.SetActive(false);
+                        Part(blade,"Grip",PrimitiveType.Cube,new Vector3(.14f,-.4f,.16f),new Vector3(.16f,.16f,.35f),rust);
+                        Part(blade,"Blade",PrimitiveType.Cube,new Vector3(.14f,-.4f,.72f),new Vector3(.2f,.08f,.9f),glow);
+                    } else {
+                        Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
+                    }
                     switch(type) {
                         case VisualArchetype.Shield: Part(left,"Shield",PrimitiveType.Cube,new Vector3(-.42f,-.3f,.15f),new Vector3(.7f,1,.15f),color); break;
                         case VisualArchetype.Ranged: Part(right,"RangedWeapon",PrimitiveType.Cube,new Vector3(.17f,-.3f,.2f),new Vector3(.12f,.8f,.12f),gold); break;
@@ -87,8 +97,8 @@ namespace AlmostDelivered.Presentation.Editor
                             Part(body,"WarHorn",PrimitiveType.Cylinder,new Vector3(-.65f,1.4f,.2f),new Vector3(.14f,.35f,.14f),gold,Quaternion.Euler(90,0,0)); break;
                     }
                 }
-                var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right,type == VisualArchetype.Payload);
-                var visual = root.AddComponent<LowPolyVisual>(); visual.Configure(type,root.transform,root.GetComponentsInChildren<Renderer>(),left == null ? new[]{body} : new[]{body,left,right});
+                var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right,type == VisualArchetype.Payload,leftLeg,rightLeg);
+                var visual = root.AddComponent<LowPolyVisual>(); visual.Configure(type,root.transform,root.GetComponentsInChildren<Renderer>(true),left == null ? new[]{body} : new[]{body,left,right,leftLeg,rightLeg});
                 if (!visual.IsGameplayFree(out var reason)) throw new InvalidOperationException(reason);
                 PrefabUtility.SaveAsPrefabAsset(root,GetPrefabPath(type));
             } finally { UnityEngine.Object.DestroyImmediate(root); }

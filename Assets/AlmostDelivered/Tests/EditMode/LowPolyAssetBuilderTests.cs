@@ -25,6 +25,9 @@ namespace AlmostDelivered.Tests.EditMode
         [Test] public void GeneratedRoleSilhouettes_HaveRequiredNamedPartsAndDistinctBounds() {
             LowPolyAssetFactory.CreateOrUpdateAll();
             foreach (var type in Types.Take(7)) { var p = LowPolyAssetFactory.LoadPrefab(type); foreach (var name in new[]{"Body", "Head", "Weapon"}) Assert.True(Has(p,name), type+" "+name); }
+            var playerParts = LowPolyAssetFactory.LoadPrefab(VisualArchetype.Player).GetComponentsInChildren<Transform>(true);
+            foreach (var name in new[]{"LeftLegPivot", "RightLegPivot", "RangedWeapon", "MeleeWeapon"})
+                Assert.That(playerParts.Any(part => part.name == name), Is.True, name);
             foreach (var pair in new[]{(VisualArchetype.Shield,"Shield"),(VisualArchetype.Ranged,"RangedWeapon"),(VisualArchetype.Charger,"Horns"),(VisualArchetype.Support,"Totem"),(VisualArchetype.Commander,"Cape"),(VisualArchetype.Commander,"Banner"),(VisualArchetype.Commander,"WarHorn"),(VisualArchetype.Payload,"CargoHull"),(VisualArchetype.Payload,"EnergyCore"),(VisualArchetype.Payload,"HoverShadow"),(VisualArchetype.ObjectiveBeacon,"Beacon"),(VisualArchetype.ObjectiveBeacon,"RuneRing")}) Assert.True(Has(LowPolyAssetFactory.LoadPrefab(pair.Item1),pair.Item2), pair.ToString());
             CollectionAssert.AreEquivalent(new[]{"ThrusterRearLeft", "ThrusterFrontLeft", "ThrusterRearRight", "ThrusterFrontRight"}, LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>().Where(t=>t.name.StartsWith("Thruster", StringComparison.Ordinal)).Select(t=>t.name));
             Assert.That(LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).GetComponentsInChildren<Transform>().Any(t=>t.name.StartsWith("Wheel", StringComparison.Ordinal) || t.name == "Cart"), Is.False);

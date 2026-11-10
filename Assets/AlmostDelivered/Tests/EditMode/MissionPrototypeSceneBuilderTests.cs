@@ -31,6 +31,13 @@ namespace AlmostDelivered.Tests.EditMode
 
             Assert.That(player.GetComponent<MissionPlayerController>(), Is.Not.Null);
             Assert.That(player.GetComponent<RangedAttackController>(), Is.Not.Null);
+            Assert.That(player.GetComponent<MeleeAttackController>(), Is.Not.Null);
+            Assert.That(new SerializedObject(player.GetComponent<MeleeAttackController>())
+                .FindProperty("cooldown").floatValue, Is.EqualTo(.55f).Within(.001f));
+            var slash = player.GetComponent<MeleeSlashVfx>();
+            Assert.That(slash, Is.Not.Null);
+            Assert.That(slash.WindMaterial, Is.Not.Null);
+            Assert.That(slash.WindMaterial.shader.name, Is.EqualTo("Sprites/Default"));
             Assert.That(player.GetComponent<CombatTeam>().Team, Is.EqualTo(CombatTeamId.Player));
             Assert.That(Object.FindObjectsOfType<PayloadMissionController>(true), Has.Length.EqualTo(1));
             Assert.That(mission.IsAuthority, Is.True);
@@ -72,9 +79,9 @@ namespace AlmostDelivered.Tests.EditMode
             var buildPaths = EditorBuildSettings.scenes.Select(item => item.path).ToArray();
             Assert.That(buildPaths.Take(3), Is.EqualTo(new[]
             {
-                FrontendSceneBuilder.FrontendScenePath,
                 FrontendSceneBuilder.DepartureHubScenePath,
-                MissionPrototypeSceneBuilder.ScenePath
+                MissionPrototypeSceneBuilder.ScenePath,
+                FrontendSceneBuilder.FrontendScenePath
             }));
         }
 
