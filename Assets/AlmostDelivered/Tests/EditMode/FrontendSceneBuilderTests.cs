@@ -1,4 +1,5 @@
 using System.Linq;
+using AlmostDelivered.Combat;
 using AlmostDelivered.Editor.Frontend;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Presentation;
@@ -37,13 +38,15 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
-        public void BuildLeavesFrontendAsActiveStartScene()
+        public void BuildLeavesHubAsActiveStartScene()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
 
-            Assert.That(SceneManager.GetActiveScene().path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
-            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
-            Assert.That(EditorSceneManager.playModeStartScene, Is.Null);
+            Assert.That(SceneManager.GetActiveScene().path, Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
+            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
+            if (!Application.isBatchMode)
+                Assert.That(EditorSceneManager.playModeStartScene,
+                    Is.EqualTo(AssetDatabase.LoadAssetAtPath<SceneAsset>(FrontendSceneBuilder.DepartureHubScenePath)));
         }
 
         [Test]
@@ -130,9 +133,74 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(layout.GetComponentsInChildren<Renderer>(true).Length, Is.GreaterThan(8));
             Assert.That(stations.Find("Mission Terminal"), Is.Not.Null);
             Assert.That(stations.Find("Equipment Bay"), Is.Not.Null);
+            Assert.That(stations.Find("Equipment Bay/Weapon Station Trigger").GetComponent<HubWeaponStation>(), Is.Not.Null);
+            Assert.That(stations.Find("Equipment Bay/Selected Weapon").GetComponent<TextMesh>().text,
+                Does.Contain("원거리"));
             Assert.That(stations.Find("Deployment Gate"), Is.Not.Null);
             Assert.That(layout.GetComponentsInChildren<HubPlayerController>(true), Is.Empty);
             Assert.That(stations.GetComponentsInChildren<HubPlayerController>(true), Is.Empty);
+        }
+
+        [Test]
+        public void HubHasReadableGuideAndClickBasedWeaponMenuWithoutRaisedCounterInTheWalkway()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+            var hub = FindRoot(scene, "Departure Hub");
+            var station = hub.transform.Find("Stations/Equipment Bay/Weapon Station Trigger");
+            var zone = hub.transform.Find("Layout/Equipment Zone Floor").GetComponent<Renderer>();
+            var stationBounds = station.GetComponent<Collider>().bounds;
+            Assert.That(stationBounds.min.x, Is.EqualTo(zone.bounds.min.x).Within(.01f));
+            Assert.That(stationBounds.max.x, Is.EqualTo(zone.bounds.max.x).Within(.01f));
+            Assert.That(stationBounds.min.z, Is.EqualTo(zone.bounds.min.z).Within(.01f));
+            Assert.That(stationBounds.max.z, Is.EqualTo(zone.bounds.max.z).Within(.01f));
+            var counter = hub.transform.Find("Stations/Equipment Bay/Equipment Counter")
+                .GetComponent<Renderer>();
+            Assert.That(counter.bounds.min.x, Is.GreaterThan(station.position.x + .5f));
+
+            var canvas = GameObject.Find("Hub Canvas").GetComponent<Canvas>();
+            Assert.That(canvas.renderMode, Is.EqualTo(RenderMode.ScreenSpaceOverlay));
+            Assert.That(canvas.GetComponent<CanvasScaler>().referenceResolution,
+                Is.EqualTo(new Vector2(1920f, 1080f)));
+            Assert.That(canvas.GetComponent<HubGuideHud>(), Is.Not.Null);
+            Assert.That(canvas.transform.Find("Hub Station Guide/Station Guide").GetComponent<Text>().text,
+                Does.Contain("청록색"));
+            Assert.That(canvas.transform.Find("Hub Title Panel/Hub Title").GetComponent<Text>().fontSize,
+                Is.GreaterThanOrEqualTo(42));
+            var overlay = canvas.transform.Find("Weapon Selection Overlay");
+            Assert.That(overlay.gameObject.activeSelf, Is.False);
+            Assert.That(overlay.Find("Weapon Selection Menu/Ranged Weapon Card").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(overlay.Find("Weapon Selection Menu/Melee Weapon Card").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(overlay.Find("Weapon Selection Menu/Close Weapon Menu").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(hub.transform.Find("Stations/Equipment Bay/Weapon Selection Prompt")
+                .GetComponent<TextMesh>().text, Does.Contain("E"));
+            Assert.That(new SerializedObject(GameObject.Find("Player").GetComponent<MeleeAttackController>())
+                .FindProperty("cooldown").floatValue, Is.EqualTo(.55f).Within(.001f));
+        }
+
+        [Test]
+        public void HubMarksEachStationWithDistinctFlatFloorAndEquipsBothAttacks()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            var scene = EditorSceneManager.OpenScene(FrontendSceneBuilder.DepartureHubScenePath, OpenSceneMode.Single);
+            var hub = FindRoot(scene, "Departure Hub");
+            var layout = hub.transform.Find("Layout");
+            var names = new[] { "Gate Zone Floor", "Equipment Zone Floor", "Terminal Zone Floor", "Crew Zone Floor" };
+            var colors = names.Select(name =>
+            {
+                var zone = layout.Find(name);
+                Assert.That(zone, Is.Not.Null, name);
+                Assert.That(zone.GetComponent<Collider>(), Is.Null, name);
+                return zone.GetComponent<Renderer>().sharedMaterial.color;
+            }).ToArray();
+            Assert.That(colors.Distinct().Count(), Is.EqualTo(names.Length));
+
+            var player = GameObject.Find("Player");
+            Assert.That(player.GetComponent<CombatTeam>().Team, Is.EqualTo(CombatTeamId.Player));
+            Assert.That(player.GetComponent<RangedAttackController>(), Is.Not.Null);
+            Assert.That(player.GetComponent<MeleeAttackController>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Hub Projectile Template"), Is.Null,
+                "The inactive projectile template must not appear in the hub.");
         }
 
         [Test]
@@ -289,8 +357,9 @@ namespace AlmostDelivered.Tests.EditMode
             FrontendSceneBuilder.BuildOrUpdateAll();
 
             var paths = EditorBuildSettings.scenes.Select(item => item.path).ToArray();
-            Assert.That(paths[0], Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
-            Assert.That(paths[1], Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
+            Assert.That(paths[0], Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
+            Assert.That(paths[1], Is.EqualTo(MissionPrototypeSceneBuilder.ScenePath));
+            Assert.That(paths[2], Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
             Assert.That(paths.Count(path => path == FrontendSceneBuilder.FrontendScenePath), Is.EqualTo(1));
             Assert.That(paths.Count(path => path == FrontendSceneBuilder.DepartureHubScenePath), Is.EqualTo(1));
 

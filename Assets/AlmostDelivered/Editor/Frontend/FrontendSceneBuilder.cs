@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Presentation;
 using AlmostDelivered.Presentation.Editor;
@@ -36,14 +37,16 @@ namespace AlmostDelivered.Editor.Frontend
         public static void BuildOrUpdateAll()
         {
             EnsureProjectFolders();
+            LowPolyAssetFactory.CreateOrUpdateAll();
             var materials = CreateOrUpdateMaterials();
             BuildFrontend(materials);
             BuildDepartureHub(materials);
             MissionPrototypeSceneBuilder.BuildOrUpdate();
             RegisterBuildSettings();
             AssetDatabase.SaveAssets();
-            EditorSceneManager.OpenScene(FrontendScenePath, OpenSceneMode.Single);
-            EditorSceneManager.playModeStartScene = null;
+            EditorSceneManager.OpenScene(DepartureHubScenePath, OpenSceneMode.Single);
+            if (!Application.isBatchMode)
+                EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(DepartureHubScenePath);
             Debug.Log("FRONTEND_HUB_BUILT " + FrontendScenePath + " " + DepartureHubScenePath);
         }
 
@@ -79,7 +82,11 @@ namespace AlmostDelivered.Editor.Frontend
                 { "Amber", CreateOrUpdateMaterial("Amber", AmberColor, .05f, .48f) },
                 { "Hazard", CreateOrUpdateMaterial("Hazard", HazardColor, 0f, .34f) },
                 { "Dark", CreateOrUpdateMaterial("Dark", new Color(.025f, .035f, .05f), .1f, .3f) },
-                { "Player", CreateOrUpdateMaterial("Player", new Color(.2f, .78f, .82f), .15f, .55f) }
+                { "Player", CreateOrUpdateMaterial("Player", new Color(.2f, .78f, .82f), .15f, .55f) },
+                { "HubGateZone", CreateOrUpdateMaterial("HubGateZone", new Color(.32f, .19f, .07f), 0f, .36f) },
+                { "HubEquipmentZone", CreateOrUpdateMaterial("HubEquipmentZone", new Color(.065f, .25f, .28f), 0f, .36f) },
+                { "HubTerminalZone", CreateOrUpdateMaterial("HubTerminalZone", new Color(.22f, .13f, .32f), 0f, .36f) },
+                { "HubCrewZone", CreateOrUpdateMaterial("HubCrewZone", new Color(.12f, .23f, .16f), 0f, .36f) }
             };
         }
 
@@ -198,6 +205,16 @@ namespace AlmostDelivered.Editor.Frontend
                 VisualCube("Floor Lane " + z, layout, new Vector3(0f, .04f, z), new Vector3(12f, .035f, .16f), materials["Hazard"]);
             }
 
+            // Flat colored panels leave collision and walking height unchanged.
+            VisualCube("Gate Zone Floor", layout, new Vector3(0f, .07f, 7.25f),
+                new Vector3(11f, .018f, 4.3f), materials["HubGateZone"]);
+            VisualCube("Equipment Zone Floor", layout, new Vector3(11.5f, .07f, .8f),
+                new Vector3(6.5f, .018f, 7f), materials["HubEquipmentZone"]);
+            VisualCube("Terminal Zone Floor", layout, new Vector3(-10.7f, .07f, 1.2f),
+                new Vector3(7f, .018f, 6f), materials["HubTerminalZone"]);
+            VisualCube("Crew Zone Floor", layout, new Vector3(-7.5f, .07f, -8f),
+                new Vector3(5.5f, .018f, 3.2f), materials["HubCrewZone"]);
+
             BuildDeploymentGate(stations, materials);
             BuildMissionTerminal(stations, materials);
             BuildEquipmentBay(stations, materials);
@@ -209,6 +226,22 @@ namespace AlmostDelivered.Editor.Frontend
             var characterController = player.AddComponent<CharacterController>();
             characterController.height = 2f;
             characterController.radius = .45f;
+            player.AddComponent<CombatTeam>().Team = CombatTeamId.Player;
+            var projectileTemplate = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            projectileTemplate.name = "Hub Projectile Template";
+            projectileTemplate.transform.SetParent(hub.transform, false);
+            projectileTemplate.transform.localScale = Vector3.one * .28f;
+            projectileTemplate.GetComponent<Renderer>().sharedMaterial = materials["Cyan"];
+            projectileTemplate.GetComponent<SphereCollider>().isTrigger = true;
+            projectileTemplate.AddComponent<CombatProjectile>();
+            projectileTemplate.SetActive(false);
+            var rangedAttack = player.AddComponent<RangedAttackController>();
+            var muzzle = Child(player.transform, "Hub Player Muzzle");
+            muzzle.localPosition = new Vector3(0f, .65f, .85f);
+            rangedAttack.Configure(projectileTemplate, muzzle, 28f, .22f, 30f, 2.2f, 0f);
+            var meleeAttack = player.AddComponent<MeleeAttackController>();
+            meleeAttack.Configure(34f, 2.8f, 140f, .55f);
+            player.AddComponent<MeleeSlashVfx>();
             player.AddComponent<HubPlayerController>();
             AttachVisual(player, VisualArchetype.Player);
 
@@ -235,6 +268,8 @@ namespace AlmostDelivered.Editor.Frontend
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
             RenderSettings.ambientLight = new Color(.11f, .14f, .18f);
 
+            BuildHubUi(stations);
+
             EditorSceneManager.SaveScene(scene, DepartureHubScenePath);
         }
 
@@ -250,10 +285,10 @@ namespace AlmostDelivered.Editor.Frontend
                 var stripe = VisualCube("Hazard Stripe", gate, new Vector3(x, .38f, 9.82f), new Vector3(1.1f, .34f, .08f), materials["Hazard"]);
                 stripe.transform.rotation = Quaternion.Euler(0f, 0f, -18f);
             }
-            WorldLabel("DEPLOYMENT // LOCKED", gate, new Vector3(0f, 4.2f, 9.78f), 46, AmberColor, TextAnchor.MiddleCenter);
+            WorldLabel("미션 출격 게이트", gate, new Vector3(0f, 4.2f, 9.78f), 46, AmberColor, TextAnchor.MiddleCenter);
 
             var prompt = WorldLabel("Deployment Prompt", gate, new Vector3(0f, 1.15f, 8.2f), 38, CyanColor, TextAnchor.MiddleCenter);
-            prompt.text = "E  출발";
+            prompt.text = "E  미션 출격";
             prompt.gameObject.SetActive(false);
 
             var triggerObject = new GameObject("Deployment Gate Trigger", typeof(BoxCollider), typeof(HubDeploymentGate));
@@ -272,7 +307,7 @@ namespace AlmostDelivered.Editor.Frontend
             VisualCube("Terminal Screen", terminal, new Vector3(-11.54f, 2.25f, 1.2f), new Vector3(.16f, 1.55f, 3.2f), materials["Cyan"]);
             VisualCube("Briefing Table", terminal, new Vector3(-9.5f, .85f, 1.2f), new Vector3(3.2f, .22f, 3.8f), materials["Structure"]);
             VisualCube("Briefing Table Leg", terminal, new Vector3(-9.5f, .4f, 1.2f), new Vector3(.55f, .8f, .55f), materials["Dark"]);
-            WorldLabel("MISSION CONTROL", terminal, new Vector3(-11.42f, 3.35f, 1.2f), 34, CyanColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, 90f, 0f));
+            WorldLabel("작전 단말기", terminal, new Vector3(-11.42f, 3.35f, 1.2f), 34, CyanColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, 90f, 0f));
         }
 
         private static void BuildEquipmentBay(Transform stations, IReadOnlyDictionary<string, Material> materials)
@@ -283,8 +318,20 @@ namespace AlmostDelivered.Editor.Frontend
             {
                 VisualCube("Equipment Rack", bay, new Vector3(14.55f, 1.5f, z), new Vector3(.45f, 2.3f, 1.1f), materials["Amber"]);
             }
-            VisualCube("Equipment Counter", bay, new Vector3(12.7f, .85f, .8f), new Vector3(3.8f, .25f, 6.2f), materials["Structure"]);
-            WorldLabel("EQUIPMENT // OFFLINE", bay, new Vector3(14.36f, 4.25f, .8f), 30, AmberColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, -90f, 0f));
+            VisualCube("Equipment Counter", bay, new Vector3(14.15f, .48f, .8f), new Vector3(1.1f, .85f, 5.7f), materials["Structure"]);
+            WorldLabel("장비 보관소", bay, new Vector3(14.36f, 4.25f, .8f), 36, AmberColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, -90f, 0f));
+            var selection = WorldLabel("Selected Weapon", bay, new Vector3(13.72f, 3.34f, .8f), 31,
+                CyanColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, -90f, 0f));
+            var prompt = WorldLabel("Weapon Selection Prompt", bay, new Vector3(12.4f, 2.55f, .8f), 34,
+                AmberColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, -90f, 0f));
+            prompt.text = "E  무기 선택";
+            var triggerObject = new GameObject("Weapon Station Trigger", typeof(BoxCollider), typeof(HubWeaponStation));
+            triggerObject.transform.SetParent(bay, false);
+            triggerObject.transform.position = new Vector3(11.5f, 1.5f, .8f);
+            var trigger = triggerObject.GetComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(6.5f, 3f, 7f);
+            triggerObject.GetComponent<HubWeaponStation>().Configure(prompt, selection);
         }
 
         private static void BuildCrewDoor(Transform stations, IReadOnlyDictionary<string, Material> materials)
@@ -292,7 +339,7 @@ namespace AlmostDelivered.Editor.Frontend
             var door = Child(stations, "Crew Access Door");
             VisualCube("Crew Door", door, new Vector3(-7.5f, 2f, -10.15f), new Vector3(4f, 4f, .35f), materials["Panel"]);
             VisualCube("Crew Door Light", door, new Vector3(-7.5f, 4.45f, -9.9f), new Vector3(2f, .18f, .12f), materials["Cyan"]);
-            WorldLabel("CREW ACCESS", door, new Vector3(-7.5f, 3.2f, -9.92f), 28, CyanColor, TextAnchor.MiddleCenter);
+            WorldLabel("승무원 구역", door, new Vector3(-7.5f, 3.2f, -9.92f), 28, CyanColor, TextAnchor.MiddleCenter);
         }
 
         private static void BuildCargoAndDetails(Transform layout, IReadOnlyDictionary<string, Material> materials)
@@ -312,13 +359,117 @@ namespace AlmostDelivered.Editor.Frontend
             WorkLight("East Work Light", layout, new Vector3(12.8f, 4.8f, -4.5f), CyanColor);
         }
 
+        private static void BuildHubUi(Transform stations)
+        {
+            var station = stations.GetComponentInChildren<HubWeaponStation>();
+            var gate = stations.GetComponentInChildren<HubDeploymentGate>();
+            var canvasObject = new GameObject("Hub Canvas", typeof(RectTransform), typeof(Canvas),
+                typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(HubGuideHud));
+            var canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = 20;
+            var scaler = canvasObject.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = .5f;
+
+            var titlePanel = UiImage("Hub Title Panel", canvasObject.transform, new Color(.02f, .045f, .065f, .92f));
+            PlaceRect(titlePanel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(24f, -24f), new Vector2(590f, 150f));
+            var title = UiText("Hub Title", titlePanel.transform, "출발 기지", 46, Color.white, TextAnchor.MiddleLeft);
+            title.fontStyle = FontStyle.Bold;
+            PlaceRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(24f, -16f), new Vector2(540f, 65f));
+            var subtitle = UiText("Hub Subtitle", titlePanel.transform, "무기를 고르고 출격 게이트로 이동하세요", 29,
+                new Color(.7f, .85f, .9f), TextAnchor.MiddleLeft);
+            PlaceRect(subtitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(24f, -83f), new Vector2(540f, 50f));
+
+            var weaponPanel = UiImage("Current Weapon Panel", canvasObject.transform,
+                new Color(.02f, .045f, .065f, .92f));
+            PlaceRect(weaponPanel.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-24f, -24f), new Vector2(430f, 105f));
+            var currentWeapon = UiText("Current Weapon", weaponPanel.transform, "현재 무기  ·  원거리", 32,
+                CyanColor, TextAnchor.MiddleCenter);
+            Stretch(currentWeapon.rectTransform);
+
+            var mapPanel = UiImage("Hub Station Guide", canvasObject.transform,
+                new Color(.02f, .045f, .065f, .92f));
+            PlaceRect(mapPanel.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
+                new Vector2(24f, 130f), new Vector2(630f, 245f));
+            var stationGuide = UiText("Station Guide", mapPanel.transform,
+                "주황색  출격 게이트  ·  미션 시작\n청록색  장비 보관소  ·  무기 선택\n보라색  작전 단말기  ·  준비 중\n녹색  승무원 구역  ·  준비 중",
+                27, Color.white, TextAnchor.MiddleLeft);
+            PlaceRect(stationGuide.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
+                new Vector2(22f, 18f), new Vector2(590f, 205f));
+
+            var hintPanel = UiImage("Interaction Hint Panel", canvasObject.transform,
+                new Color(.02f, .07f, .09f, .96f));
+            PlaceRect(hintPanel.rectTransform, new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(0f, 24f), new Vector2(780f, 86f));
+            var hint = UiText("Interaction Hint", hintPanel.transform, string.Empty, 28,
+                Color.white, TextAnchor.MiddleCenter);
+            Stretch(hint.rectTransform);
+
+            var overlay = UiImage("Weapon Selection Overlay", canvasObject.transform,
+                new Color(.005f, .015f, .025f, .82f));
+            Stretch(overlay.rectTransform);
+            var menu = UiImage("Weapon Selection Menu", overlay.transform,
+                new Color(.035f, .075f, .1f, 1f));
+            PlaceRect(menu.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                Vector2.zero, new Vector2(1100f, 660f));
+            var menuTitle = UiText("Weapon Menu Title", menu.transform, "무기 선택", 54,
+                Color.white, TextAnchor.MiddleCenter);
+            menuTitle.fontStyle = FontStyle.Bold;
+            PlaceRect(menuTitle.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
+                new Vector2(0f, -24f), new Vector2(1000f, 72f));
+            var menuDescription = UiText("Weapon Menu Description", menu.transform,
+                "카드를 클릭하면 무기가 바뀝니다. 출격 전에 자유롭게 다시 고를 수 있습니다.", 27,
+                new Color(.72f, .83f, .88f), TextAnchor.MiddleCenter);
+            PlaceRect(menuDescription.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
+                new Vector2(0f, -105f), new Vector2(1000f, 54f));
+
+            var rangedCard = UiImage("Ranged Weapon Card", menu.transform, new Color(.08f, .42f, .48f));
+            PlaceRect(rangedCard.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                new Vector2(-255f, -10f), new Vector2(480f, 270f));
+            var rangedButton = rangedCard.gameObject.AddComponent<Button>();
+            rangedButton.targetGraphic = rangedCard;
+            var rangedText = UiText("Ranged Card Label", rangedCard.transform,
+                "원거리 무기\n\n멀리서 적을 안전하게 사격", 34, Color.white, TextAnchor.MiddleCenter);
+            Stretch(rangedText.rectTransform);
+            UnityEventTools.AddPersistentListener(rangedButton.onClick, station.SelectRanged);
+
+            var meleeCard = UiImage("Melee Weapon Card", menu.transform, new Color(.19f, .14f, .09f));
+            PlaceRect(meleeCard.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                new Vector2(255f, -10f), new Vector2(480f, 270f));
+            var meleeButton = meleeCard.gameObject.AddComponent<Button>();
+            meleeButton.targetGraphic = meleeCard;
+            var meleeText = UiText("Melee Card Label", meleeCard.transform,
+                "근접 무기\n\n넓은 범위를 빠르게 베기", 34, Color.white, TextAnchor.MiddleCenter);
+            Stretch(meleeText.rectTransform);
+            UnityEventTools.AddPersistentListener(meleeButton.onClick, station.SelectMelee);
+
+            var menuSelection = UiText("Menu Current Weapon", menu.transform, string.Empty, 31,
+                CyanColor, TextAnchor.MiddleCenter);
+            PlaceRect(menuSelection.rectTransform, new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(0f, 113f), new Vector2(880f, 50f));
+            var closeButton = UiButton("Close Weapon Menu", menu.transform, "선택 완료", CyanColor, true);
+            PlaceRect(closeButton.GetComponent<RectTransform>(), new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(0f, 25f), new Vector2(280f, 65f));
+            UnityEventTools.AddPersistentListener(closeButton.onClick, station.CloseMenu);
+
+            station.ConfigureMenu(overlay.gameObject, menuSelection, rangedCard, meleeCard);
+            canvasObject.GetComponent<HubGuideHud>().Configure(station, gate, hint, currentWeapon);
+            new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        }
+
         private static void RegisterBuildSettings()
         {
             var ordered = new List<EditorBuildSettingsScene>
             {
-                new EditorBuildSettingsScene(FrontendScenePath, true),
                 new EditorBuildSettingsScene(DepartureHubScenePath, true),
-                new EditorBuildSettingsScene(MissionPrototypeSceneBuilder.ScenePath, true)
+                new EditorBuildSettingsScene(MissionPrototypeSceneBuilder.ScenePath, true),
+                new EditorBuildSettingsScene(FrontendScenePath, true)
             };
 
             ordered.AddRange(EditorBuildSettings.scenes.Where(scene =>
@@ -390,12 +541,23 @@ namespace AlmostDelivered.Editor.Frontend
             labelObject.transform.rotation = rotation ?? Quaternion.identity;
             var label = labelObject.GetComponent<TextMesh>();
             label.text = name;
+            label.font = LoadFrontendFont();
             label.fontSize = fontSize;
-            label.characterSize = .055f;
+            label.characterSize = .09f;
             label.color = color;
             label.anchor = anchor;
             label.alignment = TextAlignment.Center;
+            labelObject.GetComponent<MeshRenderer>().sharedMaterial = label.font.material;
             return label;
+        }
+
+        private static void PlaceRect(RectTransform rect, Vector2 anchor, Vector2 pivot, Vector2 position, Vector2 size)
+        {
+            rect.anchorMin = anchor;
+            rect.anchorMax = anchor;
+            rect.pivot = pivot;
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
         }
 
         private static Image UiImage(string name, Transform parent, Color color)

@@ -46,6 +46,19 @@ namespace AlmostDelivered.Gameplay.Payload
         public float CargoActivationDuration => configuredCargoActivationDuration;
         public int PreplacedSentryCount => configuredPreplacedSentryCount;
         public CargoIntegrity CargoHealth => cargoIntegrity;
+        public float CargoInteractionRadius => escortRadius;
+        public bool CanInteractWithCargo
+        {
+            get
+            {
+                if (playerTransform == null || payloadTransform == null) return false;
+                var playerHealth = playerTransform.GetComponent<ActorHealth>();
+                if (playerHealth != null && playerHealth.IsDead) return false;
+                var offset = playerTransform.position - payloadTransform.position;
+                offset.y = 0f;
+                return offset.sqrMagnitude <= escortRadius * escortRadius;
+            }
+        }
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
@@ -196,15 +209,16 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
+            var canInteract = CanInteractWithCargo;
+            if (canInteract) players = Mathf.Max(players, 1);
             var previousPhase = snapshot.Phase;
-            if (cargoIntegrity != null && activationInputHeld &&
+            if (cargoIntegrity != null && activationInputHeld && canInteract &&
                 previousPhase != PayloadMissionPhase.Recovering && previousPhase != PayloadMissionPhase.Activating &&
-                previousPhase != PayloadMissionPhase.Deploying && previousPhase != PayloadMissionPhase.Completed &&
-                Vector3.Distance(playerTransform.position, payloadTransform.position) <= 3.5f)
+                previousPhase != PayloadMissionPhase.Deploying && previousPhase != PayloadMissionPhase.Completed)
                 cargoIntegrity.Repair(cargoRepairPerSecond * deltaTime);
 
             stateMachine.Tick(deltaTime, cargoIntegrity != null && cargoIntegrity.IsBroken ? 0 : players,
-                enemies, activationInputHeld);
+                enemies, activationInputHeld && canInteract);
             var currentState = stateMachine.Snapshot;
             HandleActivationTransition(previousPhase, currentState.Phase);
             TickActivationWaves(previousPhase, currentState);

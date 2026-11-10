@@ -96,6 +96,58 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void CargoInteractionMatchesTheVisibleFourPointFiveMeterRing()
+        {
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = NewController();
+            controller.Configure(true, 15, Bounds(), player.transform, payload.transform,
+                null, null, 10f, 0f, 4.5f, requireCargoRecovery: true,
+                recoveryGuardCount: 0, cargoActivationDuration: 3f, preplacedSentryCount: 0);
+            var activationViewObject = new GameObject("Activation View");
+            activationViewObject.transform.SetParent(root.transform, false);
+            var activationView = activationViewObject.AddComponent<PayloadActivationView>();
+            activationView.Configure(controller, null);
+            var activationRing = activationView.GetComponent<LineRenderer>();
+            Assert.That(new Vector2(activationRing.GetPosition(0).x, activationRing.GetPosition(0).z).magnitude,
+                Is.EqualTo(4.5f).Within(.01f));
+            var escortViewObject = new GameObject("Escort View");
+            escortViewObject.transform.SetParent(root.transform, false);
+            var escortView = escortViewObject.AddComponent<PayloadEscortRadiusView>();
+            escortView.Configure(controller, controller.CargoInteractionRadius, null);
+
+            player.transform.position = payload.transform.position + Vector3.right * 4.4f;
+            Physics.SyncTransforms();
+            controller.Tick(0f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Recovering));
+            Assert.That(escortView.GetComponent<LineRenderer>().enabled, Is.True);
+            Assert.That(controller.CanInteractWithCargo, Is.True);
+            controller.Tick(0f, true);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+
+            player.transform.position = payload.transform.position + Vector3.right * 4.6f;
+            Physics.SyncTransforms();
+            Assert.That(controller.CanInteractWithCargo, Is.False);
+            controller.Tick(1f, true);
+            Assert.That(controller.Snapshot.PlayersInRange, Is.Zero);
+            Assert.That(controller.Snapshot.ActivationProgress, Is.Zero);
+
+            player.transform.position = payload.transform.position + Vector3.right * 4.4f;
+            Physics.SyncTransforms();
+            controller.Tick(3f, true);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+
+            integrity.ApplyDamage(integrity.MaximumHealth);
+            player.transform.position = payload.transform.position + Vector3.right * 4.6f;
+            Physics.SyncTransforms();
+            controller.Tick(1f, true);
+            Assert.That(integrity.CurrentHealth, Is.Zero);
+            player.transform.position = payload.transform.position + Vector3.right * 4.4f;
+            Physics.SyncTransforms();
+            controller.Tick(1f, true);
+            Assert.That(integrity.CurrentHealth, Is.EqualTo(40f).Within(.001f));
+        }
+
+        [Test]
         public void RecoveryMissionSpawnsCargoGuardsAndStartsOnlyAfterTheyAreCleared()
         {
             var spawner = CreateSpawner(713);

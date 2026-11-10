@@ -22,6 +22,7 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             Unsubscribe();
             mission = missionController;
+            if (mission != null) baseRadius = mission.CargoInteractionRadius;
             EnsureVisuals();
             if (material != null)
             {
@@ -63,7 +64,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            DrawRing(baseRadius + Mathf.Sin(Time.time * 9f) * .16f);
+            DrawRing(baseRadius);
             if (Camera.main != null && label != null)
             {
                 var direction = label.transform.position - Camera.main.transform.position;

@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq;
+using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay;
 using AlmostDelivered.Gameplay.Payload;
@@ -20,6 +21,7 @@ namespace AlmostDelivered.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator Cleanup()
         {
+            PlayerWeaponLoadout.Select(PlayerWeaponType.Ranged);
             var loaded = SceneManager.GetActiveScene();
             var empty = SceneManager.CreateScene("Frontend flow cleanup");
             SceneManager.SetActiveScene(empty);
@@ -132,6 +134,74 @@ namespace AlmostDelivered.Tests.PlayMode
             var mission = Object.FindObjectOfType<PayloadMissionController>();
             Assert.That(mission, Is.Not.Null);
             Assert.That(mission.IsAuthority, Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator HubWeaponSelectionCarriesIntoMissionCombat()
+        {
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
+                new LoadSceneParameters(LoadSceneMode.Single));
+            var player = GameObject.Find("Player");
+            var controller = player.GetComponent<CharacterController>();
+            var station = Object.FindObjectOfType<HubWeaponStation>();
+            Assert.That(station, Is.Not.Null);
+
+            controller.enabled = false;
+            player.transform.position = station.transform.position;
+            controller.enabled = true;
+            controller.Move(Vector3.zero);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            Assert.That(station.CanSelect, Is.True);
+            Assert.That(station.OpenMenu(), Is.True);
+            Assert.That(player.GetComponent<HubPlayerController>().IsInputLocked, Is.True);
+            GameObject.Find("Melee Weapon Card").GetComponent<Button>().onClick.Invoke();
+            Assert.That(PlayerWeaponLoadout.Selected, Is.EqualTo(PlayerWeaponType.Melee));
+            station.CloseMenu();
+            Assert.That(player.GetComponent<HubPlayerController>().IsInputLocked, Is.False);
+
+            var gate = Object.FindObjectOfType<HubDeploymentGate>();
+            controller.enabled = false;
+            player.transform.position = gate.transform.position;
+            controller.enabled = true;
+            controller.Move(Vector3.zero);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            Assert.That(gate.CanLaunch, Is.True);
+            gate.RequestLaunch();
+            yield return WaitForScene(GameSceneFlow.MissionPrototypeScene);
+            yield return null;
+
+            var missionPlayer = GameObject.Find("Player");
+            Assert.That(missionPlayer.GetComponent<MissionPlayerController>().WeaponType,
+                Is.EqualTo(PlayerWeaponType.Melee));
+            Assert.That(missionPlayer.GetComponent<MeleeAttackController>().enabled, Is.True);
+            Assert.That(missionPlayer.GetComponent<RangedAttackController>().enabled, Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator HubPlayerCanFireAndSlashBeforeDeployment()
+        {
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
+                new LoadSceneParameters(LoadSceneMode.Single));
+            var player = GameObject.Find("Player");
+            var hubController = player.GetComponent<HubPlayerController>();
+            var aimPoint = player.transform.position + Vector3.forward * 5f;
+
+            PlayerWeaponLoadout.Select(PlayerWeaponType.Ranged);
+            hubController.SetWeaponType(PlayerWeaponType.Ranged);
+            Assert.That(hubController.AimAndFire(aimPoint, Time.time, .1f), Is.True);
+            Assert.That(GameObject.Find("Hub Projectile Template (Shot)"), Is.Not.Null);
+
+            PlayerWeaponLoadout.Select(PlayerWeaponType.Melee);
+            hubController.SetWeaponType(PlayerWeaponType.Melee);
+            Assert.That(player.GetComponent<RangedAttackController>().enabled, Is.False);
+            Assert.That(player.GetComponent<MeleeAttackController>().enabled, Is.True);
+            Assert.That(hubController.AimAndFire(aimPoint, Time.time, .1f), Is.True);
+            Assert.That(player.GetComponent<AlmostDelivered.Presentation.MeleeSlashVfx>().IsVisible, Is.True);
+
+            hubController.SetInputLocked(true);
+            Assert.That(hubController.AimAndFire(aimPoint, Time.time + 1f, .1f), Is.False);
         }
 
         private static IEnumerator WaitForScene(string sceneName)

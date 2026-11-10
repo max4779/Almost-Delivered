@@ -51,8 +51,10 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 var snapshot = mission.Snapshot;
                 line.enabled = snapshot.Phase != PayloadMissionPhase.Deploying &&
-                               snapshot.Phase != PayloadMissionPhase.Recovering;
-                if (snapshot.Phase == PayloadMissionPhase.CheckpointDefense || snapshot.Phase == PayloadMissionPhase.FinalDefense)
+                               snapshot.Phase != PayloadMissionPhase.Activating;
+                if (snapshot.Phase == PayloadMissionPhase.Recovering)
+                    color = new Color(.15f, .95f, 1f, .9f);
+                else if (snapshot.Phase == PayloadMissionPhase.CheckpointDefense || snapshot.Phase == PayloadMissionPhase.FinalDefense)
                     color = new Color(1f, .65f, .15f, .85f);
                 else if (snapshot.EnemiesInRange > 0)
                     color = new Color(1f, .18f, .12f, .9f);

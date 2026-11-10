@@ -35,10 +35,15 @@ namespace AlmostDelivered.Gameplay.Payload
 
                 var health = hit.GetComponentInParent<ActorHealth>();
                 var team = hit.GetComponentInParent<CombatTeam>();
-                if (health == null || health.IsDead || team == null || !countedActors.Add(health.GetInstanceID()))
+                if (health == null || health.IsDead || team == null)
                 {
                     continue;
                 }
+
+                var offset = health.transform.position - center;
+                offset.y = 0f;
+                if (offset.sqrMagnitude > radius * radius || !countedActors.Add(health.GetInstanceID()))
+                    continue;
 
                 if (team.Team == CombatTeamId.Player)
                 {

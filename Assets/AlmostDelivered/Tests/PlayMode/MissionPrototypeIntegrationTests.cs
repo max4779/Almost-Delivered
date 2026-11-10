@@ -112,7 +112,8 @@ namespace AlmostDelivered.Tests.PlayMode
             var escortRadius = Object.FindObjectOfType<PayloadEscortRadiusView>();
             Assert.That(escortRadius, Is.Not.Null);
             Assert.That(escortRadius.Radius, Is.EqualTo(4.5f));
-            Assert.That(escortRadius.GetComponent<LineRenderer>().enabled, Is.False);
+            Assert.That(escortRadius.GetComponent<LineRenderer>().enabled, Is.True,
+                "The interaction boundary must be visible while recovering the cargo.");
 
             RecoverCargo(mission, waves, player, payload);
             hud.Refresh();

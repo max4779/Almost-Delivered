@@ -50,6 +50,15 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void MovingDoesNotOverrideMouseAimDirection()
+        {
+            Assert.That(movement.AimAt(Vector3.back * 5f, 1f), Is.True);
+            movement.Move(Vector2.right, .1f);
+
+            Assert.That(Vector3.Dot(player.transform.forward, Vector3.back), Is.GreaterThan(.999f));
+        }
+
+        [Test]
         public void CameraSnapMaintainsConfiguredQuarterViewOffset()
         {
             var cameraObject = new GameObject("Hub camera test");
