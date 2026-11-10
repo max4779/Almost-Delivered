@@ -111,10 +111,16 @@ namespace AlmostDelivered.Combat
                 return false;
             if (ownerHealth != null && ownerHealth.IsDead)
                 return false;
-            if (!IsFinite(now) || now < nextFireTime || !IsFinite(aimPoint))
+            if (!IsFinite(now) || !IsFinite(aimPoint))
                 return false;
             TickReload(now);
-            if (isReloading || (magazineSize > 0 && roundsRemaining <= 0)) return false;
+            if (isReloading) return false;
+            if (magazineSize > 0 && roundsRemaining <= 0)
+            {
+                TryReload(now);
+                return false;
+            }
+            if (now < nextFireTime) return false;
 
             var planarDirection = Vector3.ProjectOnPlane(aimPoint - muzzle.position, Vector3.up);
             if (planarDirection.sqrMagnitude < 0.0001f)

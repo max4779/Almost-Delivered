@@ -33,14 +33,16 @@ namespace AlmostDelivered.Tests.PlayMode
             for (var i = 0; i < 6; i++)
                 Assert.That(attack.TryFire(Vector3.forward * 10f, i * .6f), Is.True);
             Assert.That(attack.RoundsRemaining, Is.Zero);
+            Assert.That(attack.IsReloading, Is.False, "The last shot alone must not begin reloading.");
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 3.01f), Is.False);
+            Assert.That(attack.IsReloading, Is.True);
+            Assert.That(attack.TryReload(3.02f), Is.False);
             Assert.That(attack.TryFire(Vector3.forward * 10f, 4f), Is.False);
-            Assert.That(attack.TryReload(4f), Is.True);
-            Assert.That(attack.TryFire(Vector3.forward * 10f, 5f), Is.False);
-            attack.TickReload(6.39f);
+            attack.TickReload(5.4f);
             Assert.That(attack.RoundsRemaining, Is.Zero);
-            attack.TickReload(6.4f);
+            attack.TickReload(5.42f);
             Assert.That(attack.RoundsRemaining, Is.EqualTo(6));
-            Assert.That(attack.TryFire(Vector3.forward * 10f, 6.4f), Is.True);
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 5.42f), Is.True);
         }
 
         [Test]
@@ -58,6 +60,27 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(attack.TryReload(.2f), Is.True);
             attack.TickReload(2f);
             Assert.That(attack.RoundsRemaining, Is.EqualTo(20));
+        }
+
+        [Test]
+        public void EmptyRifleBeginsOneReloadOnNextFireInput()
+        {
+            var attack = CreateAttack();
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            for (var i = 0; i < 20; i++)
+                Assert.That(attack.TryFire(Vector3.forward * 10f, i * .125f), Is.True);
+            Assert.That(attack.RoundsRemaining, Is.Zero);
+            Assert.That(attack.IsReloading, Is.False);
+
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 2.38f), Is.False);
+            Assert.That(attack.IsReloading, Is.True);
+            var firstEndTime = attack.ReloadEndTime;
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 2.5f), Is.False);
+            Assert.That(attack.ReloadEndTime, Is.EqualTo(firstEndTime));
+            attack.TickReload(4.2f);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(20));
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 4.2f), Is.True);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
         }
 
         [Test]
