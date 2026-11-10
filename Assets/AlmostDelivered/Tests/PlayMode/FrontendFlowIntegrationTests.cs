@@ -128,6 +128,8 @@ namespace AlmostDelivered.Tests.PlayMode
             yield return WaitForScene(GameSceneFlow.MissionPrototypeScene);
 
             Assert.That(GameObject.Find("Player").GetComponent<MissionPlayerController>(), Is.Not.Null);
+            Assert.That(GameObject.Find("Player").transform.Find("Weapon Settings/Revolver")
+                .GetComponent<RevolverStats>(), Is.Not.Null);
             Assert.That(GameObject.Find("Payload"), Is.Not.Null);
             Assert.That(Object.FindObjectsOfType<PrototypeBossController>(), Is.Empty);
             Assert.That(Object.FindObjectsOfType<PayloadWaveSpawner>(), Has.Length.EqualTo(1));
@@ -299,6 +301,8 @@ namespace AlmostDelivered.Tests.PlayMode
             var player = GameObject.Find("Player");
             var attack = player.GetComponent<RangedAttackController>();
             var controller = player.GetComponent<HubPlayerController>();
+            Assert.That(player.transform.Find("Weapon Settings/Automatic Rifle")
+                .GetComponent<AutomaticRifleStats>(), Is.Not.Null);
             var gunPivot = player.transform.Find("VisualRoot/BodyPivot/RightArmPivot/Weapon");
             var neutralPosition = gunPivot.localPosition;
             var rifleMuzzle = PlayerWeaponLoadout.FindMuzzle(player, PlayerWeaponType.AutomaticRifle);
