@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Presentation;
 using UnityEngine;
 
 namespace AlmostDelivered.Gameplay.Payload
@@ -79,8 +80,8 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField, Min(0f)] private float deathSinkDepth = 1.35f;
         [SerializeField, Min(0f)] private float alertRadius = 7f;
         [SerializeField, Min(.1f)] private float alertIndicatorDuration = 1.25f;
-        [SerializeField, Range(1f, 180f)] private float sightFieldOfView = 110f;
-        [SerializeField, Min(0f)] private float closeAwarenessRadius = 2.5f;
+        [SerializeField, Range(1f, 180f)] private float sightFieldOfView = 120f;
+        [SerializeField, Min(0f)] private float closeAwarenessRadius = 3.25f;
 
         private ActorHealth health;
         private CharacterController characterController;
@@ -217,7 +218,7 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             cargoTarget = cargo;
             assaultingCargo = cargo != null;
-            guardAwarenessRadius = 10f;
+            guardAwarenessRadius = 13f;
         }
 
         public void AssignIdentity(int waveId, int enemyId)
@@ -315,7 +316,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 }
                 else if (pursuingPlayer && rangedAttack != null && !blocked && detourObstacle == null)
                 {
-                    rangedAttack.TryFire(target.position, now);
+                    if (rangedAttack.TryFire(target.position, now))
+                        GetComponentInChildren<ProceduralPoseAnimator>()?.PlayAttack();
                 }
 
                 if (distance <= Definition.StandOffRange && !blocked && detourObstacle == null)
@@ -336,6 +338,7 @@ namespace AlmostDelivered.Gameplay.Payload
             if (pursuingPlayer && now >= nextContactTime)
             {
                 targetHealth.ApplyDamage(Definition.ContactDamage);
+                GetComponentInChildren<ProceduralPoseAnimator>()?.PlayMeleeAttack();
                 nextContactTime = now + Definition.ContactCooldown;
             }
             else if (!pursuingPlayer && now >= nextContactTime)
@@ -343,6 +346,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 var cargo = cargoTarget.GetComponent<CargoIntegrity>();
                 if (cargo != null)
                     cargo.ApplyDamage(Definition.ContactDamage);
+                GetComponentInChildren<ProceduralPoseAnimator>()?.PlayMeleeAttack();
                 nextContactTime = now + Definition.ContactCooldown;
             }
 

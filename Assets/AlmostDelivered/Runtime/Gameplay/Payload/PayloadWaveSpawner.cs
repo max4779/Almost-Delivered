@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Presentation;
 using UnityEngine;
 
 namespace AlmostDelivered.Gameplay.Payload
@@ -344,7 +345,7 @@ namespace AlmostDelivered.Gameplay.Payload
             controller.Configure(pendingEnemy.Definition, playerTarget, rangedAttack);
             if (pendingEnemy.HasGuardPost)
             {
-                controller.ConfigureGuardPost(pendingEnemy.GuardPost, 10f);
+                controller.ConfigureGuardPost(pendingEnemy.GuardPost, 13f);
             }
             else
             {
@@ -358,6 +359,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 visual.name = "VisualRoot";
                 visual.transform.localPosition = Vector3.zero;
                 visual.transform.localRotation = Quaternion.identity;
+                visual.GetComponent<ProceduralPoseAnimator>()?.BindMotionSource(actor.transform);
             }
 
             WorldHealthBar.Attach(actor, new Vector3(0f, 2.2f, 0f));

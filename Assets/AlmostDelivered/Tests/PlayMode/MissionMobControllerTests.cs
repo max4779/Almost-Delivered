@@ -254,6 +254,37 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void GuardDetectsPlayerAtTwelveMetersAndNearBehindButNotBeyondTheNewLimits()
+        {
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            controller.ConfigureGuardPost(mob.transform.position, 13f);
+            mob.transform.forward = Vector3.forward;
+            target.transform.position = Vector3.forward * 12f;
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.True);
+
+            controller.ConfigureGuardPost(mob.transform.position, 13f);
+            target.transform.position = Vector3.forward * 14f;
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.False);
+
+            controller.ConfigureGuardPost(mob.transform.position, 13f);
+            target.transform.position = Vector3.back * 3f;
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.True);
+
+            controller.ConfigureGuardPost(mob.transform.position, 13f);
+            target.transform.position = Vector3.back * 3.5f;
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsGuardPostEngaged, Is.False);
+        }
+
+        [Test]
         public void SolidObstacleBlocksGuardSight()
         {
             floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
