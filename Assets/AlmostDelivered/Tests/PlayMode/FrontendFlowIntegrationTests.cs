@@ -180,6 +180,50 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator RifleAmmoAndIconStayConsistentAfterDeployment()
+        {
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
+                new LoadSceneParameters(LoadSceneMode.Single));
+            PlayerWeaponLoadout.Select(PlayerWeaponType.AutomaticRifle);
+            var player = GameObject.Find("Player");
+            player.GetComponent<HubPlayerController>().SetWeaponType(PlayerWeaponType.AutomaticRifle);
+            yield return null;
+            AssertRifleHud("20/20");
+
+            var gate = Object.FindObjectOfType<HubDeploymentGate>();
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = gate.transform.position;
+            controller.enabled = true;
+            controller.Move(Vector3.zero);
+            Physics.SyncTransforms();
+            yield return new WaitForFixedUpdate();
+            Assert.That(gate.CanLaunch, Is.True);
+            gate.RequestLaunch();
+            yield return WaitForScene(GameSceneFlow.MissionPrototypeScene);
+            yield return null;
+            AssertRifleHud("20/20");
+
+            var missionPlayer = GameObject.Find("Player");
+            var attack = missionPlayer.GetComponent<RangedAttackController>();
+            Assert.That(attack.TryFire(missionPlayer.transform.position + Vector3.forward * 10f, Time.time), Is.True);
+            Object.FindObjectOfType<PlayerAmmoHud>().Refresh();
+            AssertRifleHud("19/20");
+        }
+
+        private static void AssertRifleHud(string rounds)
+        {
+            var hud = Object.FindObjectOfType<PlayerAmmoHud>();
+            Assert.That(hud, Is.Not.Null);
+            var rifle = hud.transform.Find("Automatic Rifle Ammo");
+            Assert.That(rifle.gameObject.activeSelf, Is.True);
+            Assert.That(rifle.Find("Rifle Muzzle"), Is.Not.Null);
+            var count = rifle.Find("Rifle Ammo Count").GetComponent<Text>();
+            Assert.That(count.text, Is.EqualTo(rounds));
+            Assert.That(count.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
+        }
+
+        [UnityTest]
         public IEnumerator HubPlayerCanFireAndSlashBeforeDeployment()
         {
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,

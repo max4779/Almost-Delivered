@@ -172,7 +172,17 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(overlay.Find("Weapon Selection Menu/Automatic Rifle Card").GetComponent<Button>(), Is.Not.Null);
             Assert.That(overlay.Find("Weapon Selection Menu/Revolver Card").GetComponent<Button>(), Is.Not.Null);
             Assert.That(overlay.Find("Weapon Selection Menu/Melee Weapon Card").GetComponent<Button>(), Is.Not.Null);
-            Assert.That(canvas.GetComponentInChildren<PlayerAmmoHud>(true), Is.Not.Null);
+            var ammoHud = canvas.GetComponentInChildren<PlayerAmmoHud>(true);
+            Assert.That(ammoHud, Is.Not.Null);
+            var rifleAmmo = ammoHud.transform.Find("Automatic Rifle Ammo");
+            Assert.That(rifleAmmo.Find("Rifle Muzzle").GetComponent<Image>(), Is.Not.Null);
+            Assert.That(rifleAmmo.Find("Rifle Magazine").GetComponent<Image>(), Is.Not.Null);
+            var rifleCount = rifleAmmo.Find("Rifle Ammo Count").GetComponent<Text>();
+            Assert.That(rifleCount.rectTransform.anchorMin.x, Is.EqualTo(1f));
+            Assert.That(rifleCount.horizontalOverflow, Is.EqualTo(HorizontalWrapMode.Overflow));
+            Assert.That(rifleCount.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
+            Assert.That(overlay.Find("Weapon Selection Menu/Automatic Rifle Card/Ranged Card Label")
+                .GetComponent<Text>().text, Does.Contain("20발"));
             Assert.That(overlay.Find("Weapon Selection Menu/Close Weapon Menu").GetComponent<Button>(), Is.Not.Null);
             Assert.That(hub.transform.Find("Stations/Equipment Bay/Weapon Selection Prompt")
                 .GetComponent<TextMesh>().text, Does.Contain("E"));

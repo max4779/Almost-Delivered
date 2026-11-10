@@ -61,6 +61,12 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectsOfType<PlayerAmmoHud>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectOfType<PlayerAmmoHud>(true).transform.Find("Revolver Ammo/Revolver Cylinder")
                 .GetComponent<AmmoCylinderGraphic>(), Is.Not.Null);
+            var missionRifleCount = Object.FindObjectOfType<PlayerAmmoHud>(true).transform
+                .Find("Automatic Rifle Ammo/Rifle Ammo Count").GetComponent<Text>();
+            Assert.That(missionRifleCount.text, Is.EqualTo("20/20"));
+            Assert.That(missionRifleCount.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
+            Assert.That(Object.FindObjectOfType<PlayerAmmoHud>(true).transform
+                .Find("Automatic Rifle Ammo/Rifle Muzzle"), Is.Not.Null);
             Assert.That(payload.GetComponent<CargoIntegrity>(), Is.Not.Null);
             Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).GetComponent<RectTransform>().anchoredPosition.x,
                 Is.EqualTo(64f));

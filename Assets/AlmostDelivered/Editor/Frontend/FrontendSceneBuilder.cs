@@ -239,6 +239,7 @@ namespace AlmostDelivered.Editor.Frontend
             var muzzle = Child(player.transform, "Hub Player Muzzle");
             muzzle.localPosition = new Vector3(0f, .65f, .85f);
             rangedAttack.Configure(projectileTemplate, muzzle, 28f, .22f, 30f, 2.2f, 0f);
+            PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, PlayerWeaponType.AutomaticRifle);
             var meleeAttack = player.AddComponent<MeleeAttackController>();
             meleeAttack.Configure(34f, 2.8f, 140f, .55f);
             player.AddComponent<MeleeSlashVfx>();
@@ -437,7 +438,7 @@ namespace AlmostDelivered.Editor.Frontend
             var rangedButton = rangedCard.gameObject.AddComponent<Button>();
             rangedButton.targetGraphic = rangedCard;
             var rangedText = UiText("Ranged Card Label", rangedCard.transform,
-                "자동소총\n\n30발 · 빠른 연사\n낮은 피해", 30, Color.white, TextAnchor.MiddleCenter);
+                "자동소총\n\n20발 · 빠른 연사\n낮은 피해", 30, Color.white, TextAnchor.MiddleCenter);
             Stretch(rangedText.rectTransform);
             UnityEventTools.AddPersistentListener(rangedButton.onClick, station.SelectAutomaticRifle);
 

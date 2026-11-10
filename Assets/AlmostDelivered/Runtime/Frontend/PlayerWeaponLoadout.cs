@@ -34,7 +34,7 @@ namespace AlmostDelivered.Frontend
             if (weapon == PlayerWeaponType.Revolver)
                 attack.ConfigureMagazine(6, 2.4f, 55f, .58f);
             else
-                attack.ConfigureMagazine(30, 1.8f, 12f, .12f);
+                attack.ConfigureMagazine(20, 1.8f, 8f, .12f);
         }
 
         public static void ApplyVisual(GameObject actor, PlayerWeaponType weapon)

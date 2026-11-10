@@ -2,6 +2,7 @@ using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace AlmostDelivered.Tests.PlayMode
 {
@@ -9,6 +10,7 @@ namespace AlmostDelivered.Tests.PlayMode
     {
         private GameObject player;
         private GameObject template;
+        private GameObject hudRoot;
 
         [TearDown]
         public void TearDown()
@@ -18,6 +20,7 @@ namespace AlmostDelivered.Tests.PlayMode
                 Object.DestroyImmediate(shot.gameObject);
             if (player != null) Object.DestroyImmediate(player);
             if (template != null) Object.DestroyImmediate(template);
+            if (hudRoot != null) Object.DestroyImmediate(hudRoot);
         }
 
         [Test]
@@ -41,20 +44,56 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void RifleHasThirtyLowerDamageRoundsAndRespectsFireInterval()
+        public void RifleHasTwentyLowerDamageRoundsAndRespectsFireInterval()
         {
             var attack = CreateAttack();
             PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
-            Assert.That(attack.MagazineSize, Is.EqualTo(30));
-            Assert.That(attack.Damage, Is.EqualTo(12f));
+            Assert.That(attack.MagazineSize, Is.EqualTo(20));
+            Assert.That(attack.Damage, Is.EqualTo(8f));
             Assert.That(attack.TryFire(Vector3.forward * 10f, 0f), Is.True);
             Assert.That(attack.TryFire(Vector3.forward * 10f, .05f), Is.False);
-            Assert.That(attack.RoundsRemaining, Is.EqualTo(29));
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
             Assert.That(attack.TryFire(Vector3.forward * 10f, .12f), Is.True);
-            Assert.That(attack.RoundsRemaining, Is.EqualTo(28));
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(18));
             Assert.That(attack.TryReload(.2f), Is.True);
             attack.TickReload(2f);
-            Assert.That(attack.RoundsRemaining, Is.EqualTo(30));
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(20));
+        }
+
+        [Test]
+        public void RifleHudShowsRemainingRoundsWhereReloadPromptWas()
+        {
+            var attack = CreateAttack();
+            PlayerWeaponLoadout.Select(PlayerWeaponType.AutomaticRifle);
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            hudRoot = new GameObject("Ammo HUD", typeof(RectTransform), typeof(PlayerAmmoHud));
+            var revolverPanel = new GameObject("Revolver Ammo");
+            revolverPanel.transform.SetParent(hudRoot.transform, false);
+            var riflePanel = new GameObject("Automatic Rifle Ammo");
+            riflePanel.transform.SetParent(hudRoot.transform, false);
+            var count = new GameObject("Rifle Ammo Count", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text))
+                .GetComponent<Text>();
+            count.transform.SetParent(riflePanel.transform, false);
+            var status = new GameObject("Reload Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text))
+                .GetComponent<Text>();
+            status.transform.SetParent(hudRoot.transform, false);
+            var hud = hudRoot.GetComponent<PlayerAmmoHud>();
+            hud.Configure(attack, revolverPanel, riflePanel, null, count, status);
+
+            Assert.That(count.text, Is.EqualTo("20/20"));
+            Assert.That(count.verticalOverflow, Is.EqualTo(VerticalWrapMode.Overflow));
+            Assert.That(riflePanel.transform.Find("Rifle Muzzle"), Is.Not.Null);
+            Assert.That(status.rectTransform.anchorMin.x, Is.Zero);
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 0f), Is.True);
+            hud.Refresh();
+            Assert.That(count.text, Is.EqualTo("19/20"));
+            Assert.That(attack.TryReload(.2f), Is.True);
+            hud.Refresh();
+            Assert.That(status.text, Is.EqualTo("장전 중..."));
+            Assert.That(count.text, Is.EqualTo("19/20"));
+            attack.TickReload(2f);
+            hud.Refresh();
+            Assert.That(count.text, Is.EqualTo("20/20"));
         }
 
         private RangedAttackController CreateAttack()
