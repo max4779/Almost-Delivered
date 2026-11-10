@@ -9,6 +9,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private readonly float routeLength;
         private readonly float[] checkpointDistances;
         private readonly float movementSpeed;
+        private float escortSpeedMultiplier = 1f;
         private readonly float deploymentDuration;
         private readonly bool requiresRecovery;
         private readonly float activationDuration;
@@ -49,6 +50,12 @@ namespace AlmostDelivered.Gameplay.Payload
         }
 
         public event Action<PayloadWaveRequest> WaveRequested;
+
+        public void SetEscortSpeedMultiplier(float value)
+        {
+            if (!IsFinite(value) || value < 0f) throw new ArgumentOutOfRangeException(nameof(value));
+            escortSpeedMultiplier = value;
+        }
 
         public PayloadMissionSnapshot Snapshot => new PayloadMissionSnapshot(
             phase,
@@ -154,7 +161,7 @@ namespace AlmostDelivered.Gameplay.Payload
             var targetDistance = nextCheckpointIndex < checkpointDistances.Length
                 ? checkpointDistances[nextCheckpointIndex]
                 : routeLength;
-            routeDistance = Mathf.Min(targetDistance, routeDistance + movementSpeed * deltaTime);
+            routeDistance = Mathf.Min(targetDistance, routeDistance + movementSpeed * escortSpeedMultiplier * deltaTime);
 
             if (routeDistance + .0001f < targetDistance)
             {

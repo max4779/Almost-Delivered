@@ -46,7 +46,9 @@ namespace AlmostDelivered.Gameplay.Payload
             bool isActivationInputHeld = false,
             float cargoHealth = -1f,
             float cargoMaximumHealth = -1f,
-            bool isCargoBroken = false)
+            bool isCargoBroken = false,
+            bool isRelayChoicePending = false,
+            string activeRouteOptionId = null)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -64,6 +66,8 @@ namespace AlmostDelivered.Gameplay.Payload
             CargoHealth = cargoHealth;
             CargoMaximumHealth = cargoMaximumHealth;
             IsCargoBroken = isCargoBroken;
+            IsRelayChoicePending = isRelayChoicePending;
+            ActiveRouteOptionId = activeRouteOptionId;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -97,5 +101,9 @@ namespace AlmostDelivered.Gameplay.Payload
         public float CargoMaximumHealth { get; }
 
         public bool IsCargoBroken { get; }
+
+        public bool IsRelayChoicePending { get; }
+
+        public string ActiveRouteOptionId { get; }
     }
 }

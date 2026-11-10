@@ -263,6 +263,111 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void RelayChoicePausesCargoAndOverdriveSpeedsTheNextLeg()
+        {
+            var controller = ReachFirstRelayChoice(out var spawner);
+            var stoppedAt = controller.Snapshot.RouteDistance;
+
+            Assert.That(controller.Snapshot.IsRelayChoicePending, Is.True);
+            Assert.That(controller.Snapshot.ActiveRouteOptionId, Is.Null);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(stoppedAt));
+            Assert.That(controller.ChooseRelayOption("missing-option"), Is.False);
+
+            Assert.That(controller.ChooseRelayOption("overdrive"), Is.True);
+            Assert.That(controller.Snapshot.IsRelayChoicePending, Is.False);
+            Assert.That(controller.Snapshot.ActiveRouteOptionId, Is.EqualTo("overdrive"));
+            controller.Tick(.01f);
+            Assert.That(controller.Snapshot.RouteDistance - stoppedAt, Is.EqualTo(1.5f).Within(.01f));
+            player.transform.position = payload.transform.position + Vector3.forward * 40f;
+            Physics.SyncTransforms();
+            controller.Tick(8f);
+            Assert.That(spawner.LivingEnemies.Count(mob => mob.WaveId < 0), Is.InRange(5, 8));
+        }
+
+        [Test]
+        public void AutoRepairRestoresCargoAndForcesCargoSaboteurInTravelGroup()
+        {
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = ReachFirstRelayChoice(out var spawner);
+            integrity.ApplyDamage(40f);
+            Assert.That(controller.ChooseRelayOption("auto-repair"), Is.True);
+            player.transform.position = payload.transform.position + Vector3.forward * 40f;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(integrity.CurrentHealth, Is.EqualTo(integrity.MaximumHealth - 35f).Within(.01f));
+            controller.Tick(8f);
+            Assert.That(spawner.LivingEnemies.Any(enemy => enemy.WaveId < 0 &&
+                enemy.Definition.Archetype == MissionMobArchetype.CargoSaboteur), Is.True);
+        }
+
+        [Test]
+        public void ShockGridStrengthensNewEnemiesAndDamagesThoseNearCargo()
+        {
+            var controller = ReachFirstRelayChoice(out var spawner);
+            Assert.That(controller.ChooseRelayOption("shock-grid"), Is.True);
+            Assert.That(spawner.EnemyHealthMultiplier, Is.EqualTo(1.25f));
+            Assert.That(spawner.SpawnTravelGroup(
+                new PayloadEscortEncounter(1, 3, PayloadAssaultPattern.LeftAmbush),
+                payload.transform.position, Vector3.forward, Bounds(), 4.5f), Is.True);
+            var enemy = spawner.LivingEnemies.First(mob => mob.WaveId == -2);
+            Assert.That(enemy.Definition.MaxHealth,
+                Is.EqualTo(MissionMobDefinition.For(enemy.Definition.Archetype).MaxHealth * 1.25f).Within(.01f));
+            enemy.transform.position = payload.transform.position + Vector3.forward * 2f;
+            player.transform.position = payload.transform.position + Vector3.forward * 40f;
+            Physics.SyncTransforms();
+            var before = enemy.GetComponent<ActorHealth>().CurrentHealth;
+            controller.Tick(3f);
+            Assert.That(enemy.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(before - 12f).Within(.01f));
+        }
+
+        [Test]
+        public void NewRouteOptionCanCombineEffectsWithoutAddingControllerBranches()
+        {
+            var custom = new RelayRouteOptionDefinition
+            {
+                id = "risky-repair", title = "위험한 수리",
+                benefit = "화물 회복과 가속", drawback = "적 추가와 체력 증가",
+                escortSpeedMultiplier = 1.2f,
+                cargoRepairPerSecond = 3f,
+                extraTravelEnemies = 1,
+                enemyHealthMultiplier = 1.1f
+            };
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = ReachFirstRelayChoice(out var spawner, new[] { custom });
+            Assert.That(controller.RouteOptions.Count, Is.EqualTo(1));
+            integrity.ApplyDamage(20f);
+            Assert.That(controller.ChooseRelayOption("risky-repair"), Is.True);
+            Assert.That(controller.Snapshot.ActiveRouteOptionId, Is.EqualTo(custom.id));
+            Assert.That(spawner.EnemyHealthMultiplier, Is.EqualTo(1.1f));
+            player.transform.position = payload.transform.position + Vector3.forward * 40f;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(integrity.CurrentHealth, Is.EqualTo(integrity.MaximumHealth - 17f).Within(.01f));
+        }
+
+        private PayloadMissionController ReachFirstRelayChoice(
+            out PayloadWaveSpawner spawner, RelayRouteOptionDefinition[] options = null)
+        {
+            spawner = CreateSpawner(801);
+            var controller = NewController();
+            if (options != null) controller.SetRouteOptions(options);
+            controller.Configure(true, 801, Bounds(), player.transform, payload.transform,
+                null, spawner, 100f, 0f, 4.5f, enableRelayChoices: true);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
+            foreach (var enemy in spawner.LivingEnemies.Where(mob => mob.WaveId > 0).ToArray())
+                enemy.GetComponent<ActorHealth>().ApplyDamage(10000f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(controller.Snapshot.IsRelayChoicePending, Is.True);
+            return controller;
+        }
+
+        [Test]
         public void ReplicaDoesNotTickAndOnlyAppliesSnapshots()
         {
             var controller = NewController();

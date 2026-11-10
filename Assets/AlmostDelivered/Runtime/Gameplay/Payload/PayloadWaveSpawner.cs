@@ -25,6 +25,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private Transform[] spawnAnchors = Array.Empty<Transform>();
         [SerializeField] private int missionSeed;
         [SerializeField, Min(1)] private int activeCap = 18;
+        private float enemyHealthMultiplier = 1f;
 
         private readonly Queue<PendingEnemy> pending = new Queue<PendingEnemy>();
         private readonly Dictionary<int, MissionMobController> living = new Dictionary<int, MissionMobController>();
@@ -38,6 +39,14 @@ namespace AlmostDelivered.Gameplay.Payload
         public int ActiveCount => living.Count;
         public int PendingCount => pending.Count;
         public int ActiveCap => activeCap;
+        public float EnemyHealthMultiplier => enemyHealthMultiplier;
+
+        public void SetEnemyHealthMultiplier(float multiplier)
+        {
+            if (float.IsNaN(multiplier) || float.IsInfinity(multiplier) || multiplier <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(multiplier));
+            enemyHealthMultiplier = multiplier;
+        }
 
         public static int WaveCountFor(int checkpointIndex, bool finalWave)
         {
@@ -83,6 +92,7 @@ namespace AlmostDelivered.Gameplay.Payload
             spawnAnchors = anchors ?? Array.Empty<Transform>();
             missionSeed = seed;
             activeCap = Mathf.Max(1, maximumActiveEnemies);
+            enemyHealthMultiplier = 1f;
             shuttingDown = false;
         }
 
@@ -198,7 +208,8 @@ namespace AlmostDelivered.Gameplay.Payload
             Vector3 routeDirection,
             Rect missionBounds,
             float exclusionRadius,
-            Camera visibilityCamera = null)
+            Camera visibilityCamera = null,
+            bool forceCargoSaboteur = false)
         {
             if (encounter.GroupSize <= 0 || !IsFinite(payloadPosition))
             {
@@ -236,7 +247,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 travelGroup.Add(new PendingEnemy(
                     -(encounter.SequenceId + 1),
                     enemyId,
-                    MissionMobDefinition.For(index == 0 && encounter.SequenceId % 3 == 0
+                    MissionMobDefinition.For(index == 0 && (forceCargoSaboteur || encounter.SequenceId % 3 == 0)
                         ? MissionMobArchetype.CargoSaboteur
                         : standardArchetype),
                     candidate,
@@ -342,7 +353,14 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var controller = actor.AddComponent<MissionMobController>();
             controller.AssignIdentity(pendingEnemy.WaveId, pendingEnemy.EnemyId);
-            controller.Configure(pendingEnemy.Definition, playerTarget, rangedAttack);
+            var definition = pendingEnemy.Definition;
+            if (enemyHealthMultiplier != 1f && pendingEnemy.WaveId != RecoveryWaveId &&
+                pendingEnemy.WaveId != PreplacedSentryWaveId)
+                definition = new MissionMobDefinition(definition.Archetype,
+                    definition.MaxHealth * enemyHealthMultiplier, definition.MoveSpeed,
+                    definition.ContactRange, definition.ContactDamage,
+                    definition.ContactCooldown, definition.StandOffRange);
+            controller.Configure(definition, playerTarget, rangedAttack);
             if (pendingEnemy.HasGuardPost)
             {
                 controller.ConfigureGuardPost(pendingEnemy.GuardPost, 13f);

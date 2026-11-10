@@ -76,7 +76,8 @@ namespace AlmostDelivered.Editor.Frontend
                 true,
                 6,
                 3f,
-                8);
+                8,
+                true);
 
             BuildPayloadEscortRadius(payload.transform, mission);
             BuildPayloadActivationView(payload.transform, mission);

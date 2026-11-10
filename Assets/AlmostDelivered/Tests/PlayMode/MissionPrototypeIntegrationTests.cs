@@ -68,6 +68,9 @@ namespace AlmostDelivered.Tests.PlayMode
                 Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
                 ClearWave(waves);
                 Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+                Assert.That(mission.Snapshot.IsRelayChoicePending, Is.True);
+                Assert.That(mission.ChooseRelayOption(mission.RouteOptions[checkpoint].id), Is.True);
+                Assert.That(mission.Snapshot.IsRelayChoicePending, Is.False);
             }
 
             MovePlayerIntoEscortRadius(player, payload);

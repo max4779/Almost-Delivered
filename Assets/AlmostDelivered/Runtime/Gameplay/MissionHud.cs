@@ -101,18 +101,22 @@ namespace AlmostDelivered.Gameplay
 
             var state = payloadMission.Snapshot;
             if (payloadPhaseText != null)
-                payloadPhaseText.text = $"MISSION  {PhaseLabel(state.Phase)}";
+                payloadPhaseText.text = state.IsRelayChoicePending
+                    ? "MISSION  SELECT ROUTE PROTOCOL"
+                    : $"MISSION  {PhaseLabel(state.Phase)}";
             if (payloadProgressText != null)
                 payloadProgressText.text = $"PAYLOAD  {Mathf.RoundToInt(state.NormalizedProgress * 100f)}%";
             if (payloadCheckpointText != null)
                 payloadCheckpointText.text = $"CHECKPOINT  {Mathf.Clamp(state.NextCheckpointIndex + 1, 1, 3)} / 3";
             if (payloadEscortText != null)
-                payloadEscortText.text = payloadMission.CargoHealth != null && payloadMission.CargoHealth.IsBroken
+                payloadEscortText.text = state.IsRelayChoicePending
+                    ? "ESCORT  WAITING FOR ROUTE CHOICE"
+                    : payloadMission.CargoHealth != null && payloadMission.CargoHealth.IsBroken
                     ? "ESCORT  CARGO BROKEN"
                     : state.Phase == PayloadMissionPhase.Recovering ||
                                          state.Phase == PayloadMissionPhase.Activating
                     ? $"OBJECTIVE  {RecoveryLabel(state)}"
-                    : $"ESCORT  {EscortLabel(state)}";
+                    : $"ESCORT  {EscortLabel(state)}{RouteOptionLabel(payloadMission.ActiveRouteOption)}";
             if (payloadElapsedText != null)
             {
                 var totalSeconds = Mathf.Max(0, Mathf.FloorToInt(state.ElapsedTime));
@@ -202,6 +206,11 @@ namespace AlmostDelivered.Gameplay
             if (state.IsEscortActive)
                 return "MOVING";
             return "WAITING";
+        }
+
+        private static string RouteOptionLabel(RelayRouteOptionDefinition option)
+        {
+            return option == null ? string.Empty : $" · {option.title}";
         }
 
         private static string RecoveryLabel(PayloadMissionSnapshot state)

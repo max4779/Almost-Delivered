@@ -1,6 +1,7 @@
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace AlmostDelivered.Gameplay
 {
@@ -76,7 +77,8 @@ namespace AlmostDelivered.Gameplay
 
             if (TryGetMouseAim(out var aimPoint))
             {
-                if (Input.GetMouseButton(0))
+                if (Input.GetMouseButton(0) &&
+                    (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
                     AimAndFire(aimPoint, Time.time, Time.deltaTime);
                 else
                     AimAt(aimPoint, Time.deltaTime);

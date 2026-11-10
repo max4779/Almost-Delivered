@@ -5721,6 +5721,7 @@ MonoBehaviour:
   configuredPreplacedSentryCount: 8
   configuredCargoNoiseRadius: 26
   configuredCargoNoiseInterval: 0.65
+  relayChoicesEnabled: 1
   escortRadius: 4.5
 --- !u!4 &407559111
 Transform:
