@@ -80,8 +80,10 @@ namespace AlmostDelivered.Presentation.Editor
                     if (type == VisualArchetype.Player) {
                         var weapon=Child(right,"Weapon");
                         var rifle=Child(weapon,"RangedWeapon");
+                        rifle.localPosition = new Vector3(0f,.12f,0f);
                         Part(rifle,"Rifle Receiver",PrimitiveType.Cube,new Vector3(.15f,-.43f,.31f),new Vector3(.18f,.2f,.55f),rust);
                         Part(rifle,"Rifle Barrel",PrimitiveType.Cylinder,new Vector3(.15f,-.39f,.59f),new Vector3(.06f,.16f,.06f),gold,Quaternion.Euler(90f,0f,0f));
+                        Child(rifle,"Rifle Muzzle").localPosition = new Vector3(.15f,-.39f,.69f);
                         Part(rifle,"Rifle Stock",PrimitiveType.Cube,new Vector3(.15f,-.48f,0f),new Vector3(.14f,.17f,.18f),rust);
                         Part(rifle,"Rifle Magazine",PrimitiveType.Cube,new Vector3(.15f,-.58f,.29f),new Vector3(.13f,.2f,.15f),gold);
                         Part(rifle,"Rifle Sight",PrimitiveType.Cube,new Vector3(.15f,-.28f,.36f),new Vector3(.08f,.08f,.19f),glow);
@@ -89,6 +91,7 @@ namespace AlmostDelivered.Presentation.Editor
                         Part(revolver,"Revolver Frame",PrimitiveType.Cube,new Vector3(.14f,-.44f,.27f),new Vector3(.2f,.17f,.4f),rust);
                         Part(revolver,"Revolver Cylinder",PrimitiveType.Cylinder,new Vector3(.14f,-.43f,.32f),new Vector3(.17f,.13f,.17f),gold,Quaternion.Euler(90f,0f,0f));
                         Part(revolver,"Revolver Barrel",PrimitiveType.Cylinder,new Vector3(.14f,-.42f,.62f),new Vector3(.08f,.22f,.08f),gold,Quaternion.Euler(90f,0f,0f));
+                        Child(revolver,"Revolver Muzzle").localPosition = new Vector3(.14f,-.42f,.76f);
                         Part(revolver,"Revolver Grip",PrimitiveType.Cube,new Vector3(.14f,-.62f,.12f),new Vector3(.15f,.3f,.14f),rust);
                         var blade=Child(right,"MeleeWeapon"); blade.gameObject.SetActive(false);
                         Part(blade,"Grip",PrimitiveType.Cube,new Vector3(.14f,-.4f,.16f),new Vector3(.16f,.16f,.35f),rust);

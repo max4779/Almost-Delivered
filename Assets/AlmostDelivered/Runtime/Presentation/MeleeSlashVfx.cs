@@ -9,6 +9,8 @@ namespace AlmostDelivered.Presentation
         private const int Segments = 28;
         private const float Duration = .26f;
         [SerializeField] private Material windMaterial;
+        [SerializeField] private AudioClip slashSound;
+        [SerializeField] private AudioSource audioSource;
         private Mesh effectMesh;
         private MeshRenderer effectRenderer;
         private Material fallbackMaterial;
@@ -32,6 +34,15 @@ namespace AlmostDelivered.Presentation
                 effectRenderer.sharedMaterial = material != null ? material : FallbackMaterial();
         }
 
+        public void ConfigureSound(AudioClip clip)
+        {
+            slashSound = clip;
+            if (audioSource == null) audioSource = GetComponent<AudioSource>();
+            if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+            audioSource.spatialBlend = 0f;
+        }
+
         public void Play(float reach, float arcDegrees)
         {
             Play(reach, arcDegrees, transform.forward);
@@ -52,6 +63,8 @@ namespace AlmostDelivered.Presentation
             effectRenderer.enabled = true;
             PinToAttack();
             UpdateColors();
+            if (audioSource != null && slashSound != null)
+                audioSource.PlayOneShot(slashSound, .65f);
         }
 
         public void ConfirmHit()

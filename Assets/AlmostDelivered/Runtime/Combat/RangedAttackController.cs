@@ -19,6 +19,7 @@ namespace AlmostDelivered.Combat
         [SerializeField] private int magazineSize;
         [SerializeField] private int roundsRemaining;
         [SerializeField] private float reloadDuration;
+        [SerializeField] private bool pierceEnemies;
         private float reloadEndTime;
         private bool isReloading;
 
@@ -28,6 +29,26 @@ namespace AlmostDelivered.Combat
         public float ReloadEndTime => reloadEndTime;
         public float Damage => damage;
         public float FireCooldown => cooldown;
+        public float MaximumRange => projectileSpeed * projectileLifetime;
+        public float ShotNoiseRadius => shotNoiseRadius;
+        public Transform Muzzle => muzzle;
+        public event Action ShotFired;
+
+        public void SetMuzzle(Transform muzzleTransform)
+        {
+            if (muzzleTransform == null) throw new ArgumentNullException(nameof(muzzleTransform));
+            muzzle = muzzleTransform;
+        }
+
+        public void SetRangeAndNoise(float maximumRange, float noiseRadius)
+        {
+            if (!IsFinite(maximumRange) || maximumRange <= 0f)
+                throw new ArgumentOutOfRangeException(nameof(maximumRange));
+            if (!IsFinite(noiseRadius) || noiseRadius < 0f)
+                throw new ArgumentOutOfRangeException(nameof(noiseRadius));
+            projectileLifetime = maximumRange / projectileSpeed;
+            shotNoiseRadius = noiseRadius;
+        }
 
         private void Awake()
         {
@@ -70,19 +91,25 @@ namespace AlmostDelivered.Combat
             magazineSize = 0;
             roundsRemaining = 0;
             isReloading = false;
+            pierceEnemies = false;
         }
 
-        public void ConfigureMagazine(int capacity, float reloadSeconds, float shotDamage, float shotCooldown)
+        public void ConfigureMagazine(int capacity, float reloadSeconds, float shotDamage, float shotCooldown,
+            bool piercesEnemies = false)
         {
             if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
             if (!IsFinite(reloadSeconds) || reloadSeconds <= 0f) throw new ArgumentOutOfRangeException(nameof(reloadSeconds));
             if (!IsFinite(shotDamage) || shotDamage < 0f) throw new ArgumentOutOfRangeException(nameof(shotDamage));
             if (!IsFinite(shotCooldown) || shotCooldown < 0f) throw new ArgumentOutOfRangeException(nameof(shotCooldown));
+            if (magazineSize == capacity && reloadDuration == reloadSeconds && damage == shotDamage &&
+                cooldown == shotCooldown && pierceEnemies == piercesEnemies)
+                return;
             magazineSize = capacity;
             roundsRemaining = capacity;
             reloadDuration = reloadSeconds;
             damage = shotDamage;
             cooldown = shotCooldown;
+            pierceEnemies = piercesEnemies;
             isReloading = false;
             nextFireTime = 0f;
         }
@@ -137,11 +164,13 @@ namespace AlmostDelivered.Combat
                 planarDirection,
                 projectileSpeed,
                 damage,
-                projectileLifetime);
+                projectileLifetime,
+                pierceEnemies);
             clone.SetActive(true);
             nextFireTime = now + cooldown;
             if (magazineSize > 0) roundsRemaining--;
             CombatNoiseSystem.Emit(muzzle.position, shotNoiseRadius, ownerTeam.Team);
+            ShotFired?.Invoke();
             return true;
         }
 

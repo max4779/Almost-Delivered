@@ -25,6 +25,7 @@ namespace AlmostDelivered.Editor.Frontend
         private const string CommanderScenePath = "Assets/AlmostDelivered/Scenes/CommanderAITest.unity";
         private const string FrontendFontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
         private const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/Frontend";
+        private const string WeaponAudioRoot = "Assets/AlmostDelivered/Art/Audio/Weapons";
 
         private static readonly Color StructureColor = new Color(.075f, .105f, .14f);
         private static readonly Color FloorColor = new Color(.11f, .14f, .17f);
@@ -227,6 +228,8 @@ namespace AlmostDelivered.Editor.Frontend
             characterController.height = 2f;
             characterController.radius = .45f;
             player.AddComponent<CombatTeam>().Team = CombatTeamId.Player;
+            AttachVisual(player, VisualArchetype.Player);
+            WeaponSettingsHierarchyBuilder.Attach(player.transform);
             var projectileTemplate = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             projectileTemplate.name = "Hub Projectile Template";
             projectileTemplate.transform.SetParent(hub.transform, false);
@@ -236,15 +239,18 @@ namespace AlmostDelivered.Editor.Frontend
             projectileTemplate.AddComponent<CombatProjectile>();
             projectileTemplate.SetActive(false);
             var rangedAttack = player.AddComponent<RangedAttackController>();
-            var muzzle = Child(player.transform, "Hub Player Muzzle");
-            muzzle.localPosition = new Vector3(0f, .65f, .85f);
+            var muzzle = PlayerWeaponLoadout.FindMuzzle(player, PlayerWeaponType.AutomaticRifle);
             rangedAttack.Configure(projectileTemplate, muzzle, 28f, .22f, 30f, 2.2f, 0f);
             PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, PlayerWeaponType.AutomaticRifle);
             var meleeAttack = player.AddComponent<MeleeAttackController>();
-            meleeAttack.Configure(34f, 2.8f, 140f, .55f);
-            player.AddComponent<MeleeSlashVfx>();
+            PlayerWeaponLoadout.ConfigureMelee(meleeAttack);
+            player.AddComponent<MeleeSlashVfx>().ConfigureSound(
+                AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/MeleeSlash.wav"));
             player.AddComponent<HubPlayerController>();
-            AttachVisual(player, VisualArchetype.Player);
+            player.GetComponentInChildren<ProceduralPoseAnimator>().BindMotionSource(player.transform);
+            player.AddComponent<GunfireFeedback>().Configure(rangedAttack, muzzle,
+                AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/AutomaticRifleShot.wav"),
+                AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/RevolverShot.wav"), materials["Amber"]);
 
             var cameraObject = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener), typeof(QuarterViewCamera));
             cameraObject.tag = "MainCamera";
@@ -413,6 +419,8 @@ namespace AlmostDelivered.Editor.Frontend
             Stretch(hint.rectTransform);
             var playerAttack = Object.FindObjectOfType<HubPlayerController>().GetComponent<RangedAttackController>();
             AmmoHudBuilder.Build(canvasObject.transform, playerAttack, LoadFrontendFont());
+            PlayerStaminaHudBuilder.Build(canvasObject.transform,
+                playerAttack.GetComponent<AlmostDelivered.Gameplay.PlayerMobility>(), LoadFrontendFont(), false);
 
             var overlay = UiImage("Weapon Selection Overlay", canvasObject.transform,
                 new Color(.005f, .015f, .025f, .82f));

@@ -25,6 +25,7 @@ namespace AlmostDelivered.Editor.Frontend
         private const float RoadWidth = 5.5f;
         private const string FontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
         private const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/Frontend";
+        private const string WeaponAudioRoot = "Assets/AlmostDelivered/Art/Audio/Weapons";
 
         [MenuItem("Almost Delivered/Frontend/Build mission prototype")]
         public static void BuildOrUpdate()
@@ -145,15 +146,23 @@ namespace AlmostDelivered.Editor.Frontend
             var character = player.AddComponent<CharacterController>();
             character.height = 2f;
             character.radius = .5f;
+            WeaponSettingsHierarchyBuilder.Attach(player.transform);
             var attack = player.AddComponent<RangedAttackController>();
-            attack.Configure(projectileTemplate, Child(player.transform, "Player Muzzle", new Vector3(0f, .65f, .85f)), 28f, .22f, 30f, 2.2f);
+            var muzzle = PlayerWeaponLoadout.FindMuzzle(player, PlayerWeaponType.AutomaticRifle);
+            attack.Configure(projectileTemplate, muzzle, 28f, .22f, 30f, 2.2f);
+            player.AddComponent<GunfireFeedback>().Configure(attack, muzzle,
+                AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/AutomaticRifleShot.wav"),
+                AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/RevolverShot.wav"), Material("Amber"));
             var melee = player.AddComponent<MeleeAttackController>();
-            melee.Configure(34f, 2.8f, 140f, .55f);
-            player.AddComponent<MeleeSlashVfx>().Configure(CreateSlashMaterial());
+            PlayerWeaponLoadout.ConfigureMelee(melee);
+            var slash = player.AddComponent<MeleeSlashVfx>();
+            slash.Configure(CreateSlashMaterial());
+            slash.ConfigureSound(AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/MeleeSlash.wav"));
             var controller = player.AddComponent<MissionPlayerController>();
             controller.Configure(character, attack, 6.5f);
             controller.ConfigureMelee(melee);
             controller.SetWeaponType(PlayerWeaponType.Ranged);
+            player.GetComponentInChildren<ProceduralPoseAnimator>().BindMotionSource(player.transform);
             return player;
         }
 
@@ -416,7 +425,7 @@ namespace AlmostDelivered.Editor.Frontend
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
-            var controls = HudText("Controls", canvasObject.transform, new Vector2(24f, -22f), new Vector2(950f, 54f), 26, TextAnchor.UpperLeft);
+            var controls = HudText("Controls", canvasObject.transform, new Vector2(24f, -22f), new Vector2(1480f, 54f), 23, TextAnchor.UpperLeft);
             var playerHealth = HudText("Player Health", canvasObject.transform, new Vector2(24f, -82f), new Vector2(420f, 48f), 28, TextAnchor.UpperLeft);
             var targetCount = HudText("Target Count", canvasObject.transform, new Vector2(24f, -132f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var phase = HudText("Mission Phase", canvasObject.transform, new Vector2(0f, -22f), new Vector2(620f, 52f), 30, TextAnchor.UpperCenter, false, true);
@@ -453,6 +462,9 @@ namespace AlmostDelivered.Editor.Frontend
             hud.BindActivationCountdown(activationCountdown);
             hud.BindCargoHealth(cargoHealth);
             BuildPlayerHealthBar(canvasObject.transform, health);
+            PlayerStaminaHudBuilder.Build(canvasObject.transform,
+                player.GetComponent<PlayerMobility>(),
+                AssetDatabase.LoadAssetAtPath<Font>(FontPath) ?? Resources.GetBuiltinResource<Font>("Arial.ttf"), true);
             AmmoHudBuilder.Build(canvasObject.transform, player.GetComponent<RangedAttackController>(),
                 AssetDatabase.LoadAssetAtPath<Font>(FontPath) ?? Resources.GetBuiltinResource<Font>("Arial.ttf"));
 

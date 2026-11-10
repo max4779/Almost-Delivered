@@ -28,9 +28,10 @@ namespace AlmostDelivered.Tests.PlayMode
             var body = Child(visualRoot, "Body", new Vector3(.1f, .9f, -.2f), new Vector3(3f, 8f, 5f));
             var left = Child(body, "Left arm", new Vector3(-.4f, .3f, .1f), new Vector3(7f, -4f, 11f));
             var right = Child(body, "Right arm", new Vector3(.4f, .3f, .1f), new Vector3(-5f, 6f, -9f));
+            var firearm = Child(right, "Weapon", Vector3.zero, Vector3.zero);
             var leftLeg = Child(body, "Left leg", new Vector3(-.2f, -.35f, 0f), Vector3.zero);
             var rightLeg = Child(body, "Right leg", new Vector3(.2f, -.35f, 0f), Vector3.zero);
-            pivots = new[] { body, left, right, leftLeg, rightLeg };
+            pivots = new[] { body, left, right, leftLeg, rightLeg, firearm };
             positions = new Vector3[pivots.Length];
             rotations = new Quaternion[pivots.Length];
             scales = new Vector3[pivots.Length];
@@ -82,6 +83,42 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator MovingRifleBurstHoldsArmsWhileLegsKeepWalking()
+        {
+            var first = Time.realtimeSinceStartup;
+            var leftMin = float.PositiveInfinity;
+            var leftMax = float.NegativeInfinity;
+            var rightMin = float.PositiveInfinity;
+            var rightMax = float.NegativeInfinity;
+            var largestLegStride = 0f;
+            var samples = 0;
+            while (Time.realtimeSinceStartup - first < .7f)
+            {
+                MoveSource();
+                animator.PlayGunshot(false);
+                yield return null;
+                if (Time.realtimeSinceStartup - first < .2f) continue;
+                var left = Mathf.DeltaAngle(0f,
+                    (Quaternion.Inverse(rotations[1]) * pivots[1].localRotation).eulerAngles.x);
+                var right = Mathf.DeltaAngle(0f,
+                    (Quaternion.Inverse(rotations[2]) * pivots[2].localRotation).eulerAngles.x);
+                leftMin = Mathf.Min(leftMin, left);
+                leftMax = Mathf.Max(leftMax, left);
+                rightMin = Mathf.Min(rightMin, right);
+                rightMax = Mathf.Max(rightMax, right);
+                var leg = Mathf.DeltaAngle(0f,
+                    (Quaternion.Inverse(rotations[3]) * pivots[3].localRotation).eulerAngles.x);
+                largestLegStride = Mathf.Max(largestLegStride, Mathf.Abs(leg));
+                samples++;
+            }
+            Assert.That(samples, Is.GreaterThan(5));
+            Assert.That(leftMax - leftMin, Is.LessThan(8f));
+            Assert.That(rightMax - rightMin, Is.LessThan(8f));
+            Assert.That(largestLegStride, Is.GreaterThan(8f));
+            AssertRootUnchanged();
+        }
+
+        [UnityTest]
         public IEnumerator Idle_ReturnsAllConfiguredPivotsToRecordedNeutralPose()
         {
             var until = Time.realtimeSinceStartup + .6f;
@@ -127,6 +164,27 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(Quaternion.Angle(rotations[0], pivots[0].localRotation), Is.GreaterThan(3f));
             yield return new WaitForSecondsRealtime(1.3f);
             AssertNeutral();
+        }
+
+        [UnityTest]
+        public IEnumerator Gunshot_RevolverRecoilsMoreThanRifleAndBothReturnToNeutral()
+        {
+            animator.PlayGunshot(false);
+            yield return new WaitForSecondsRealtime(.025f);
+            var rifleKick = Quaternion.Angle(rotations[2], pivots[2].localRotation);
+            Assert.That(rifleKick, Is.GreaterThan(1f));
+            Assert.That(Vector3.Distance(positions[5], pivots[5].localPosition), Is.GreaterThan(.015f));
+            yield return new WaitForSecondsRealtime(.8f);
+            AssertNeutral();
+
+            animator.PlayGunshot(true);
+            yield return new WaitForSecondsRealtime(.025f);
+            var revolverKick = Quaternion.Angle(rotations[2], pivots[2].localRotation);
+            Assert.That(revolverKick, Is.GreaterThan(rifleKick));
+            Assert.That(Quaternion.Angle(rotations[5], pivots[5].localRotation), Is.GreaterThan(5f));
+            yield return new WaitForSecondsRealtime(.8f);
+            AssertNeutral();
+            AssertRootUnchanged();
         }
 
         [UnityTest]

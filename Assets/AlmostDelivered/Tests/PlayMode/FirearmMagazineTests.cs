@@ -1,6 +1,7 @@
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -30,7 +31,11 @@ namespace AlmostDelivered.Tests.PlayMode
             PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.Revolver);
             Assert.That(attack.MagazineSize, Is.EqualTo(6));
             Assert.That(attack.Damage, Is.EqualTo(55f));
-            for (var i = 0; i < 6; i++)
+            Assert.That(attack.MaximumRange, Is.EqualTo(38f).Within(.001f));
+            Assert.That(attack.ShotNoiseRadius, Is.EqualTo(28f));
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 0f), Is.True);
+            Assert.That(Object.FindObjectOfType<CombatProjectile>().PiercesEnemies, Is.True);
+            for (var i = 1; i < 6; i++)
                 Assert.That(attack.TryFire(Vector3.forward * 10f, i * .6f), Is.True);
             Assert.That(attack.RoundsRemaining, Is.Zero);
             Assert.That(attack.IsReloading, Is.False, "The last shot alone must not begin reloading.");
@@ -52,7 +57,10 @@ namespace AlmostDelivered.Tests.PlayMode
             PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
             Assert.That(attack.MagazineSize, Is.EqualTo(20));
             Assert.That(attack.Damage, Is.EqualTo(8f));
+            Assert.That(attack.MaximumRange, Is.EqualTo(32f).Within(.001f));
+            Assert.That(attack.ShotNoiseRadius, Is.EqualTo(24f));
             Assert.That(attack.TryFire(Vector3.forward * 10f, 0f), Is.True);
+            Assert.That(Object.FindObjectOfType<CombatProjectile>().PiercesEnemies, Is.False);
             Assert.That(attack.TryFire(Vector3.forward * 10f, .05f), Is.False);
             Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
             Assert.That(attack.TryFire(Vector3.forward * 10f, .12f), Is.True);
@@ -60,6 +68,25 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(attack.TryReload(.2f), Is.True);
             attack.TickReload(2f);
             Assert.That(attack.RoundsRemaining, Is.EqualTo(20));
+        }
+
+        [Test]
+        public void ReapplyingSameFirearmKeepsAmmoReloadAndFireCooldown()
+        {
+            var attack = CreateAttack();
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            Assert.That(attack.TryFire(Vector3.forward * 10f, 0f), Is.True);
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
+            Assert.That(attack.TryFire(Vector3.forward * 10f, .05f), Is.False);
+            Assert.That(attack.TryFire(Vector3.forward * 10f, .12f), Is.True);
+
+            Assert.That(attack.TryReload(.13f), Is.True);
+            var reloadEnd = attack.ReloadEndTime;
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            Assert.That(attack.IsReloading, Is.True);
+            Assert.That(attack.ReloadEndTime, Is.EqualTo(reloadEnd));
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(18));
         }
 
         [Test]
@@ -81,6 +108,39 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(attack.RoundsRemaining, Is.EqualTo(20));
             Assert.That(attack.TryFire(Vector3.forward * 10f, 4.2f), Is.True);
             Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
+        }
+
+        [Test]
+        public void WeaponSettingsChildrenOverrideDamageAndRange()
+        {
+            var attack = CreateAttack();
+            var rifle = new GameObject("Automatic Rifle", typeof(AutomaticRifleStats));
+            rifle.transform.SetParent(player.transform, false);
+            var rifleProperties = new SerializedObject(rifle.GetComponent<AutomaticRifleStats>());
+            rifleProperties.FindProperty("damage").floatValue = 12f;
+            rifleProperties.FindProperty("range").floatValue = 27f;
+            rifleProperties.ApplyModifiedPropertiesWithoutUndo();
+
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            Assert.That(attack.Damage, Is.EqualTo(12f));
+            Assert.That(attack.MaximumRange, Is.EqualTo(27f).Within(.001f));
+
+            var revolver = new GameObject("Revolver", typeof(RevolverStats));
+            revolver.transform.SetParent(player.transform, false);
+            var revolverProperties = new SerializedObject(revolver.GetComponent<RevolverStats>());
+            revolverProperties.FindProperty("damage").floatValue = 63f;
+            revolverProperties.ApplyModifiedPropertiesWithoutUndo();
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.Revolver);
+            Assert.That(attack.Damage, Is.EqualTo(63f));
+
+            var melee = new GameObject("Melee Weapon", typeof(MeleeWeaponStats));
+            melee.transform.SetParent(player.transform, false);
+            var meleeProperties = new SerializedObject(melee.GetComponent<MeleeWeaponStats>());
+            meleeProperties.FindProperty("damage").floatValue = 47f;
+            meleeProperties.ApplyModifiedPropertiesWithoutUndo();
+            var meleeAttack = player.AddComponent<MeleeAttackController>();
+            PlayerWeaponLoadout.ConfigureMelee(meleeAttack);
+            Assert.That(meleeAttack.Damage, Is.EqualTo(47f));
         }
 
         [Test]

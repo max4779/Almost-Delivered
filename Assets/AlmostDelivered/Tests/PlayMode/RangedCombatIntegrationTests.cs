@@ -92,6 +92,54 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator PiercingProjectileDamagesTwoEnemiesOnceEachThenStopsAtWall()
+        {
+            var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
+            var front = Actor("Front Enemy", CombatTeamId.Enemy, new Vector3(0f, 0f, 1f), true);
+            var secondHitbox = new GameObject("Second Body Hitbox", typeof(BoxCollider));
+            secondHitbox.transform.SetParent(front.transform, false);
+            var rear = Actor("Rear Enemy", CombatTeamId.Enemy, new Vector3(0f, 0f, 2.5f), true);
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.transform.position = new Vector3(0f, 0f, 4f);
+            var projectile = Projectile(owner, CombatTeamId.Player, Vector3.forward, 300f, 30f, 1f,
+                pierceEnemies: true);
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Assert.That(front.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(70f));
+            Assert.That(rear.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(70f));
+            Assert.That(projectile == null, Is.True);
+            Object.Destroy(owner);
+            Object.Destroy(front);
+            Object.Destroy(rear);
+            Object.Destroy(wall);
+        }
+
+        [UnityTest]
+        public IEnumerator PiercingProjectileCannotDamageEnemyBehindWall()
+        {
+            var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
+            var front = Actor("Front Enemy", CombatTeamId.Enemy, new Vector3(0f, 0f, 1f), true);
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.transform.position = new Vector3(0f, 0f, 2.5f);
+            var rear = Actor("Rear Enemy", CombatTeamId.Enemy, new Vector3(0f, 0f, 4f), true);
+            var projectile = Projectile(owner, CombatTeamId.Player, Vector3.forward, 300f, 30f, 1f,
+                pierceEnemies: true);
+
+            yield return new WaitForFixedUpdate();
+            yield return null;
+
+            Assert.That(front.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(70f));
+            Assert.That(rear.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(100f));
+            Assert.That(projectile == null, Is.True);
+            Object.Destroy(owner);
+            Object.Destroy(front);
+            Object.Destroy(rear);
+            Object.Destroy(wall);
+        }
+
+        [UnityTest]
         public IEnumerator ProjectileExpiresAfterLifetime()
         {
             var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);
@@ -123,7 +171,8 @@ namespace AlmostDelivered.Tests.PlayMode
             float speed,
             float damage,
             float lifetime,
-            float radius = 0f)
+            float radius = 0f,
+            bool pierceEnemies = false)
         {
             var projectile = new GameObject("Projectile", typeof(CombatProjectile));
             projectile.transform.position = owner.transform.position;
@@ -133,7 +182,8 @@ namespace AlmostDelivered.Tests.PlayMode
                 collider.radius = radius;
                 collider.isTrigger = true;
             }
-            projectile.GetComponent<CombatProjectile>().Configure(owner, team, direction, speed, damage, lifetime);
+            projectile.GetComponent<CombatProjectile>().Configure(owner, team, direction, speed, damage, lifetime,
+                pierceEnemies);
             Physics.SyncTransforms();
             return projectile;
         }

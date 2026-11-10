@@ -206,9 +206,17 @@ namespace AlmostDelivered.Tests.PlayMode
 
             var missionPlayer = GameObject.Find("Player");
             var attack = missionPlayer.GetComponent<RangedAttackController>();
+            Assert.That(attack.Muzzle,
+                Is.EqualTo(PlayerWeaponLoadout.FindMuzzle(missionPlayer, PlayerWeaponType.AutomaticRifle)));
+            var feedback = missionPlayer.GetComponent<AlmostDelivered.Presentation.GunfireFeedback>();
+            Assert.That(feedback, Is.Not.Null);
+            Assert.That(feedback.IsFlashing, Is.False);
             Assert.That(attack.TryFire(missionPlayer.transform.position + Vector3.forward * 10f, Time.time), Is.True);
+            Assert.That(feedback.IsFlashing, Is.True);
             Object.FindObjectOfType<PlayerAmmoHud>().Refresh();
             AssertRifleHud("19/20");
+            yield return new WaitForSecondsRealtime(.2f);
+            Assert.That(feedback.IsFlashing, Is.False);
         }
 
         private static void AssertRifleHud(string rounds)
@@ -243,9 +251,83 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(player.GetComponent<MeleeAttackController>().enabled, Is.True);
             Assert.That(hubController.AimAndFire(aimPoint, Time.time, .1f), Is.True);
             Assert.That(player.GetComponent<AlmostDelivered.Presentation.MeleeSlashVfx>().IsVisible, Is.True);
+            var slash = player.GetComponent<AlmostDelivered.Presentation.MeleeSlashVfx>();
+            Assert.That(new UnityEditor.SerializedObject(slash).FindProperty("slashSound").objectReferenceValue,
+                Is.Not.Null);
 
             hubController.SetInputLocked(true);
             Assert.That(hubController.AimAndFire(aimPoint, Time.time + 1f, .1f), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator EnteringWeaponStationKeepsAmmoAndShotInterval()
+        {
+            PlayerWeaponLoadout.Select(PlayerWeaponType.AutomaticRifle);
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
+                new LoadSceneParameters(LoadSceneMode.Single));
+            var player = GameObject.Find("Player");
+            var attack = player.GetComponent<RangedAttackController>();
+            var station = Object.FindObjectOfType<HubWeaponStation>();
+            var controller = player.GetComponent<CharacterController>();
+            var now = Time.time + 1f;
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, now), Is.True);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
+
+            controller.enabled = false;
+            player.transform.position = station.transform.position;
+            controller.enabled = true;
+            Physics.SyncTransforms();
+            station.SendMessage("OnTriggerEnter", controller);
+            Assert.That(station.CanSelect, Is.True);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, now + .05f), Is.False);
+
+            Assert.That(station.OpenMenu(), Is.True);
+            Assert.That(station.Select(PlayerWeaponType.AutomaticRifle), Is.True);
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(19));
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, now + .05f), Is.False);
+            station.CloseMenu();
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, now + .12f), Is.True);
+        }
+
+        [UnityTest]
+        public IEnumerator GunshotsStartAtSelectedWeaponBarrelAndMoveGun()
+        {
+            PlayerWeaponLoadout.Select(PlayerWeaponType.AutomaticRifle);
+            yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
+                new LoadSceneParameters(LoadSceneMode.Single));
+            var player = GameObject.Find("Player");
+            var attack = player.GetComponent<RangedAttackController>();
+            var controller = player.GetComponent<HubPlayerController>();
+            var gunPivot = player.transform.Find("VisualRoot/BodyPivot/RightArmPivot/Weapon");
+            var neutralPosition = gunPivot.localPosition;
+            var rifleMuzzle = PlayerWeaponLoadout.FindMuzzle(player, PlayerWeaponType.AutomaticRifle);
+            Assert.That(rifleMuzzle.parent.localPosition.y, Is.EqualTo(.12f).Within(.001f));
+            Assert.That(attack.Muzzle, Is.EqualTo(rifleMuzzle));
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, Time.time + 1f), Is.True);
+            var rifleShot = GameObject.Find("Hub Projectile Template (Shot)");
+            Assert.That(rifleShot.transform.position, Is.EqualTo(rifleMuzzle.position));
+            Assert.That(rifleMuzzle.Find("Muzzle Flash"), Is.Not.Null);
+            Assert.That(rifleMuzzle.Find("Muzzle Flash").localPosition.z, Is.GreaterThan(.25f));
+            var largestRecoil = 0f;
+            for (var frame = 0; frame < 6; frame++)
+            {
+                yield return null;
+                largestRecoil = Mathf.Max(largestRecoil,
+                    Vector3.Distance(gunPivot.localPosition, neutralPosition));
+            }
+            Assert.That(largestRecoil, Is.GreaterThan(.005f));
+
+            Object.DestroyImmediate(rifleShot);
+            PlayerWeaponLoadout.Select(PlayerWeaponType.Revolver);
+            controller.SetWeaponType(PlayerWeaponType.Revolver);
+            var revolverMuzzle = PlayerWeaponLoadout.FindMuzzle(player, PlayerWeaponType.Revolver);
+            Assert.That(attack.Muzzle, Is.EqualTo(revolverMuzzle));
+            Assert.That(attack.TryFire(player.transform.position + Vector3.forward * 10f, Time.time + 1f), Is.True);
+            var revolverShot = GameObject.Find("Hub Projectile Template (Shot)");
+            Assert.That(revolverShot.transform.position, Is.EqualTo(revolverMuzzle.position));
+            Assert.That(revolverMuzzle.Find("Muzzle Flash"), Is.Not.Null);
+            Assert.That(revolverMuzzle.Find("Muzzle Flash").localPosition.z, Is.GreaterThan(.25f));
         }
 
         private static IEnumerator WaitForScene(string sceneName)

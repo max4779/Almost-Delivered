@@ -1,10 +1,11 @@
 using AlmostDelivered.Combat;
+using AlmostDelivered.Gameplay;
 using UnityEngine.EventSystems;
 using UnityEngine;
 
 namespace AlmostDelivered.Frontend
 {
-    [RequireComponent(typeof(CharacterController))]
+    [RequireComponent(typeof(CharacterController), typeof(PlayerMobility))]
     public sealed class HubPlayerController : MonoBehaviour
     {
         [SerializeField, Min(0f)] private float speed = 6f;
@@ -13,6 +14,7 @@ namespace AlmostDelivered.Frontend
         private CharacterController characterController;
         private RangedAttackController rangedAttack;
         private MeleeAttackController meleeAttack;
+        private PlayerMobility mobility;
         private bool inputLocked;
 
         public bool IsInputLocked => inputLocked;
@@ -30,6 +32,7 @@ namespace AlmostDelivered.Frontend
             characterController = GetComponent<CharacterController>();
             rangedAttack = GetComponent<RangedAttackController>();
             meleeAttack = GetComponent<MeleeAttackController>();
+            mobility = GetComponent<PlayerMobility>();
         }
 
         private void Start() => SetWeaponType(PlayerWeaponLoadout.Selected);
@@ -41,7 +44,11 @@ namespace AlmostDelivered.Frontend
                 rangedAttack.enabled = PlayerWeaponLoadout.IsFirearm(weapon);
                 PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, weapon);
             }
-            if (meleeAttack != null) meleeAttack.enabled = weapon == PlayerWeaponType.Melee;
+            if (meleeAttack != null)
+            {
+                PlayerWeaponLoadout.ConfigureMelee(meleeAttack);
+                meleeAttack.enabled = weapon == PlayerWeaponType.Melee;
+            }
             PlayerWeaponLoadout.ApplyVisual(gameObject, weapon);
         }
 
@@ -55,9 +62,10 @@ namespace AlmostDelivered.Frontend
                 return;
             }
 
-            Move(
+            MoveWithActions(
                 new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
-                Time.deltaTime);
+                Time.deltaTime, PlayerInputBindings.IsHeld(PlayerAction.Sprint),
+                PlayerInputBindings.WasPressed(PlayerAction.Roll));
             if (TryGetMouseAim(out var aimPoint))
             {
                 AimAt(aimPoint, Time.deltaTime);
@@ -71,7 +79,8 @@ namespace AlmostDelivered.Frontend
 
         public bool AimAndFire(Vector3 aimPoint, float now, float deltaTime)
         {
-            if (inputLocked || !IsFinite(aimPoint.x) || !IsFinite(aimPoint.y) || !IsFinite(aimPoint.z))
+            if (inputLocked || (mobility != null && mobility.IsRolling) ||
+                !IsFinite(aimPoint.x) || !IsFinite(aimPoint.y) || !IsFinite(aimPoint.z))
                 return false;
             AimAt(aimPoint, deltaTime);
             return PlayerWeaponLoadout.Selected == PlayerWeaponType.Melee
@@ -101,7 +110,9 @@ namespace AlmostDelivered.Frontend
             return IsFinite(aimPoint.x) && IsFinite(aimPoint.y) && IsFinite(aimPoint.z);
         }
 
-        public void Move(Vector2 input, float deltaTime)
+        public void Move(Vector2 input, float deltaTime) => MoveWithActions(input, deltaTime, false, false);
+
+        public void MoveWithActions(Vector2 input, float deltaTime, bool sprintHeld, bool rollPressed)
         {
             if (characterController == null)
             {
@@ -121,8 +132,10 @@ namespace AlmostDelivered.Frontend
             }
 
             input = Vector2.ClampMagnitude(input, 1f);
-            var direction = new Vector3(input.x, 0f, input.y);
-            characterController.Move(direction * (speed * deltaTime));
+            var velocity = mobility != null
+                ? mobility.Step(input, sprintHeld, rollPressed, deltaTime, speed)
+                : new Vector3(input.x, 0f, input.y) * speed;
+            characterController.Move(velocity * deltaTime);
         }
 
         public void ReturnToFrontend()

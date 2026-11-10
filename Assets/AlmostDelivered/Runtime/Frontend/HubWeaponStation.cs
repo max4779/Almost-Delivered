@@ -100,7 +100,6 @@ namespace AlmostDelivered.Frontend
             var player = other.GetComponentInParent<HubPlayerController>();
             if (player == null) return;
             occupant = player;
-            occupant.SetWeaponType(PlayerWeaponLoadout.Selected);
             Refresh();
         }
 

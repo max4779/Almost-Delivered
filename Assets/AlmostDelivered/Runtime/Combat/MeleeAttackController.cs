@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using AlmostDelivered.Presentation;
-using AlmostDelivered.Frontend;
 using UnityEngine;
 
 namespace AlmostDelivered.Combat
@@ -18,12 +17,23 @@ namespace AlmostDelivered.Combat
         private readonly HashSet<ActorHealth> damaged = new HashSet<ActorHealth>();
         private float nextAttackTime;
 
-        public void Configure(float attackDamage, float attackReach, float attackArc, float attackCooldown)
+        public float Damage => damage;
+
+        public void Configure(float attackDamage, float attackReach, float attackArc, float attackCooldown,
+            float attackNoiseRadius = 5f)
         {
-            damage = Mathf.Max(0f, attackDamage);
-            reach = Mathf.Max(.1f, attackReach);
-            arc = Mathf.Clamp(attackArc, 1f, 360f);
-            cooldown = Mathf.Max(0f, attackCooldown);
+            var nextDamage = Mathf.Max(0f, attackDamage);
+            var nextReach = Mathf.Max(.1f, attackReach);
+            var nextArc = Mathf.Clamp(attackArc, 1f, 360f);
+            var nextCooldown = Mathf.Max(0f, attackCooldown);
+            var nextNoiseRadius = Mathf.Max(0f, attackNoiseRadius);
+            if (damage == nextDamage && reach == nextReach && arc == nextArc &&
+                cooldown == nextCooldown && noiseRadius == nextNoiseRadius) return;
+            damage = nextDamage;
+            reach = nextReach;
+            arc = nextArc;
+            cooldown = nextCooldown;
+            noiseRadius = nextNoiseRadius;
             nextAttackTime = 0f;
         }
 
@@ -52,7 +62,6 @@ namespace AlmostDelivered.Combat
             if (animator != null) animator.PlayPlayerSlash();
             var wind = GetComponent<MeleeSlashVfx>();
             wind?.Play(reach, arc, attackDirection);
-            Camera.main?.GetComponent<QuarterViewCamera>()?.PlayImpactShake(.035f, .075f);
             CombatNoiseSystem.Emit(transform.position, noiseRadius, ownTeam.Team);
 
             var center = transform.position + Vector3.up * .65f;
@@ -86,7 +95,6 @@ namespace AlmostDelivered.Combat
             if (damaged.Count > 0)
             {
                 wind?.ConfirmHit();
-                Camera.main?.GetComponent<QuarterViewCamera>()?.PlayImpactShake(.17f, .13f);
             }
             return true;
         }

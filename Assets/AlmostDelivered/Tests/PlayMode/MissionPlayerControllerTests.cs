@@ -81,6 +81,18 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void SprintAndRollSpendStaminaAndMoveTheMissionPlayer()
+        {
+            var stamina = player.GetComponent<PlayerMobility>();
+            Assert.That(missionPlayer.MoveWithActions(Vector2.right, .1f, true, false), Is.True);
+            Assert.That(stamina.IsSprinting, Is.True);
+            Assert.That(stamina.Stamina, Is.LessThan(stamina.MaxStamina));
+            Assert.That(missionPlayer.MoveWithActions(Vector2.right, .1f, false, true), Is.True);
+            Assert.That(stamina.IsRolling, Is.True);
+            Assert.That(missionPlayer.AimAndFire(Vector3.forward * 10f, 0f), Is.False);
+        }
+
+        [Test]
         public void AimAtCursorTurnsWithoutFiring()
         {
             player.transform.forward = Vector3.forward;
@@ -214,7 +226,7 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator MeleeHitRecoilsEnemyAndShakesCameraBriefly()
+        public IEnumerator MeleeHitRecoilsEnemyWithoutCameraShake()
         {
             var melee = player.AddComponent<MeleeAttackController>();
             melee.Configure(34f, 2.8f, 140f, .34f);
@@ -232,7 +244,7 @@ namespace AlmostDelivered.Tests.PlayMode
             Physics.SyncTransforms();
 
             Assert.That(missionPlayer.AimAndFire(Vector3.forward * 3f, 0f, .05f), Is.True);
-            Assert.That(cameraObject.GetComponent<QuarterViewCamera>().IsImpactShaking, Is.True);
+            Assert.That(cameraObject.GetComponent<QuarterViewCamera>().IsImpactShaking, Is.False);
             yield return new WaitForSecondsRealtime(.08f);
             Assert.That(body.localPosition.z, Is.LessThan(-.02f));
             yield return new WaitForSecondsRealtime(.15f);

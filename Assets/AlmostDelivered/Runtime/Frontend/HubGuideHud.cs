@@ -33,7 +33,8 @@ namespace AlmostDelivered.Frontend
             else if (deploymentGate != null && deploymentGate.CanLaunch)
                 interactionHint.text = "E  미션 출격";
             else
-                interactionHint.text = "WASD 이동  ·  마우스 조준/좌클릭 공격  ·  R 장전  ·  오른쪽 무기 선택  ·  앞쪽 출격";
+                interactionHint.text = $"WASD 이동  ·  {PlayerInputBindings.DisplayName(PlayerAction.Sprint)} 달리기  ·  " +
+                    $"{PlayerInputBindings.DisplayName(PlayerAction.Roll)} 구르기  ·  좌클릭 공격  ·  R 장전";
         }
     }
 }

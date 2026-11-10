@@ -31,10 +31,47 @@ namespace AlmostDelivered.Frontend
         public static void ConfigureFirearm(RangedAttackController attack, PlayerWeaponType weapon)
         {
             if (attack == null || !IsFirearm(weapon)) return;
+            var muzzle = FindMuzzle(attack.gameObject, weapon);
+            if (muzzle != null) attack.SetMuzzle(muzzle);
             if (weapon == PlayerWeaponType.Revolver)
-                attack.ConfigureMagazine(6, 2.4f, 55f, .58f);
+            {
+                var stats = attack.GetComponentInChildren<RevolverStats>(true);
+                attack.ConfigureMagazine(stats != null ? stats.MagazineSize : 6,
+                    stats != null ? stats.ReloadSeconds : 2.4f,
+                    stats != null ? stats.Damage : RevolverStats.DefaultDamage,
+                    stats != null ? stats.FireCooldown : .58f,
+                    stats == null || stats.PierceEnemies);
+                attack.SetRangeAndNoise(stats != null ? stats.Range : RevolverStats.DefaultRange,
+                    stats != null ? stats.NoiseRadius : RevolverStats.DefaultNoiseRadius);
+            }
             else
-                attack.ConfigureMagazine(20, 1.8f, 8f, .12f);
+            {
+                var stats = attack.GetComponentInChildren<AutomaticRifleStats>(true);
+                attack.ConfigureMagazine(stats != null ? stats.MagazineSize : 20,
+                    stats != null ? stats.ReloadSeconds : 1.8f,
+                    stats != null ? stats.Damage : AutomaticRifleStats.DefaultDamage,
+                    stats != null ? stats.FireCooldown : .12f);
+                attack.SetRangeAndNoise(stats != null ? stats.Range : AutomaticRifleStats.DefaultRange,
+                    stats != null ? stats.NoiseRadius : AutomaticRifleStats.DefaultNoiseRadius);
+            }
+        }
+
+        public static void ConfigureMelee(MeleeAttackController attack)
+        {
+            if (attack == null) return;
+            var stats = attack.GetComponentInChildren<MeleeWeaponStats>(true);
+            if (stats == null) return;
+            attack.Configure(stats.Damage, stats.Reach, stats.ArcDegrees,
+                stats.AttackCooldown, stats.NoiseRadius);
+        }
+
+        public static Transform FindMuzzle(GameObject actor, PlayerWeaponType weapon)
+        {
+            if (actor == null || !IsFirearm(weapon)) return null;
+            var socketName = weapon == PlayerWeaponType.Revolver ? "Revolver Muzzle" : "Rifle Muzzle";
+            foreach (var part in actor.GetComponentsInChildren<Transform>(true))
+                if (part.name == socketName) return part;
+            return null;
         }
 
         public static void ApplyVisual(GameObject actor, PlayerWeaponType weapon)

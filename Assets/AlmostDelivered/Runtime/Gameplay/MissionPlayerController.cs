@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace AlmostDelivered.Gameplay
 {
-    [RequireComponent(typeof(CharacterController))]
+    [RequireComponent(typeof(CharacterController), typeof(PlayerMobility))]
     public sealed class MissionPlayerController : MonoBehaviour
     {
         [SerializeField, Min(.1f)] private float moveSpeed = 6f;
@@ -17,6 +17,7 @@ namespace AlmostDelivered.Gameplay
 
         private CharacterController characterController;
         private ActorHealth health;
+        private PlayerMobility mobility;
         private float verticalVelocity;
 
         public PlayerWeaponType WeaponType => weaponType;
@@ -27,6 +28,7 @@ namespace AlmostDelivered.Gameplay
             rangedAttack = attack;
             moveSpeed = Mathf.Max(.1f, speed);
             health = GetComponent<ActorHealth>();
+            mobility = GetComponent<PlayerMobility>();
             verticalVelocity = 0f;
         }
 
@@ -34,6 +36,7 @@ namespace AlmostDelivered.Gameplay
         {
             characterController = GetComponent<CharacterController>();
             health = GetComponent<ActorHealth>();
+            mobility = GetComponent<PlayerMobility>();
             if (rangedAttack == null)
                 rangedAttack = GetComponent<RangedAttackController>();
             if (meleeAttack == null)
@@ -55,14 +58,20 @@ namespace AlmostDelivered.Gameplay
                 rangedAttack.enabled = PlayerWeaponLoadout.IsFirearm(selected);
                 PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, selected);
             }
-            if (meleeAttack != null) meleeAttack.enabled = selected == PlayerWeaponType.Melee;
+            if (meleeAttack != null)
+            {
+                PlayerWeaponLoadout.ConfigureMelee(meleeAttack);
+                meleeAttack.enabled = selected == PlayerWeaponType.Melee;
+            }
             PlayerWeaponLoadout.ApplyVisual(gameObject, selected);
         }
 
         private void Update()
         {
             if (Input.GetKeyDown(KeyCode.R)) Reload(Time.time);
-            Move(new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")), Time.deltaTime);
+            MoveWithActions(new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
+                Time.deltaTime, PlayerInputBindings.IsHeld(PlayerAction.Sprint),
+                PlayerInputBindings.WasPressed(PlayerAction.Roll));
 
             if (TryGetMouseAim(out var aimPoint))
             {
@@ -78,7 +87,9 @@ namespace AlmostDelivered.Gameplay
 
         public bool Reload(float now) => CanAct() && rangedAttack != null && rangedAttack.TryReload(now);
 
-        public bool Move(Vector2 input, float deltaTime)
+        public bool Move(Vector2 input, float deltaTime) => MoveWithActions(input, deltaTime, false, false);
+
+        public bool MoveWithActions(Vector2 input, float deltaTime, bool sprintHeld, bool rollPressed)
         {
             if (!CanAct() || characterController == null || !characterController.enabled)
                 return false;
@@ -93,12 +104,15 @@ namespace AlmostDelivered.Gameplay
             else
                 verticalVelocity += gravity * deltaTime;
 
-            var velocity = direction * moveSpeed + Vector3.up * verticalVelocity;
+            var planarVelocity = mobility != null
+                ? mobility.Step(normalized, sprintHeld, rollPressed, deltaTime, moveSpeed)
+                : direction * moveSpeed;
+            var velocity = planarVelocity + Vector3.up * verticalVelocity;
             var collisionFlags = characterController.Move(velocity * deltaTime);
             if ((collisionFlags & CollisionFlags.Below) != 0)
                 verticalVelocity = groundedVerticalSpeed;
 
-            return hasMovementInput;
+            return planarVelocity.sqrMagnitude > .0001f;
         }
 
         public bool AimAt(Vector3 aimPoint, float deltaTime)
@@ -117,7 +131,7 @@ namespace AlmostDelivered.Gameplay
 
         public bool AimAndFire(Vector3 aimPoint, float now, float deltaTime)
         {
-            if (!CanAct() || !IsFinite(aimPoint))
+            if (!CanAct() || !IsFinite(aimPoint) || (mobility != null && mobility.IsRolling))
                 return false;
 
             AimAt(aimPoint, deltaTime);

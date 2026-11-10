@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -15,11 +16,14 @@ namespace AlmostDelivered.Combat
         private float collisionRadius;
         private bool configured;
         private bool resolved;
+        private bool pierceEnemies;
+        private readonly HashSet<ActorHealth> piercedActors = new HashSet<ActorHealth>();
 
         public GameObject Owner => owner;
         public CombatTeamId Team => team;
         public Vector3 Direction => direction;
         public float Damage => damage;
+        public bool PiercesEnemies => pierceEnemies;
 
         public void Configure(
             GameObject projectileOwner,
@@ -27,7 +31,8 @@ namespace AlmostDelivered.Combat
             Vector3 travelDirection,
             float travelSpeed,
             float hitDamage,
-            float lifetime)
+            float lifetime,
+            bool piercesEnemies = false)
         {
             if (projectileOwner == null)
                 throw new ArgumentNullException(nameof(projectileOwner));
@@ -46,6 +51,8 @@ namespace AlmostDelivered.Combat
             speed = travelSpeed;
             damage = hitDamage;
             remainingLifetime = lifetime;
+            pierceEnemies = piercesEnemies;
+            piercedActors.Clear();
             collisionRadius = ResolveCollisionRadius();
             configured = true;
             resolved = false;
@@ -59,14 +66,12 @@ namespace AlmostDelivered.Combat
 
             var step = speed * Time.fixedDeltaTime;
             var origin = transform.position;
-            var overlap = Physics.OverlapSphere(origin, collisionRadius, ~0, QueryTriggerInteraction.Ignore)
+            var overlaps = Physics.OverlapSphere(origin, collisionRadius, ~0, QueryTriggerInteraction.Ignore)
                 .Where(candidate => !ShouldIgnore(candidate))
-                .OrderBy(candidate => (candidate.ClosestPoint(origin) - origin).sqrMagnitude)
-                .FirstOrDefault();
-            if (overlap != null)
+                .OrderBy(candidate => (candidate.ClosestPoint(origin) - origin).sqrMagnitude);
+            foreach (var overlap in overlaps)
             {
-                Resolve(overlap);
-                return;
+                if (HandleImpact(overlap)) return;
             }
 
             var hits = collisionRadius > Mathf.Epsilon
@@ -78,14 +83,13 @@ namespace AlmostDelivered.Combat
                 if (ShouldIgnore(hit.collider))
                     continue;
 
-                Resolve(hit.collider);
-                return;
+                if (HandleImpact(hit.collider)) return;
             }
 
             transform.position = origin + direction * step;
             remainingLifetime -= Time.fixedDeltaTime;
             if (remainingLifetime <= 0f)
-                Resolve(null);
+                Finish();
         }
 
         private bool ShouldIgnore(Collider candidate)
@@ -96,27 +100,44 @@ namespace AlmostDelivered.Combat
             var candidateTransform = candidate.transform;
             if (candidateTransform == transform || candidateTransform.IsChildOf(transform))
                 return true;
-            if (candidateTransform == owner.transform || candidateTransform.IsChildOf(owner.transform))
+            if (owner != null && (candidateTransform == owner.transform || candidateTransform.IsChildOf(owner.transform)))
+                return true;
+
+            if (pierceEnemies && piercedActors.Contains(candidate.GetComponentInParent<ActorHealth>()))
                 return true;
 
             var candidateTeam = candidate.GetComponentInParent<CombatTeam>();
             return candidateTeam != null && candidateTeam.Team == team;
         }
 
-        private void Resolve(Collider candidate)
+        private bool HandleImpact(Collider candidate)
         {
             if (resolved)
-                return;
+                return true;
 
-            resolved = true;
             if (candidate != null)
             {
                 var health = candidate.GetComponentInParent<ActorHealth>();
                 var candidateTeam = candidate.GetComponentInParent<CombatTeam>();
                 if (health != null && candidateTeam != null && candidateTeam.Team != team)
+                {
+                    if (pierceEnemies)
+                    {
+                        if (piercedActors.Add(health)) health.ApplyDamage(damage);
+                        return false;
+                    }
                     health.ApplyDamage(damage);
+                }
             }
 
+            Finish();
+            return true;
+        }
+
+        private void Finish()
+        {
+            if (resolved) return;
+            resolved = true;
             Destroy(gameObject);
         }
 

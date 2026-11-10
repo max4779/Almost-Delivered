@@ -1,5 +1,6 @@
 using System.Linq;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay.Payload;
 using UnityEngine;
 using UnityEngine.UI;
@@ -78,7 +79,8 @@ namespace AlmostDelivered.Gameplay
         public void Refresh()
         {
             if (controlsText != null)
-                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 공격  |  R 장전  |  E 화물 기동/수리  |  ESC 귀환";
+                controlsText.text = $"WASD 이동  |  {PlayerInputBindings.DisplayName(PlayerAction.Sprint)} 달리기  |  " +
+                    $"{PlayerInputBindings.DisplayName(PlayerAction.Roll)} 구르기  |  좌클릭 공격  |  R 장전  |  E 상호작용  |  ESC 귀환";
             if (playerHealthText != null && playerHealth != null)
                 playerHealthText.text = $"PLAYER  {Mathf.CeilToInt(playerHealth.CurrentHealth)} / {Mathf.CeilToInt(playerHealth.MaxHealth)}";
             if (bossCountText != null)
