@@ -389,14 +389,14 @@ namespace AlmostDelivered.Editor.Frontend
                 new Color(.02f, .045f, .065f, .92f));
             PlaceRect(weaponPanel.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f),
                 new Vector2(-24f, -24f), new Vector2(430f, 105f));
-            var currentWeapon = UiText("Current Weapon", weaponPanel.transform, "현재 무기  ·  원거리", 32,
+            var currentWeapon = UiText("Current Weapon", weaponPanel.transform, "현재 무기  ·  자동소총", 32,
                 CyanColor, TextAnchor.MiddleCenter);
             Stretch(currentWeapon.rectTransform);
 
             var mapPanel = UiImage("Hub Station Guide", canvasObject.transform,
                 new Color(.02f, .045f, .065f, .92f));
             PlaceRect(mapPanel.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(24f, 130f), new Vector2(630f, 245f));
+                new Vector2(24f, 225f), new Vector2(630f, 245f));
             var stationGuide = UiText("Station Guide", mapPanel.transform,
                 "주황색  출격 게이트  ·  미션 시작\n청록색  장비 보관소  ·  무기 선택\n보라색  작전 단말기  ·  준비 중\n녹색  승무원 구역  ·  준비 중",
                 27, Color.white, TextAnchor.MiddleLeft);
@@ -410,6 +410,8 @@ namespace AlmostDelivered.Editor.Frontend
             var hint = UiText("Interaction Hint", hintPanel.transform, string.Empty, 28,
                 Color.white, TextAnchor.MiddleCenter);
             Stretch(hint.rectTransform);
+            var playerAttack = Object.FindObjectOfType<HubPlayerController>().GetComponent<RangedAttackController>();
+            AmmoHudBuilder.Build(canvasObject.transform, playerAttack, LoadFrontendFont());
 
             var overlay = UiImage("Weapon Selection Overlay", canvasObject.transform,
                 new Color(.005f, .015f, .025f, .82f));
@@ -429,23 +431,33 @@ namespace AlmostDelivered.Editor.Frontend
             PlaceRect(menuDescription.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
                 new Vector2(0f, -105f), new Vector2(1000f, 54f));
 
-            var rangedCard = UiImage("Ranged Weapon Card", menu.transform, new Color(.08f, .42f, .48f));
+            var rangedCard = UiImage("Automatic Rifle Card", menu.transform, new Color(.08f, .42f, .48f));
             PlaceRect(rangedCard.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
-                new Vector2(-255f, -10f), new Vector2(480f, 270f));
+                new Vector2(-350f, -10f), new Vector2(320f, 270f));
             var rangedButton = rangedCard.gameObject.AddComponent<Button>();
             rangedButton.targetGraphic = rangedCard;
             var rangedText = UiText("Ranged Card Label", rangedCard.transform,
-                "원거리 무기\n\n멀리서 적을 안전하게 사격", 34, Color.white, TextAnchor.MiddleCenter);
+                "자동소총\n\n30발 · 빠른 연사\n낮은 피해", 30, Color.white, TextAnchor.MiddleCenter);
             Stretch(rangedText.rectTransform);
-            UnityEventTools.AddPersistentListener(rangedButton.onClick, station.SelectRanged);
+            UnityEventTools.AddPersistentListener(rangedButton.onClick, station.SelectAutomaticRifle);
+
+            var revolverCard = UiImage("Revolver Card", menu.transform, new Color(.2f, .15f, .09f));
+            PlaceRect(revolverCard.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                new Vector2(0f, -10f), new Vector2(320f, 270f));
+            var revolverButton = revolverCard.gameObject.AddComponent<Button>();
+            revolverButton.targetGraphic = revolverCard;
+            var revolverText = UiText("Revolver Card Label", revolverCard.transform,
+                "리볼버\n\n6발 · 강한 한 발\n느린 장전", 30, Color.white, TextAnchor.MiddleCenter);
+            Stretch(revolverText.rectTransform);
+            UnityEventTools.AddPersistentListener(revolverButton.onClick, station.SelectRevolver);
 
             var meleeCard = UiImage("Melee Weapon Card", menu.transform, new Color(.19f, .14f, .09f));
             PlaceRect(meleeCard.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
-                new Vector2(255f, -10f), new Vector2(480f, 270f));
+                new Vector2(350f, -10f), new Vector2(320f, 270f));
             var meleeButton = meleeCard.gameObject.AddComponent<Button>();
             meleeButton.targetGraphic = meleeCard;
             var meleeText = UiText("Melee Card Label", meleeCard.transform,
-                "근접 무기\n\n넓은 범위를 빠르게 베기", 34, Color.white, TextAnchor.MiddleCenter);
+                "근접 무기\n\n넓은 범위를\n빠르게 베기", 30, Color.white, TextAnchor.MiddleCenter);
             Stretch(meleeText.rectTransform);
             UnityEventTools.AddPersistentListener(meleeButton.onClick, station.SelectMelee);
 
@@ -458,7 +470,7 @@ namespace AlmostDelivered.Editor.Frontend
                 new Vector2(0f, 25f), new Vector2(280f, 65f));
             UnityEventTools.AddPersistentListener(closeButton.onClick, station.CloseMenu);
 
-            station.ConfigureMenu(overlay.gameObject, menuSelection, rangedCard, meleeCard);
+            station.ConfigureMenu(overlay.gameObject, menuSelection, rangedCard, revolverCard, meleeCard);
             canvasObject.GetComponent<HubGuideHud>().Configure(station, gate, hint, currentWeapon);
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
         }

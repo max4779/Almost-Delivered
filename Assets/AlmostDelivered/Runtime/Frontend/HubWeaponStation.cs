@@ -11,6 +11,7 @@ namespace AlmostDelivered.Frontend
         [SerializeField] private GameObject selectionPanel;
         [SerializeField] private Text menuSelection;
         [SerializeField] private Image rangedCard;
+        [SerializeField] private Image revolverCard;
         [SerializeField] private Image meleeCard;
         private HubPlayerController occupant;
 
@@ -34,15 +35,19 @@ namespace AlmostDelivered.Frontend
             Refresh();
         }
 
-        public void ConfigureMenu(GameObject panel, Text currentSelection, Image rangedImage, Image meleeImage)
+        public void ConfigureMenu(GameObject panel, Text currentSelection, Image rangedImage, Image revolverImage, Image meleeImage)
         {
             selectionPanel = panel;
             menuSelection = currentSelection;
             rangedCard = rangedImage;
+            revolverCard = revolverImage;
             meleeCard = meleeImage;
             CloseMenu();
             Refresh();
         }
+
+        public void ConfigureMenu(GameObject panel, Text currentSelection, Image rangedImage, Image meleeImage) =>
+            ConfigureMenu(panel, currentSelection, rangedImage, null, meleeImage);
 
         private void Awake()
         {
@@ -86,6 +91,8 @@ namespace AlmostDelivered.Frontend
         }
 
         public void SelectRanged() => Select(PlayerWeaponType.Ranged);
+        public void SelectAutomaticRifle() => Select(PlayerWeaponType.AutomaticRifle);
+        public void SelectRevolver() => Select(PlayerWeaponType.Revolver);
         public void SelectMelee() => Select(PlayerWeaponType.Melee);
 
         private void OnTriggerEnter(Collider other)
@@ -111,14 +118,15 @@ namespace AlmostDelivered.Frontend
         {
             if (prompt != null) prompt.gameObject.SetActive(CanSelect);
             if (selectionLabel != null)
-                selectionLabel.text = PlayerWeaponLoadout.Selected == PlayerWeaponType.Melee
-                    ? "장착: 근접 무기" : "장착: 원거리 무기";
+                selectionLabel.text = "장착: " + PlayerWeaponLoadout.DisplayName(PlayerWeaponLoadout.Selected);
             if (menuSelection != null)
-                menuSelection.text = PlayerWeaponLoadout.Selected == PlayerWeaponType.Melee
-                    ? "현재 장착: 근접 무기" : "현재 장착: 원거리 무기";
+                menuSelection.text = "현재 장착: " + PlayerWeaponLoadout.DisplayName(PlayerWeaponLoadout.Selected);
             if (rangedCard != null)
                 rangedCard.color = PlayerWeaponLoadout.Selected == PlayerWeaponType.Ranged
                     ? new Color(.08f, .42f, .48f, 1f) : new Color(.08f, .15f, .2f, 1f);
+            if (revolverCard != null)
+                revolverCard.color = PlayerWeaponLoadout.Selected == PlayerWeaponType.Revolver
+                    ? new Color(.46f, .29f, .09f, 1f) : new Color(.2f, .15f, .09f, 1f);
             if (meleeCard != null)
                 meleeCard.color = PlayerWeaponLoadout.Selected == PlayerWeaponType.Melee
                     ? new Color(.43f, .27f, .08f, 1f) : new Color(.19f, .14f, .09f, 1f);

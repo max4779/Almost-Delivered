@@ -135,7 +135,7 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(stations.Find("Equipment Bay"), Is.Not.Null);
             Assert.That(stations.Find("Equipment Bay/Weapon Station Trigger").GetComponent<HubWeaponStation>(), Is.Not.Null);
             Assert.That(stations.Find("Equipment Bay/Selected Weapon").GetComponent<TextMesh>().text,
-                Does.Contain("원거리"));
+                Does.Contain("자동소총"));
             Assert.That(stations.Find("Deployment Gate"), Is.Not.Null);
             Assert.That(layout.GetComponentsInChildren<HubPlayerController>(true), Is.Empty);
             Assert.That(stations.GetComponentsInChildren<HubPlayerController>(true), Is.Empty);
@@ -169,8 +169,10 @@ namespace AlmostDelivered.Tests.EditMode
                 Is.GreaterThanOrEqualTo(42));
             var overlay = canvas.transform.Find("Weapon Selection Overlay");
             Assert.That(overlay.gameObject.activeSelf, Is.False);
-            Assert.That(overlay.Find("Weapon Selection Menu/Ranged Weapon Card").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(overlay.Find("Weapon Selection Menu/Automatic Rifle Card").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(overlay.Find("Weapon Selection Menu/Revolver Card").GetComponent<Button>(), Is.Not.Null);
             Assert.That(overlay.Find("Weapon Selection Menu/Melee Weapon Card").GetComponent<Button>(), Is.Not.Null);
+            Assert.That(canvas.GetComponentInChildren<PlayerAmmoHud>(true), Is.Not.Null);
             Assert.That(overlay.Find("Weapon Selection Menu/Close Weapon Menu").GetComponent<Button>(), Is.Not.Null);
             Assert.That(hub.transform.Find("Stations/Equipment Bay/Weapon Selection Prompt")
                 .GetComponent<TextMesh>().text, Does.Contain("E"));

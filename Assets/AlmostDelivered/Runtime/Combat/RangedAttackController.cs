@@ -16,6 +16,18 @@ namespace AlmostDelivered.Combat
         private ActorHealth ownerHealth;
         private CombatTeam ownerTeam;
         private float nextFireTime;
+        [SerializeField] private int magazineSize;
+        [SerializeField] private int roundsRemaining;
+        [SerializeField] private float reloadDuration;
+        private float reloadEndTime;
+        private bool isReloading;
+
+        public int MagazineSize => magazineSize;
+        public int RoundsRemaining => roundsRemaining;
+        public bool IsReloading => isReloading;
+        public float ReloadEndTime => reloadEndTime;
+        public float Damage => damage;
+        public float FireCooldown => cooldown;
 
         private void Awake()
         {
@@ -55,7 +67,43 @@ namespace AlmostDelivered.Combat
             shotNoiseRadius = noiseRadius;
             CacheOwnerComponents();
             nextFireTime = 0f;
+            magazineSize = 0;
+            roundsRemaining = 0;
+            isReloading = false;
         }
+
+        public void ConfigureMagazine(int capacity, float reloadSeconds, float shotDamage, float shotCooldown)
+        {
+            if (capacity <= 0) throw new ArgumentOutOfRangeException(nameof(capacity));
+            if (!IsFinite(reloadSeconds) || reloadSeconds <= 0f) throw new ArgumentOutOfRangeException(nameof(reloadSeconds));
+            if (!IsFinite(shotDamage) || shotDamage < 0f) throw new ArgumentOutOfRangeException(nameof(shotDamage));
+            if (!IsFinite(shotCooldown) || shotCooldown < 0f) throw new ArgumentOutOfRangeException(nameof(shotCooldown));
+            magazineSize = capacity;
+            roundsRemaining = capacity;
+            reloadDuration = reloadSeconds;
+            damage = shotDamage;
+            cooldown = shotCooldown;
+            isReloading = false;
+            nextFireTime = 0f;
+        }
+
+        public bool TryReload(float now)
+        {
+            if (!enabled || magazineSize <= 0 || roundsRemaining >= magazineSize || isReloading || !IsFinite(now))
+                return false;
+            isReloading = true;
+            reloadEndTime = now + reloadDuration;
+            return true;
+        }
+
+        public void TickReload(float now)
+        {
+            if (!isReloading || !IsFinite(now) || now < reloadEndTime) return;
+            roundsRemaining = magazineSize;
+            isReloading = false;
+        }
+
+        private void Update() => TickReload(Time.time);
 
         public bool TryFire(Vector3 aimPoint, float now)
         {
@@ -65,6 +113,8 @@ namespace AlmostDelivered.Combat
                 return false;
             if (!IsFinite(now) || now < nextFireTime || !IsFinite(aimPoint))
                 return false;
+            TickReload(now);
+            if (isReloading || (magazineSize > 0 && roundsRemaining <= 0)) return false;
 
             var planarDirection = Vector3.ProjectOnPlane(aimPoint - muzzle.position, Vector3.up);
             if (planarDirection.sqrMagnitude < 0.0001f)
@@ -84,6 +134,7 @@ namespace AlmostDelivered.Combat
                 projectileLifetime);
             clone.SetActive(true);
             nextFireTime = now + cooldown;
+            if (magazineSize > 0) roundsRemaining--;
             CombatNoiseSystem.Emit(muzzle.position, shotNoiseRadius, ownerTeam.Team);
             return true;
         }

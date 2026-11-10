@@ -36,7 +36,11 @@ namespace AlmostDelivered.Frontend
 
         public void SetWeaponType(PlayerWeaponType weapon)
         {
-            if (rangedAttack != null) rangedAttack.enabled = weapon == PlayerWeaponType.Ranged;
+            if (rangedAttack != null)
+            {
+                rangedAttack.enabled = PlayerWeaponLoadout.IsFirearm(weapon);
+                PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, weapon);
+            }
             if (meleeAttack != null) meleeAttack.enabled = weapon == PlayerWeaponType.Melee;
             PlayerWeaponLoadout.ApplyVisual(gameObject, weapon);
         }
@@ -44,6 +48,7 @@ namespace AlmostDelivered.Frontend
         private void Update()
         {
             if (inputLocked) return;
+            if (Input.GetKeyDown(KeyCode.R)) Reload(Time.time);
             if (Input.GetKeyDown(KeyCode.Escape))
             {
                 ReturnToFrontend();
@@ -61,6 +66,8 @@ namespace AlmostDelivered.Frontend
                     AimAndFire(aimPoint, Time.time, Time.deltaTime);
             }
         }
+
+        public bool Reload(float now) => !inputLocked && rangedAttack != null && rangedAttack.TryReload(now);
 
         public bool AimAndFire(Vector3 aimPoint, float now, float deltaTime)
         {

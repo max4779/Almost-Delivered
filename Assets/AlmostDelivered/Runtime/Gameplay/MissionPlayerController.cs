@@ -50,13 +50,18 @@ namespace AlmostDelivered.Gameplay
         public void SetWeaponType(PlayerWeaponType selected)
         {
             weaponType = selected;
-            if (rangedAttack != null) rangedAttack.enabled = selected == PlayerWeaponType.Ranged;
+            if (rangedAttack != null)
+            {
+                rangedAttack.enabled = PlayerWeaponLoadout.IsFirearm(selected);
+                PlayerWeaponLoadout.ConfigureFirearm(rangedAttack, selected);
+            }
             if (meleeAttack != null) meleeAttack.enabled = selected == PlayerWeaponType.Melee;
             PlayerWeaponLoadout.ApplyVisual(gameObject, selected);
         }
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.R)) Reload(Time.time);
             Move(new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")), Time.deltaTime);
 
             if (TryGetMouseAim(out var aimPoint))
@@ -70,6 +75,8 @@ namespace AlmostDelivered.Gameplay
             if (Input.GetKeyDown(KeyCode.Escape))
                 GameSceneFlow.LoadDepartureHub();
         }
+
+        public bool Reload(float now) => CanAct() && rangedAttack != null && rangedAttack.TryReload(now);
 
         public bool Move(Vector2 input, float deltaTime)
         {

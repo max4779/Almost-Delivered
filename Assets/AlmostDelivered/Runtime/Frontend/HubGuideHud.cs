@@ -24,8 +24,7 @@ namespace AlmostDelivered.Frontend
         public void Refresh()
         {
             if (currentWeapon != null)
-                currentWeapon.text = PlayerWeaponLoadout.Selected == PlayerWeaponType.Melee
-                    ? "현재 무기  ·  근접" : "현재 무기  ·  원거리";
+                currentWeapon.text = "현재 무기  ·  " + PlayerWeaponLoadout.DisplayName(PlayerWeaponLoadout.Selected);
             if (interactionHint == null) return;
             if (weaponStation != null && weaponStation.IsMenuOpen)
                 interactionHint.text = "무기 카드를 클릭해 선택하세요  ·  ESC 닫기";
@@ -34,7 +33,7 @@ namespace AlmostDelivered.Frontend
             else if (deploymentGate != null && deploymentGate.CanLaunch)
                 interactionHint.text = "E  미션 출격";
             else
-                interactionHint.text = "WASD 이동  ·  마우스 조준/좌클릭 공격  ·  오른쪽 무기 선택  ·  앞쪽 출격";
+                interactionHint.text = "WASD 이동  ·  마우스 조준/좌클릭 공격  ·  R 장전  ·  오른쪽 무기 선택  ·  앞쪽 출격";
         }
     }
 }

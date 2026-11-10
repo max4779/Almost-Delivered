@@ -58,6 +58,9 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(Object.FindObjectOfType<MissionHud>(true).HasPayloadViews, Is.True);
             Assert.That(Object.FindObjectsOfType<PlayerDamageFlashView>(true), Has.Length.EqualTo(1));
             Assert.That(Object.FindObjectsOfType<PlayerHealthBarView>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<PlayerAmmoHud>(true), Has.Length.EqualTo(1));
+            Assert.That(Object.FindObjectOfType<PlayerAmmoHud>(true).transform.Find("Revolver Ammo/Revolver Cylinder")
+                .GetComponent<AmmoCylinderGraphic>(), Is.Not.Null);
             Assert.That(payload.GetComponent<CargoIntegrity>(), Is.Not.Null);
             Assert.That(Object.FindObjectOfType<PlayerHealthBarView>(true).GetComponent<RectTransform>().anchoredPosition.x,
                 Is.EqualTo(64f));

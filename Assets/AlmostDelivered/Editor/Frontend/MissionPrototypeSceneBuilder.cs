@@ -453,6 +453,8 @@ namespace AlmostDelivered.Editor.Frontend
             hud.BindActivationCountdown(activationCountdown);
             hud.BindCargoHealth(cargoHealth);
             BuildPlayerHealthBar(canvasObject.transform, health);
+            AmmoHudBuilder.Build(canvasObject.transform, player.GetComponent<RangedAttackController>(),
+                AssetDatabase.LoadAssetAtPath<Font>(FontPath) ?? Resources.GetBuiltinResource<Font>("Arial.ttf"));
 
             var damageFlashObject = new GameObject(
                 "Player Damage Flash",

@@ -78,7 +78,7 @@ namespace AlmostDelivered.Gameplay
         public void Refresh()
         {
             if (controlsText != null)
-                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 발사  |  E 화물 기동/수리  |  ESC 귀환";
+                controlsText.text = "WASD 이동  |  마우스 조준  |  좌클릭 공격  |  R 장전  |  E 화물 기동/수리  |  ESC 귀환";
             if (playerHealthText != null && playerHealth != null)
                 playerHealthText.text = $"PLAYER  {Mathf.CeilToInt(playerHealth.CurrentHealth)} / {Mathf.CeilToInt(playerHealth.MaxHealth)}";
             if (bossCountText != null)
