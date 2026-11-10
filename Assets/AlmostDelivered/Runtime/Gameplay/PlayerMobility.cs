@@ -1,4 +1,5 @@
 using System;
+using AlmostDelivered.Combat;
 using UnityEngine;
 
 namespace AlmostDelivered.Gameplay
@@ -44,16 +45,28 @@ namespace AlmostDelivered.Gameplay
         private float recoveryClock;
         private float rollRemaining;
         private Vector3 rollDirection;
+        private ActorHealth health;
 
         public float Stamina => stamina;
         public float MaxStamina => maxStamina;
         public float RecoveryDelay => recoveryDelay;
         public bool IsSprinting { get; private set; }
         public bool IsRolling => rollRemaining > 0f;
+        public bool IsRollInvulnerable => isActiveAndEnabled && IsRolling;
         public float RollProgress => IsRolling ? 1f - rollRemaining / rollDuration : 0f;
         public Vector3 RollDirection => rollDirection;
 
-        private void Awake() => stamina = maxStamina;
+        private void Awake()
+        {
+            stamina = maxStamina;
+            health = GetComponent<ActorHealth>();
+        }
+
+        private void OnDisable()
+        {
+            rollRemaining = 0f;
+            health?.SetInvulnerable(false);
+        }
 
         public void ApplySettings(PlayerMobilitySettings settings)
         {
@@ -91,8 +104,11 @@ namespace AlmostDelivered.Gameplay
                 IsSprinting = false;
                 recoveryClock = 0f;
                 rollRemaining = Mathf.Max(0f, rollRemaining - deltaTime);
+                SyncInvulnerability();
                 return rollDirection * rollSpeed;
             }
+
+            SyncInvulnerability();
 
             var moving = direction.sqrMagnitude > .0001f;
             IsSprinting = moving && sprintHeld && stamina > 0f;
@@ -112,5 +128,11 @@ namespace AlmostDelivered.Gameplay
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private void SyncInvulnerability()
+        {
+            if (health == null) health = GetComponent<ActorHealth>();
+            health?.SetInvulnerable(IsRollInvulnerable);
+        }
     }
 }

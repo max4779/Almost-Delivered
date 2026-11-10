@@ -10,6 +10,7 @@ namespace AlmostDelivered.Combat
         public float MaxHealth => maxHealth;
         public float CurrentHealth { get; private set; } = 100f;
         public bool IsDead => CurrentHealth <= 0f;
+        public bool IsInvulnerable { get; private set; }
         public event Action<float, float> HealthChanged;
         public event Action Died;
 
@@ -17,6 +18,8 @@ namespace AlmostDelivered.Combat
         {
             CurrentHealth = maxHealth;
         }
+
+        public void SetInvulnerable(bool value) => IsInvulnerable = value;
 
         public void ConfigureMaximum(float maximum, bool refill = true)
         {
@@ -37,7 +40,7 @@ namespace AlmostDelivered.Combat
                 throw new ArgumentOutOfRangeException(nameof(damage));
             }
 
-            if (IsDead)
+            if (IsDead || IsInvulnerable)
             {
                 return;
             }
