@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using AlmostDelivered.Gameplay;
 using AlmostDelivered.Presentation;
 using NUnit.Framework;
 using UnityEngine;
@@ -116,6 +117,38 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(rightMax - rightMin, Is.LessThan(8f));
             Assert.That(largestLegStride, Is.GreaterThan(8f));
             AssertRootUnchanged();
+        }
+
+        [UnityTest]
+        public IEnumerator SprintLeansForwardAndRollRotatesTheBodyWithoutMovingTheVisualRoot()
+        {
+            var mobility = actor.AddComponent<PlayerMobility>();
+            animator.BindMotionSource(actor.transform);
+            animator.enabled = false;
+            typeof(ProceduralPoseAnimator).GetField("playerMobility",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .SetValue(animator, null);
+            animator.enabled = true;
+            for (var frame = 0; frame < 8; frame++)
+            {
+                mobility.Step(Vector2.right, true, false, .05f, 6f);
+                MoveSource();
+                yield return new WaitForSecondsRealtime(.05f);
+            }
+            var sprintLean = Quaternion.Angle(rotations[0], pivots[0].localRotation);
+            Assert.That(sprintLean, Is.GreaterThan(8f));
+            AssertRootUnchanged();
+
+            mobility.Step(Vector2.right, false, true, .12f, 6f);
+            yield return null;
+            var rollAngle = Quaternion.Angle(rotations[0], pivots[0].localRotation);
+            Assert.That(rollAngle, Is.GreaterThan(40f));
+            Assert.That(pivots[0].localPosition.y - positions[0].y, Is.GreaterThan(.7f));
+            AssertRootUnchanged();
+
+            mobility.Step(Vector2.zero, false, false, .3f, 6f);
+            yield return new WaitForSecondsRealtime(1f);
+            AssertNeutral();
         }
 
         [UnityTest]

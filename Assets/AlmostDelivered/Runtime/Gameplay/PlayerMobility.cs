@@ -1,21 +1,47 @@
+using System;
 using UnityEngine;
 
 namespace AlmostDelivered.Gameplay
 {
+    [Serializable]
+    public struct PlayerMobilitySettings
+    {
+        [Min(1f)] public float maxStamina;
+        [Min(0f)] public float sprintDrainPerSecond;
+        [Min(0f)] public float staminaRecoveryPerSecond;
+        [Min(0f)] public float recoveryDelay;
+        [Min(1f)] public float sprintSpeedMultiplier;
+        [Min(0f)] public float rollStaminaCost;
+        [Min(.01f)] public float rollDuration;
+        [Min(0f)] public float rollSpeed;
+
+        public static PlayerMobilitySettings Default => new PlayerMobilitySettings
+        {
+            maxStamina = 100f,
+            sprintDrainPerSecond = 18f,
+            staminaRecoveryPerSecond = 25f,
+            recoveryDelay = 2f,
+            sprintSpeedMultiplier = 1.6f,
+            rollStaminaCost = 28f,
+            rollDuration = .38f,
+            rollSpeed = 13f
+        };
+    }
+
     /// <summary>Shared sprint, roll and stamina rules for the hub and mission player.</summary>
     public sealed class PlayerMobility : MonoBehaviour
     {
-        [SerializeField, Min(1f)] private float maxStamina = 100f;
-        [SerializeField, Min(0f)] private float sprintDrainPerSecond = 18f;
-        [SerializeField, Min(0f)] private float staminaRecoveryPerSecond = 25f;
-        [SerializeField, Min(0f)] private float recoveryDelay = 2f;
-        [SerializeField, Min(1f)] private float sprintSpeedMultiplier = 1.6f;
-        [SerializeField, Min(0f)] private float rollStaminaCost = 28f;
-        [SerializeField, Min(.01f)] private float rollDuration = .38f;
-        [SerializeField, Min(0f)] private float rollSpeed = 13f;
+        [SerializeField, HideInInspector] private float maxStamina = 100f;
+        [SerializeField, HideInInspector] private float sprintDrainPerSecond = 18f;
+        [SerializeField, HideInInspector] private float staminaRecoveryPerSecond = 25f;
+        [SerializeField, HideInInspector] private float recoveryDelay = 2f;
+        [SerializeField, HideInInspector] private float sprintSpeedMultiplier = 1.6f;
+        [SerializeField, HideInInspector] private float rollStaminaCost = 28f;
+        [SerializeField, HideInInspector] private float rollDuration = .38f;
+        [SerializeField, HideInInspector] private float rollSpeed = 13f;
 
         private float stamina = 100f;
-        private float stillTime;
+        private float recoveryClock;
         private float rollRemaining;
         private Vector3 rollDirection;
 
@@ -25,8 +51,23 @@ namespace AlmostDelivered.Gameplay
         public bool IsSprinting { get; private set; }
         public bool IsRolling => rollRemaining > 0f;
         public float RollProgress => IsRolling ? 1f - rollRemaining / rollDuration : 0f;
+        public Vector3 RollDirection => rollDirection;
 
         private void Awake() => stamina = maxStamina;
+
+        public void ApplySettings(PlayerMobilitySettings settings)
+        {
+            var remainingRatio = maxStamina > 0f ? Mathf.Clamp01(stamina / maxStamina) : 1f;
+            maxStamina = Mathf.Max(1f, settings.maxStamina);
+            sprintDrainPerSecond = Mathf.Max(0f, settings.sprintDrainPerSecond);
+            staminaRecoveryPerSecond = Mathf.Max(0f, settings.staminaRecoveryPerSecond);
+            recoveryDelay = Mathf.Max(0f, settings.recoveryDelay);
+            sprintSpeedMultiplier = Mathf.Max(1f, settings.sprintSpeedMultiplier);
+            rollStaminaCost = Mathf.Max(0f, settings.rollStaminaCost);
+            rollDuration = Mathf.Max(.01f, settings.rollDuration);
+            rollSpeed = Mathf.Max(0f, settings.rollSpeed);
+            stamina = remainingRatio * maxStamina;
+        }
 
         public Vector3 Step(Vector2 input, bool sprintHeld, bool rollPressed, float deltaTime, float baseSpeed)
         {
@@ -48,7 +89,7 @@ namespace AlmostDelivered.Gameplay
             if (IsRolling)
             {
                 IsSprinting = false;
-                stillTime = 0f;
+                recoveryClock = 0f;
                 rollRemaining = Mathf.Max(0f, rollRemaining - deltaTime);
                 return rollDirection * rollSpeed;
             }
@@ -58,12 +99,12 @@ namespace AlmostDelivered.Gameplay
             if (IsSprinting)
                 stamina = Mathf.Max(0f, stamina - sprintDrainPerSecond * deltaTime);
 
-            if (moving)
-                stillTime = 0f;
+            if (moving && sprintHeld)
+                recoveryClock = 0f;
             else
             {
-                stillTime += deltaTime;
-                if (stillTime >= recoveryDelay)
+                recoveryClock += deltaTime;
+                if (recoveryClock >= recoveryDelay)
                     stamina = Mathf.Min(maxStamina, stamina + staminaRecoveryPerSecond * deltaTime);
             }
 

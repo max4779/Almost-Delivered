@@ -49,6 +49,7 @@ namespace AlmostDelivered.Frontend
                 PlayerWeaponLoadout.ConfigureMelee(meleeAttack);
                 meleeAttack.enabled = weapon == PlayerWeaponType.Melee;
             }
+            PlayerWeaponLoadout.ConfigureMobility(mobility, weapon);
             PlayerWeaponLoadout.ApplyVisual(gameObject, weapon);
         }
 

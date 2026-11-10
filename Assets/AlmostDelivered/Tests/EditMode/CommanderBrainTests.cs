@@ -105,6 +105,28 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(executors.All(executor => executor.CurrentOrder.Type == MonsterOrderType.HoldSlot), Is.True);
         }
 
+        [Test] public void LostContactSplitsSquadBetweenLastSeenAndPredictedPositions()
+        {
+            brain.SearchOnLostContact = true;
+            squad.TryCompleteAlert(1);
+            squad.Report(new ObservationSample(50, Vector3.right * 5f, Vector3.right * 2f,
+                0f, 1f, ObservedCombatTag.Mobility, 1));
+            brain.Tick(0f);
+            brain.Tick(1f);
+            brain.Tick(3f);
+
+            Assert.That(brain.IsSearching, Is.True);
+            Assert.That(executors[0].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.SearchLastKnownPosition));
+            Assert.That(executors[0].CurrentOrder.Position, Is.EqualTo(Vector3.right * 5f));
+            Assert.That(executors[1].CurrentOrder.Type, Is.EqualTo(MonsterOrderType.SearchLastKnownPosition));
+            Assert.That(executors[1].CurrentOrder.Position, Is.EqualTo(Vector3.right * 8f));
+
+            squad.Report(new ObservationSample(50, Vector3.right * 9f, Vector3.zero,
+                6f, 1f, ObservedCombatTag.Mobility, 1));
+            brain.Tick(6f);
+            Assert.That(brain.IsSearching, Is.False);
+        }
+
         [Test] public void SwitchPolicy_RetainsUntilHoldAndMarginAreSatisfied()
         {
             squad.TryCompleteAlert(1); brain.Tick(0); brain.Tick(1);

@@ -6,6 +6,8 @@ using UnityEngine;
 
 namespace AlmostDelivered.Gameplay.Payload
 {
+    public enum MissionMobAwarenessState { Unaware, Pursuing, Vigilant }
+
     public enum MissionMobArchetype
     {
         Melee,
@@ -82,6 +84,10 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField, Min(.1f)] private float alertIndicatorDuration = 1.25f;
         [SerializeField, Range(1f, 180f)] private float sightFieldOfView = 120f;
         [SerializeField, Min(0f)] private float closeAwarenessRadius = 3.25f;
+        [SerializeField, Min(0f)] private float freeAwarenessRadius = 18f;
+        [SerializeField, Min(0f)] private float pursuitSightRadius = 28f;
+        [SerializeField, Min(0f)] private float vigilanceDuration = 22f;
+        [SerializeField, Min(0f)] private float soundMemoryDuration = 3f;
 
         private ActorHealth health;
         private CharacterController characterController;
@@ -99,6 +105,13 @@ namespace AlmostDelivered.Gameplay.Payload
         private float guardAwarenessRadius;
         private float lastKnownHealth;
         private float alertTimeRemaining;
+        private float vigilanceRemaining;
+        private Vector3 lastKnownPlayerPosition;
+        private bool hasLastKnownPlayerPosition;
+        private bool hasSeenPlayer;
+        private bool hasShownAlert;
+        private bool pursuingFromNoise;
+        private MissionMobAwarenessState awarenessState;
         private bool suppressDamageAlert;
         private GameObject alertIndicator;
         private bool assaultingCargo;
@@ -116,7 +129,10 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool IsGuardPostEngaged => guardPostEngaged;
         public bool IsAlerted => alertTimeRemaining > 0f && alertIndicator != null && alertIndicator.activeSelf;
         public bool IsCargoSaboteur => Definition.Archetype == MissionMobArchetype.CargoSaboteur;
-        public bool IsPursuingPlayer => !IsCargoSaboteur && (!assaultingCargo || guardPostEngaged);
+        public bool IsPursuingPlayer => !IsCargoSaboteur && awarenessState != MissionMobAwarenessState.Unaware;
+        public MissionMobAwarenessState AwarenessState => awarenessState;
+        public Vector3 LastKnownPlayerPosition => lastKnownPlayerPosition;
+        public float VigilanceRemaining => vigilanceRemaining;
         public GameObject AlertIndicator => alertIndicator;
 
         public event Action<MissionMobController> Removed;
@@ -194,6 +210,13 @@ namespace AlmostDelivered.Gameplay.Payload
             assaultingCargo = false;
             cargoTarget = null;
             alertTimeRemaining = 0f;
+            vigilanceRemaining = soundMemoryDuration;
+            awarenessState = combatTarget != null ? MissionMobAwarenessState.Pursuing : MissionMobAwarenessState.Unaware;
+            lastKnownPlayerPosition = combatTarget != null ? combatTarget.position : transform.position;
+            hasLastKnownPlayerPosition = combatTarget != null;
+            hasSeenPlayer = combatTarget != null;
+            hasShownAlert = false;
+            pursuingFromNoise = false;
             if (alertIndicator != null)
             {
                 alertIndicator.SetActive(false);
@@ -212,6 +235,11 @@ namespace AlmostDelivered.Gameplay.Payload
             guardAwarenessRadius = Mathf.Max(0f, awarenessRadius);
             guardPostEnabled = true;
             guardPostEngaged = false;
+            awarenessState = MissionMobAwarenessState.Unaware;
+            hasLastKnownPlayerPosition = false;
+            hasSeenPlayer = false;
+            hasShownAlert = false;
+            pursuingFromNoise = false;
         }
 
         public void ConfigureCargoAssault(Transform cargo)
@@ -219,6 +247,11 @@ namespace AlmostDelivered.Gameplay.Payload
             cargoTarget = cargo;
             assaultingCargo = cargo != null;
             guardAwarenessRadius = 13f;
+            awarenessState = MissionMobAwarenessState.Unaware;
+            hasLastKnownPlayerPosition = false;
+            hasSeenPlayer = false;
+            hasShownAlert = false;
+            pursuingFromNoise = false;
         }
 
         public void AssignIdentity(int waveId, int enemyId)
@@ -257,8 +290,47 @@ namespace AlmostDelivered.Gameplay.Payload
             var toPlayer = target != null
                 ? Vector3.ProjectOnPlane(target.position - transform.position, Vector3.up)
                 : Vector3.zero;
-            if (assaultingCargo && !IsCargoSaboteur && !guardPostEngaged && CanDetectTarget(toPlayer))
-                ReceiveAlert(false);
+            if (!IsCargoSaboteur)
+            {
+                if (pursuingFromNoise)
+                {
+                    awarenessState = MissionMobAwarenessState.Pursuing;
+                    lastKnownPlayerPosition = target.position;
+                    hasLastKnownPlayerPosition = true;
+                }
+                else if (awarenessState == MissionMobAwarenessState.Unaware && CanDetectTarget(toPlayer))
+                    ReceiveAlert(!assaultingCargo, target.position, true);
+                else if (awarenessState != MissionMobAwarenessState.Unaware &&
+                         (hasSeenPlayer ? CanTrackTarget(toPlayer) : CanDetectTarget(toPlayer)))
+                {
+                    awarenessState = MissionMobAwarenessState.Pursuing;
+                    hasSeenPlayer = true;
+                    vigilanceRemaining = hasShownAlert ? vigilanceDuration : soundMemoryDuration;
+                    lastKnownPlayerPosition = target.position;
+                    hasLastKnownPlayerPosition = true;
+                }
+                else if (awarenessState == MissionMobAwarenessState.Pursuing)
+                {
+                    awarenessState = MissionMobAwarenessState.Vigilant;
+                    vigilanceRemaining = hasShownAlert ? vigilanceDuration : soundMemoryDuration;
+                    alertTimeRemaining = 0f;
+                    if (alertIndicator != null) alertIndicator.SetActive(false);
+                    ClearDetour();
+                }
+                else if (awarenessState == MissionMobAwarenessState.Vigilant)
+                {
+                    vigilanceRemaining = Mathf.Max(0f, vigilanceRemaining - deltaTime);
+                    if (vigilanceRemaining <= 0f)
+                    {
+                        awarenessState = MissionMobAwarenessState.Unaware;
+                        guardPostEngaged = false;
+                        hasLastKnownPlayerPosition = false;
+                        hasSeenPlayer = false;
+                        hasShownAlert = false;
+                        ClearDetour();
+                    }
+                }
+            }
 
             if (IsCargoSaboteur && cargoTarget == null)
             {
@@ -266,33 +338,27 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            var pursuingPlayer = IsPursuingPlayer || (!IsCargoSaboteur && cargoTarget == null);
-            var destination = pursuingPlayer ? target : cargoTarget;
-            var toTarget = Vector3.ProjectOnPlane(destination.position - transform.position, Vector3.up);
-            if (guardPostEnabled && !guardPostEngaged)
+            if (awarenessState == MissionMobAwarenessState.Vigilant && hasLastKnownPlayerPosition)
             {
-                if (CanDetectTarget(toTarget))
-                {
-                    ReceiveAlert();
-                }
-                else
-                {
-                    var toGuardPost = Vector3.ProjectOnPlane(guardPost - transform.position, Vector3.up);
-                    if (toGuardPost.sqrMagnitude > .25f)
-                    {
-                        var guardDirection = toGuardPost.normalized;
-                        RotateTowards(guardDirection, deltaTime);
-                        Move(guardDirection, deltaTime);
-                    }
-                    else
-                    {
-                        Move(Vector3.zero, deltaTime);
-                    }
-
-                    return;
-                }
+                MoveToKnownPosition(lastKnownPlayerPosition, deltaTime);
+                return;
             }
 
+            var pursuingPlayer = IsPursuingPlayer;
+            var destination = pursuingPlayer ? target : cargoTarget;
+            if (guardPostEnabled && !guardPostEngaged)
+            {
+                MoveToKnownPosition(guardPost, deltaTime);
+                return;
+            }
+
+            if (destination == null)
+            {
+                Move(Vector3.zero, deltaTime);
+                return;
+            }
+
+            var toTarget = Vector3.ProjectOnPlane(destination.position - transform.position, Vector3.up);
             if (toTarget.sqrMagnitude <= .0001f)
             {
                 Move(Vector3.zero, deltaTime);
@@ -376,6 +442,24 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             return obstacle != null;
+        }
+
+        private void MoveToKnownPosition(Vector3 position, float deltaTime)
+        {
+            var offset = Vector3.ProjectOnPlane(position - transform.position, Vector3.up);
+            if (offset.sqrMagnitude <= .36f)
+            {
+                Move(Vector3.zero, deltaTime);
+                return;
+            }
+
+            var direction = offset.normalized;
+            if (characterController != null && detourObstacle == null &&
+                FindBlockingObstacle(direction, offset.magnitude, out var obstacle))
+                PlanDetour(obstacle, direction);
+            var navigationDirection = NavigationDirection(direction);
+            RotateTowards(navigationDirection, deltaTime);
+            Move(navigationDirection, deltaTime);
         }
 
         private void PlanDetour(Collider obstacle, Vector3 targetDirection)
@@ -492,14 +576,15 @@ namespace AlmostDelivered.Gameplay.Payload
             if (tookDamage)
             {
                 if (assaultingCargo && !IsCargoSaboteur)
-                    ReceiveAlert(false);
+                    ReceiveAlert(false, transform.position);
                 AlertNearbyMobs();
             }
         }
 
         private void HandleNoise(CombatNoise noise)
         {
-            if (!isActiveAndEnabled || IsDefeated || IsCargoSaboteur)
+            if (!isActiveAndEnabled || IsDefeated || target == null || IsCargoSaboteur ||
+                noise.SourceTeam != CombatTeamId.Player)
             {
                 return;
             }
@@ -507,31 +592,47 @@ namespace AlmostDelivered.Gameplay.Payload
             var offset = Vector3.ProjectOnPlane(transform.position - noise.Position, Vector3.up);
             if (offset.sqrMagnitude <= noise.Radius * noise.Radius)
             {
-                ReceiveAlert(false);
+                if (!hasShownAlert)
+                {
+                    ReceiveAlert(false, target.position, true);
+                    pursuingFromNoise = true;
+                }
+                else
+                {
+                    ReceiveAlert(false, noise.Position);
+                }
             }
         }
 
         private bool CanDetectTarget(Vector3 toTarget)
         {
             var distanceSquared = toTarget.sqrMagnitude;
-            if (distanceSquared <= closeAwarenessRadius * closeAwarenessRadius)
-            {
+            if (distanceSquared <= .0001f)
                 return true;
-            }
 
-            if (distanceSquared > guardAwarenessRadius * guardAwarenessRadius || distanceSquared <= .0001f)
+            var awarenessRadius = guardPostEnabled || assaultingCargo
+                ? guardAwarenessRadius : freeAwarenessRadius;
+            if (distanceSquared > awarenessRadius * awarenessRadius)
             {
                 return false;
             }
 
             var direction = toTarget.normalized;
+            var close = distanceSquared <= closeAwarenessRadius * closeAwarenessRadius;
             var minimumDot = Mathf.Cos(sightFieldOfView * .5f * Mathf.Deg2Rad);
-            if (Vector3.Dot(transform.forward, direction) < minimumDot)
+            if (!close && Vector3.Dot(transform.forward, direction) < minimumDot)
             {
                 return false;
             }
 
             return HasLineOfSight(direction, Mathf.Sqrt(distanceSquared));
+        }
+
+        private bool CanTrackTarget(Vector3 toTarget)
+        {
+            var distanceSquared = toTarget.sqrMagnitude;
+            return distanceSquared <= pursuitSightRadius * pursuitSightRadius &&
+                (distanceSquared <= .0001f || HasLineOfSight(toTarget.normalized, Mathf.Sqrt(distanceSquared)));
         }
 
         private bool HasLineOfSight(Vector3 planarDirection, float distance)
@@ -561,24 +662,36 @@ namespace AlmostDelivered.Gameplay.Payload
                 var offset = Vector3.ProjectOnPlane(candidate.transform.position - center, Vector3.up);
                 if (offset.sqrMagnitude <= radiusSquared)
                 {
-                    candidate.ReceiveAlert(!candidate.assaultingCargo);
+                    candidate.ReceiveAlert(!candidate.assaultingCargo, center);
                 }
             }
         }
 
-        private void ReceiveAlert(bool showIndicator = true)
+        private void ReceiveAlert(bool showIndicator = true, Vector3? knownPosition = null,
+            bool visualContact = false)
         {
             if (IsCargoSaboteur)
                 return;
+            var firstDetection = awarenessState == MissionMobAwarenessState.Unaware;
             guardPostEngaged = true;
             ClearDetour();
+            awarenessState = visualContact ? MissionMobAwarenessState.Pursuing : MissionMobAwarenessState.Vigilant;
+            if (visualContact) hasSeenPlayer = true;
+            vigilanceRemaining = hasShownAlert ? vigilanceDuration : soundMemoryDuration;
+            if (knownPosition.HasValue)
+            {
+                lastKnownPlayerPosition = knownPosition.Value;
+                hasLastKnownPlayerPosition = true;
+            }
             if (assaultingCargo)
                 showIndicator = false;
-            if (!showIndicator)
+            if (!showIndicator || !firstDetection)
             {
                 return;
             }
 
+            hasShownAlert = true;
+            vigilanceRemaining = vigilanceDuration;
             alertTimeRemaining = Mathf.Max(alertTimeRemaining, alertIndicatorDuration);
             EnsureAlertIndicator();
             alertIndicator.SetActive(true);

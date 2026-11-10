@@ -216,7 +216,8 @@ namespace AlmostDelivered.Tests.PlayMode
                 var distantStart = distant.transform.position;
                 nearbyController.Tick(0f, .5f);
                 distantController.Tick(0f, .5f);
-                Assert.That(nearby.transform.position.z, Is.GreaterThan(nearbyStart.z));
+                Assert.That(nearby.transform.position.z, Is.LessThan(nearbyStart.z),
+                    "An alerted guard should check the attacked ally's position first.");
                 Assert.That(distant.transform.position.z, Is.EqualTo(distantStart.z).Within(.001f));
 
                 nearbyController.Tick(2f, 2f);
@@ -304,6 +305,91 @@ namespace AlmostDelivered.Tests.PlayMode
             Physics.SyncTransforms();
             controller.Tick(0f, 0f);
             Assert.That(controller.IsGuardPostEngaged, Is.True);
+        }
+
+        [Test]
+        public void GuardSearchesLastSeenPositionAndDoesNotRepeatAlertAfterCover()
+        {
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            controller.ConfigureGuardPost(Vector3.zero, 13f);
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Pursuing));
+
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "Cover";
+            floor.transform.position = new Vector3(0f, 1f, 5f);
+            floor.transform.localScale = new Vector3(3f, 3f, 1f);
+            target.transform.position = Vector3.forward * 12f;
+            Physics.SyncTransforms();
+            controller.Tick(.1f, .1f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Vigilant));
+            Assert.That(controller.LastKnownPlayerPosition, Is.EqualTo(Vector3.forward * 10f));
+            Assert.That(controller.IsAlerted, Is.False);
+
+            target.transform.position = Vector3.forward * 20f;
+            Physics.SyncTransforms();
+            controller.Tick(.2f, .25f);
+            Assert.That(mob.transform.position.x, Is.EqualTo(0f).Within(.001f));
+            Assert.That(mob.transform.position.z, Is.GreaterThan(0f));
+
+            floor.transform.position = Vector3.right * 30f;
+            target.transform.position = new Vector3(8f, 0f, 12f);
+            Physics.SyncTransforms();
+            controller.Tick(.5f, 0f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Pursuing));
+            Assert.That(controller.IsAlerted, Is.False);
+        }
+
+        [Test]
+        public void SoundStartsDirectPursuitWithoutExclamationOrSearch()
+        {
+            target.transform.position = Vector3.forward * 20f;
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
+            controller.ConfigureGuardPost(Vector3.zero, 1f);
+            CombatNoiseSystem.Emit(Vector3.forward * 9f, 12f, CombatTeamId.Player);
+
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Pursuing));
+            Assert.That(controller.LastKnownPlayerPosition, Is.EqualTo(target.transform.position));
+            Assert.That(controller.IsAlerted, Is.False);
+            controller.Tick(0f, .5f);
+            Assert.That(mob.transform.position.z, Is.GreaterThan(0f));
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.transform.position = new Vector3(0f, 1f, 10f);
+            floor.transform.localScale = new Vector3(3f, 3f, 1f);
+            Physics.SyncTransforms();
+            controller.Tick(3.1f, 3.1f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Pursuing));
+            Assert.That(controller.IsAlerted, Is.False);
+        }
+
+        [Test]
+        public void ExclamationKeepsGuardVigilantForTwentyTwoSeconds()
+        {
+            var definition = new MissionMobDefinition(MissionMobArchetype.Melee,
+                60f, 0f, 1.4f, 10f, 1f, 0f);
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(definition, target.transform, null);
+            controller.ConfigureGuardPost(Vector3.zero, 13f);
+            Physics.SyncTransforms();
+            controller.Tick(0f, 0f);
+            Assert.That(controller.IsAlerted, Is.True);
+
+            floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.transform.position = new Vector3(0f, 1f, 5f);
+            floor.transform.localScale = new Vector3(3f, 3f, 1f);
+            Physics.SyncTransforms();
+            controller.Tick(.1f, .1f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Vigilant));
+            Assert.That(controller.IsAlerted, Is.False);
+            Assert.That(controller.VigilanceRemaining, Is.EqualTo(22f));
+
+            controller.Tick(10f, 10f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Vigilant));
+            controller.Tick(22f, 12f);
+            Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Unaware));
         }
 
         [Test]

@@ -85,6 +85,15 @@ MonoBehaviour:
   range: 38
   noiseRadius: 28
   pierceEnemies: 1
+  mobilitySettings:
+    maxStamina: 100
+    sprintDrainPerSecond: 18
+    staminaRecoveryPerSecond: 25
+    recoveryDelay: 2
+    sprintSpeedMultiplier: 1.6
+    rollStaminaCost: 28
+    rollDuration: 0.38
+    rollSpeed: 13
 --- !u!1 &5066709898422479605
 GameObject:
   m_ObjectHideFlags: 0
@@ -135,6 +144,15 @@ MonoBehaviour:
   reloadSeconds: 1.8
   range: 32
   noiseRadius: 24
+  mobilitySettings:
+    maxStamina: 100
+    sprintDrainPerSecond: 18
+    staminaRecoveryPerSecond: 25
+    recoveryDelay: 2
+    sprintSpeedMultiplier: 1.6
+    rollStaminaCost: 28
+    rollDuration: 0.38
+    rollSpeed: 13
 --- !u!1 &7875935977571344953
 GameObject:
   m_ObjectHideFlags: 0
@@ -184,3 +202,12 @@ MonoBehaviour:
   arcDegrees: 140
   attackCooldown: 0.55
   noiseRadius: 5
+  mobilitySettings:
+    maxStamina: 100
+    sprintDrainPerSecond: 18
+    staminaRecoveryPerSecond: 25
+    recoveryDelay: 2
+    sprintSpeedMultiplier: 1.6
+    rollStaminaCost: 28
+    rollDuration: 0.38
+    rollSpeed: 13

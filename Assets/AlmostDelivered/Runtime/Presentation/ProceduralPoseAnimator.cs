@@ -104,7 +104,8 @@ namespace AlmostDelivered.Presentation
             }
 
             var delta = Time.deltaTime;
-            if (moving) movementPhase = Mathf.Repeat(movementPhase + delta * 10f, Mathf.PI * 2f);
+            var sprinting = playerMobility != null && playerMobility.IsSprinting;
+            if (moving) movementPhase = Mathf.Repeat(movementPhase + delta * (sprinting ? 16f : 10f), Mathf.PI * 2f);
             var swing = moving ? Mathf.Sin(movementPhase) : 0f;
             attackRemaining = Mathf.Max(0f, attackRemaining - delta);
             meleeRemaining = Mathf.Max(0f, meleeRemaining - delta);
@@ -127,8 +128,12 @@ namespace AlmostDelivered.Presentation
 
             if (playerMobility != null && playerMobility.IsRolling)
             {
-                body.Apply(new Vector3(0f, .08f, 0f),
-                    new Vector3(playerMobility.RollProgress * 360f, 0f, 0f), 1f);
+                var worldAxis = Vector3.Cross(Vector3.up, playerMobility.RollDirection);
+                var localAxis = motionSource != null ? motionSource.InverseTransformDirection(worldAxis) : Vector3.right;
+                if (localAxis.sqrMagnitude < .0001f) localAxis = Vector3.right;
+                var rollRotation = Quaternion.AngleAxis(playerMobility.RollProgress * 360f, localAxis.normalized);
+                var rollCenter = Vector3.up;
+                body.Apply(rollCenter - rollRotation * rollCenter, rollRotation, 1f);
                 leftArm.Apply(Vector3.zero, new Vector3(-70f, 0f, -18f), 1f);
                 rightArm.Apply(Vector3.zero, new Vector3(-70f, 0f, 18f), 1f);
                 firearm.Apply(Vector3.zero, Vector3.zero, 1f);
@@ -138,20 +143,25 @@ namespace AlmostDelivered.Presentation
             }
 
             body.Apply(new Vector3(0f, hovering ? Mathf.Sin(Time.time * 2f) * .1f : Mathf.Abs(swing) * .025f,
-                    melee * .12f - hit * .12f - recoil * .045f),
-                new Vector3(-hit * 26f - melee * 12f - recoil * 7f, melee * 10f + slashYaw * .12f, 0f), poseBlend);
-            leftArm.Apply(Vector3.zero, new Vector3(armSwing * 25f - attack * 15f + melee * 25f + hit * 22f -
+                    melee * .12f - hit * .12f - recoil * .045f - (sprinting ? .055f : 0f)),
+                new Vector3((sprinting ? 13f : 0f) - hit * 26f - melee * 12f - recoil * 7f,
+                    melee * 10f + slashYaw * .12f, 0f), poseBlend);
+            leftArm.Apply(Vector3.zero, new Vector3(armSwing * (sprinting ? 38f : 25f) - attack * 15f + melee * 25f + hit * 22f -
                 (rifleFireActive ? 30f : recoil * 12f), rifleFireActive ? -12f : 0f, 0f), poseBlend);
             rightArm.Apply(new Vector3(0f, 0f, -recoil * .12f),
-                new Vector3(-armSwing * 25f - attack * 75f - melee * 115f - (slashing ? 18f : 0f) - recoil * 30f,
+                new Vector3(-armSwing * (sprinting ? 38f : 25f) - attack * 75f - melee * 115f - (slashing ? 18f : 0f) - recoil * 30f,
                 -melee * 25f + slashYaw, hit * 18f + recoil * 8f), poseBlend);
             firearm.Apply(new Vector3(0f, 0f, -recoil * .18f),
                 new Vector3(-recoil * 24f, 0f, recoil * 7f), poseBlend);
-            leftLeg.Apply(Vector3.zero, new Vector3(swing * 32f, 0f, 0f), blend);
-            rightLeg.Apply(Vector3.zero, new Vector3(-swing * 32f, 0f, 0f), blend);
+            leftLeg.Apply(Vector3.zero, new Vector3(swing * (sprinting ? 48f : 32f), 0f, 0f), blend);
+            rightLeg.Apply(Vector3.zero, new Vector3(-swing * (sprinting ? 48f : 32f), 0f, 0f), blend);
         }
 
-        private void OnEnable() => ResetMotion();
+        private void OnEnable()
+        {
+            playerMobility = motionSource != null ? motionSource.GetComponent<PlayerMobility>() : null;
+            ResetMotion();
+        }
 
         private void OnDisable()
         {
@@ -207,9 +217,14 @@ namespace AlmostDelivered.Presentation
 
             public void Apply(Vector3 offset, Vector3 angles, float blend)
             {
+                Apply(offset, Quaternion.Euler(angles), blend);
+            }
+
+            public void Apply(Vector3 offset, Quaternion rotationOffset, float blend)
+            {
                 if (pivot == null) return;
                 pivot.localPosition = Vector3.Lerp(pivot.localPosition, position + offset, blend);
-                pivot.localRotation = Quaternion.Slerp(pivot.localRotation, rotation * Quaternion.Euler(angles), blend);
+                pivot.localRotation = Quaternion.Slerp(pivot.localRotation, rotation * rotationOffset, blend);
                 pivot.localScale = Vector3.Lerp(pivot.localScale, scale, blend);
             }
 

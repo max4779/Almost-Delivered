@@ -42,6 +42,7 @@ namespace AlmostDelivered.CommanderAI.Debugging
                 member.GetComponent<AlertSignal>().Configure(Squad, i + 1, 1f);
             }
             SelectDifficulty(difficulty);
+            Brain.SearchOnLostContact = true;
         }
 
         public void SelectDifficulty(int index)

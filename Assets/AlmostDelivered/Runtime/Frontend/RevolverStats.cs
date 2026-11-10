@@ -1,3 +1,4 @@
+using AlmostDelivered.Gameplay;
 using UnityEngine;
 
 namespace AlmostDelivered.Frontend
@@ -15,6 +16,8 @@ namespace AlmostDelivered.Frontend
         [SerializeField, Min(.1f)] private float range = DefaultRange;
         [SerializeField, Min(0f)] private float noiseRadius = DefaultNoiseRadius;
         [SerializeField] private bool pierceEnemies = true;
+        [Header("이 무기를 들었을 때 이동·스테미나")]
+        [SerializeField] private PlayerMobilitySettings mobilitySettings = PlayerMobilitySettings.Default;
 
         public float Damage => damage;
         public float FireCooldown => fireCooldown;
@@ -23,5 +26,6 @@ namespace AlmostDelivered.Frontend
         public float Range => range;
         public float NoiseRadius => noiseRadius;
         public bool PierceEnemies => pierceEnemies;
+        public PlayerMobilitySettings MobilitySettings => mobilitySettings;
     }
 }

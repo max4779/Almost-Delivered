@@ -1,4 +1,5 @@
 using AlmostDelivered.Combat;
+using AlmostDelivered.Gameplay;
 using UnityEngine;
 
 namespace AlmostDelivered.Frontend
@@ -63,6 +64,29 @@ namespace AlmostDelivered.Frontend
             if (stats == null) return;
             attack.Configure(stats.Damage, stats.Reach, stats.ArcDegrees,
                 stats.AttackCooldown, stats.NoiseRadius);
+        }
+
+        public static void ConfigureMobility(PlayerMobility mobility, PlayerWeaponType weapon)
+        {
+            if (mobility == null) return;
+            PlayerMobilitySettings settings;
+            if (weapon == PlayerWeaponType.Melee)
+            {
+                var stats = mobility.GetComponentInChildren<MeleeWeaponStats>(true);
+                settings = stats != null ? stats.MobilitySettings : PlayerMobilitySettings.Default;
+            }
+            else if (weapon == PlayerWeaponType.Revolver)
+            {
+                var stats = mobility.GetComponentInChildren<RevolverStats>(true);
+                settings = stats != null ? stats.MobilitySettings : PlayerMobilitySettings.Default;
+            }
+            else
+            {
+                var stats = mobility.GetComponentInChildren<AutomaticRifleStats>(true);
+                settings = stats != null ? stats.MobilitySettings : PlayerMobilitySettings.Default;
+            }
+
+            mobility.ApplySettings(settings);
         }
 
         public static Transform FindMuzzle(GameObject actor, PlayerWeaponType weapon)

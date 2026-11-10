@@ -22,7 +22,9 @@ namespace AlmostDelivered.Tests.PlayMode
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode("Assets/AlmostDelivered/Scenes/CommanderAITest.unity", new LoadSceneParameters(LoadSceneMode.Single));
             arena = Object.FindObjectOfType<CommanderArena>();
             Assert.That(arena, Is.Not.Null);
+            yield return null;
             arena.Brain.enabled = false;
+            arena.Brain.SearchOnLostContact = false;
             foreach (var member in arena.Members)
             {
                 var perception = member.GetComponent<MonsterPerception>();

@@ -13,6 +13,9 @@ namespace AlmostDelivered.CommanderAI.Commander
     {
         private static readonly ProfilerMarker TickMarker = new ProfilerMarker("CommanderAI.CommandTick");
         [SerializeField, Min(.01f)] private float memorySecondsToZero = 10f;
+        [SerializeField, Min(0f)] private float lostContactSearchDelay = 1.5f;
+        [SerializeField, Min(0f)] private float predictionLeadSeconds = 1.5f;
+        [SerializeField, Min(0f)] private float maximumPredictionDistance = 4f;
         [SerializeField, Range(0, 128)] private int evaluationHistoryCapacity = 128;
         private SquadController squad;
         private ActorHealth commander;
@@ -33,6 +36,11 @@ namespace AlmostDelivered.CommanderAI.Commander
         private float lastTick = float.NegativeInfinity;
         private UtilityTactic pendingTactic;
         private TacticalContext pendingContext;
+        private bool searchOrdersActive;
+        private int searchedActorId;
+        private float searchedObservationTime;
+        public bool SearchOnLostContact { get; set; }
+        public bool IsSearching => searchOrdersActive;
         public TacticEvaluation PendingEvaluation { get; private set; }
         public TacticEvaluation ActiveEvaluation { get; private set; }
         public IReadOnlyList<TacticEvaluation> EvaluationHistory => history.AsReadOnly();
@@ -64,6 +72,7 @@ namespace AlmostDelivered.CommanderAI.Commander
             Telegraph = GetComponent<CommandTelegraph>() ?? gameObject.AddComponent<CommandTelegraph>();
             Telegraph.Cancel(); PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
             nextCycle = lastTick = float.NegativeInfinity; history.Clear(); latest.Clear(); CommandCycleCount = 0; allocationFailures.Clear();
+            searchOrdersActive = false;
             DecisionReason = "waiting for completed alert";
             ConfigureMembers();
             commander.Died += CommanderDied;
@@ -76,6 +85,7 @@ namespace AlmostDelivered.CommanderAI.Commander
         private void ClearOrganization()
         {
             PendingEvaluation = null; ActiveEvaluation = null; pendingTactic = null;
+            searchOrdersActive = false;
             Telegraph?.Cancel(); allocator?.ReleaseAll();
             DetachMembers();
             DecisionReason = "coordination ended permanently";
@@ -108,6 +118,18 @@ namespace AlmostDelivered.CommanderAI.Commander
             CommandCycleCount++; latest.Clear();
             squad.Knowledge.Decay(now, memorySecondsToZero);
             ConfigureMembers();
+            if (SearchOnLostContact && TryGetLostContact(now, out var lostMemory))
+            {
+                if (!searchOrdersActive || searchedActorId != lostMemory.ActorId ||
+                    searchedObservationTime != lostMemory.LastObservedTime)
+                    AssignSearchOrders(in lostMemory);
+                return;
+            }
+            if (searchOrdersActive)
+            {
+                searchOrdersActive = false;
+                foreach (var member in squad.LivingMembers) member.Executor.Cancel();
+            }
             var context = BuildContext(now);
             UtilityTactic winner = null;
             TacticEvaluation best = null, current = null;
@@ -153,6 +175,45 @@ namespace AlmostDelivered.CommanderAI.Commander
 
         private bool Available(string id)
         { foreach (var available in profile.AvailableTacticIds) if (available == id) return true; return false; }
+
+        private bool TryGetLostContact(float now, out ObservedTargetMemory selected)
+        {
+            selected = default;
+            var found = false;
+            foreach (var memory in squad.Knowledge.Snapshot)
+            {
+                if (memory.Confidence <= 0f || now - memory.LastObservedTime < lostContactSearchDelay ||
+                    (found && memory.LastObservedTime <= selected.LastObservedTime)) continue;
+                selected = memory;
+                found = true;
+            }
+            return found;
+        }
+
+        private void AssignSearchOrders(in ObservedTargetMemory memory)
+        {
+            Telegraph.Cancel();
+            PendingEvaluation = null;
+            ActiveEvaluation = null;
+            pendingTactic = null;
+            activeRequests.Clear();
+            retriedMembers.Clear();
+            allocator.ReleaseAll();
+            var prediction = Vector3.ClampMagnitude(
+                Vector3.ProjectOnPlane(memory.LastKnownVelocity, Vector3.up) * predictionLeadSeconds,
+                maximumPredictionDistance);
+            var index = 0;
+            foreach (var member in squad.LivingMembers)
+            {
+                member.Executor.Cancel();
+                member.Executor.Assign(new MonsterOrder(MonsterOrderType.SearchLastKnownPosition,
+                    position: memory.LastKnownPosition + (index++ % 2 == 0 ? Vector3.zero : prediction)));
+            }
+            searchedActorId = memory.ActorId;
+            searchedObservationTime = memory.LastObservedTime;
+            searchOrdersActive = true;
+            DecisionReason = "searching last observed and predicted positions";
+        }
 
         private void ConfigureMembers()
         {

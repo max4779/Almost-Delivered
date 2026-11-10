@@ -1,5 +1,7 @@
 using AlmostDelivered.Gameplay;
+using AlmostDelivered.Frontend;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 
 namespace AlmostDelivered.Tests.PlayMode
@@ -31,6 +33,53 @@ namespace AlmostDelivered.Tests.PlayMode
             mobility.Step(Vector2.zero, false, false, .1f, 6f);
             Assert.That(mobility.Stamina, Is.GreaterThan(82f));
             Assert.That(mobility.IsSprinting, Is.False);
+        }
+
+        [Test]
+        public void StaminaRecoversWhileWalkingAfterSprintStops()
+        {
+            mobility.Step(Vector2.right, true, false, 1f, 6f);
+            Assert.That(mobility.Stamina, Is.EqualTo(82f));
+
+            mobility.Step(Vector2.right, false, false, 1.9f, 6f);
+            Assert.That(mobility.Stamina, Is.EqualTo(82f));
+            mobility.Step(Vector2.right, false, false, .1f, 6f);
+            Assert.That(mobility.Stamina, Is.GreaterThan(82f));
+            Assert.That(mobility.IsSprinting, Is.False);
+        }
+
+        [Test]
+        public void WeaponSettingsApplyDistinctStaminaValuesWithoutRefillingOnSwitch()
+        {
+            var rifle = new GameObject("Automatic Rifle", typeof(AutomaticRifleStats));
+            rifle.transform.SetParent(player.transform, false);
+            var revolver = new GameObject("Revolver", typeof(RevolverStats));
+            revolver.transform.SetParent(player.transform, false);
+            var melee = new GameObject("Melee Weapon", typeof(MeleeWeaponStats));
+            melee.transform.SetParent(player.transform, false);
+            SetMobilityValue(rifle.GetComponent<AutomaticRifleStats>(), "maxStamina", 120f);
+            SetMobilityValue(rifle.GetComponent<AutomaticRifleStats>(), "sprintDrainPerSecond", 30f);
+            SetMobilityValue(revolver.GetComponent<RevolverStats>(), "maxStamina", 80f);
+            SetMobilityValue(melee.GetComponent<MeleeWeaponStats>(), "maxStamina", 150f);
+
+            PlayerWeaponLoadout.ConfigureMobility(mobility, PlayerWeaponType.AutomaticRifle);
+            Assert.That(mobility.MaxStamina, Is.EqualTo(120f));
+            mobility.Step(Vector2.right, true, false, 1f, 6f);
+            Assert.That(mobility.Stamina, Is.EqualTo(90f));
+
+            PlayerWeaponLoadout.ConfigureMobility(mobility, PlayerWeaponType.Revolver);
+            Assert.That(mobility.MaxStamina, Is.EqualTo(80f));
+            Assert.That(mobility.Stamina, Is.EqualTo(60f));
+            PlayerWeaponLoadout.ConfigureMobility(mobility, PlayerWeaponType.Melee);
+            Assert.That(mobility.MaxStamina, Is.EqualTo(150f));
+            Assert.That(mobility.Stamina, Is.EqualTo(112.5f));
+        }
+
+        private static void SetMobilityValue(Object stats, string name, float value)
+        {
+            var serialized = new SerializedObject(stats);
+            serialized.FindProperty("mobilitySettings").FindPropertyRelative(name).floatValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         [Test]
