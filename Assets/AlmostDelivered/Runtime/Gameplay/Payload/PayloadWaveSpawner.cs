@@ -338,6 +338,14 @@ namespace AlmostDelivered.Gameplay.Payload
             character.center = Vector3.up;
             character.slopeLimit = 45f;
             character.stepOffset = .3f;
+            var hurtboxObject = new GameObject("Combat Hurtbox", typeof(CapsuleCollider), typeof(CombatHurtbox));
+            hurtboxObject.transform.SetParent(actor.transform, false);
+            var hurtbox = hurtboxObject.GetComponent<CapsuleCollider>();
+            hurtbox.isTrigger = true;
+            hurtbox.radius = HurtboxRadiusFor(pendingEnemy.Definition.Archetype);
+            hurtbox.height = pendingEnemy.Definition.Archetype == MissionMobArchetype.CommanderBoss ||
+                             pendingEnemy.Definition.Archetype == MissionMobArchetype.ChargerBoss ? 2.4f : 2.2f;
+            hurtbox.center = Vector3.up * (hurtbox.height * .5f);
 
             RangedAttackController rangedAttack = null;
             if (IsRanged(pendingEnemy.Definition.Archetype) &&
@@ -673,6 +681,20 @@ namespace AlmostDelivered.Gameplay.Payload
         private static bool IsRanged(MissionMobArchetype archetype)
         {
             return archetype == MissionMobArchetype.Ranged || archetype == MissionMobArchetype.CommanderBoss;
+        }
+
+        private static float HurtboxRadiusFor(MissionMobArchetype archetype)
+        {
+            switch (archetype)
+            {
+                case MissionMobArchetype.CommanderBoss:
+                case MissionMobArchetype.ChargerBoss:
+                    return .9f;
+                case MissionMobArchetype.Shield:
+                    return .8f;
+                default:
+                    return .72f;
+            }
         }
 
         private readonly struct PendingEnemy

@@ -69,7 +69,7 @@ namespace AlmostDelivered.Combat
             while (true)
             {
                 count = Physics.OverlapSphereNonAlloc(center, reach, hits,
-                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
                 if (count < hits.Length) break;
                 Array.Resize(ref hits, hits.Length * 2);
             }
@@ -78,6 +78,7 @@ namespace AlmostDelivered.Combat
             {
                 var hit = hits[i];
                 if (hit == null) continue;
+                if (hit.isTrigger && hit.GetComponent<CombatHurtbox>() == null) continue;
                 var targetHealth = hit.GetComponentInParent<ActorHealth>();
                 if (targetHealth == null || targetHealth == ownerHealth || targetHealth.IsDead ||
                     damaged.Contains(targetHealth)) continue;

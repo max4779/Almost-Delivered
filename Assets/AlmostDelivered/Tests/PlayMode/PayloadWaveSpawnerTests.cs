@@ -149,11 +149,16 @@ namespace AlmostDelivered.Tests.PlayMode
             foreach (var enemy in spawner.LivingEnemies)
             {
                 var character = enemy.GetComponent<CharacterController>();
+                var hurtbox = enemy.GetComponentInChildren<CombatHurtbox>();
                 var visual = enemy.transform.Find("VisualRoot");
                 Assert.That(character, Is.Not.Null, enemy.name);
                 Assert.That(enemy.GetComponent<CapsuleCollider>(), Is.Null, enemy.name);
                 Assert.That(character.center, Is.EqualTo(Vector3.up), enemy.name);
                 Assert.That(character.height, Is.EqualTo(2f), enemy.name);
+                Assert.That(character.radius, Is.EqualTo(.5f), enemy.name);
+                Assert.That(hurtbox, Is.Not.Null, enemy.name);
+                Assert.That(hurtbox.GetComponent<CapsuleCollider>().isTrigger, Is.True, enemy.name);
+                Assert.That(hurtbox.GetComponent<CapsuleCollider>().radius, Is.GreaterThan(character.radius), enemy.name);
                 Assert.That(visual, Is.Not.Null, enemy.name);
                 Assert.That(visual.localPosition, Is.EqualTo(Vector3.zero), enemy.name);
             }

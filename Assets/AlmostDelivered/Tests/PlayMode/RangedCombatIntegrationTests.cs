@@ -76,6 +76,39 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
+        public IEnumerator ProjectileHitsWiderEnemyHurtboxButIgnoresUnrelatedTriggers()
+        {
+            var owner = Actor("Owner", CombatTeamId.Player, new Vector3(0f, 1f, 0f), false);
+            var unrelatedTrigger = new GameObject("Unrelated Trigger", typeof(BoxCollider));
+            unrelatedTrigger.transform.position = new Vector3(0f, 1f, 1f);
+            unrelatedTrigger.GetComponent<BoxCollider>().isTrigger = true;
+            var enemy = new GameObject("Enemy", typeof(CharacterController),
+                typeof(ActorHealth), typeof(CombatTeam));
+            enemy.GetComponent<CombatTeam>().Team = CombatTeamId.Enemy;
+            enemy.transform.position = new Vector3(.75f, 0f, 2f);
+            var movement = enemy.GetComponent<CharacterController>();
+            movement.radius = .5f;
+            movement.height = 2f;
+            movement.center = Vector3.up;
+            var hitbox = new GameObject("Combat Hurtbox", typeof(CapsuleCollider), typeof(CombatHurtbox));
+            hitbox.transform.SetParent(enemy.transform, false);
+            var capsule = hitbox.GetComponent<CapsuleCollider>();
+            capsule.isTrigger = true;
+            capsule.radius = .72f;
+            capsule.height = 2.2f;
+            capsule.center = Vector3.up * 1.1f;
+            Projectile(owner, CombatTeamId.Player, Vector3.forward, 150f, 20f, 1f, .14f);
+
+            yield return new WaitForFixedUpdate();
+
+            Assert.That(enemy.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(80f));
+            Assert.That(movement.radius, Is.EqualTo(.5f));
+            Object.Destroy(owner);
+            Object.Destroy(unrelatedTrigger);
+            Object.Destroy(enemy);
+        }
+
+        [UnityTest]
         public IEnumerator ProjectileDiesOnWorldGeometry()
         {
             var owner = Actor("Owner", CombatTeamId.Player, Vector3.zero, false);

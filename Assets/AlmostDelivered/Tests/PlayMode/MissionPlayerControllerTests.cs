@@ -190,6 +190,35 @@ namespace AlmostDelivered.Tests.PlayMode
             foreach (var obstacle in scenery) Object.DestroyImmediate(obstacle);
         }
 
+        [Test]
+        public void MeleeSwingHitsWiderEnemyHurtboxWithoutChangingMovementCollider()
+        {
+            var melee = player.AddComponent<MeleeAttackController>();
+            melee.Configure(34f, 2.8f, 140f, .34f);
+            var enemy = new GameObject("Enemy", typeof(CharacterController),
+                typeof(ActorHealth), typeof(CombatTeam));
+            enemy.GetComponent<CombatTeam>().Team = CombatTeamId.Enemy;
+            enemy.transform.position = new Vector3(0f, 0f, 3.4f);
+            var movement = enemy.GetComponent<CharacterController>();
+            movement.radius = .5f;
+            movement.height = 2f;
+            movement.center = Vector3.up;
+            var hurtbox = new GameObject("Combat Hurtbox", typeof(CapsuleCollider), typeof(CombatHurtbox));
+            hurtbox.transform.SetParent(enemy.transform, false);
+            var capsule = hurtbox.GetComponent<CapsuleCollider>();
+            capsule.isTrigger = true;
+            capsule.radius = .72f;
+            capsule.height = 2.2f;
+            capsule.center = Vector3.up * 1.1f;
+            Physics.SyncTransforms();
+
+            Assert.That(melee.TryAttack(0f, Vector3.forward), Is.True);
+            Assert.That(enemy.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(66f));
+            Assert.That(movement.radius, Is.EqualTo(.5f));
+
+            Object.DestroyImmediate(enemy);
+        }
+
         [UnityTest]
         public IEnumerator WindArcFadesOutAfterTheSwing()
         {

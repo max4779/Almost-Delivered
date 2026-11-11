@@ -1,3 +1,4 @@
+using System;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using UnityEngine;
@@ -151,8 +152,12 @@ namespace AlmostDelivered.Gameplay
                 return false;
 
             var ray = camera.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit, 250f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            var hits = Physics.RaycastAll(ray, 250f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide);
+            Array.Sort(hits, (first, second) => first.distance.CompareTo(second.distance));
+            foreach (var hit in hits)
             {
+                if (hit.collider.isTrigger && hit.collider.GetComponent<CombatHurtbox>() == null)
+                    continue;
                 var targetHealth = hit.collider.GetComponentInParent<ActorHealth>();
                 var targetTeam = hit.collider.GetComponentInParent<CombatTeam>();
                 var ownTeam = GetComponent<CombatTeam>();
@@ -162,6 +167,7 @@ namespace AlmostDelivered.Gameplay
                     aimPoint = hit.collider.bounds.center;
                     return IsFinite(aimPoint);
                 }
+                break;
             }
 
             var plane = new Plane(Vector3.up, transform.position);

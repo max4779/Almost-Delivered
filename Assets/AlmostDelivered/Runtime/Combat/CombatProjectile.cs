@@ -66,7 +66,7 @@ namespace AlmostDelivered.Combat
 
             var step = speed * Time.fixedDeltaTime;
             var origin = transform.position;
-            var overlaps = Physics.OverlapSphere(origin, collisionRadius, ~0, QueryTriggerInteraction.Ignore)
+            var overlaps = Physics.OverlapSphere(origin, collisionRadius, ~0, QueryTriggerInteraction.Collide)
                 .Where(candidate => !ShouldIgnore(candidate))
                 .OrderBy(candidate => (candidate.ClosestPoint(origin) - origin).sqrMagnitude);
             foreach (var overlap in overlaps)
@@ -75,8 +75,8 @@ namespace AlmostDelivered.Combat
             }
 
             var hits = collisionRadius > Mathf.Epsilon
-                ? Physics.SphereCastAll(origin, collisionRadius, direction, step, ~0, QueryTriggerInteraction.Ignore)
-                : Physics.RaycastAll(origin, direction, step, ~0, QueryTriggerInteraction.Ignore);
+                ? Physics.SphereCastAll(origin, collisionRadius, direction, step, ~0, QueryTriggerInteraction.Collide)
+                : Physics.RaycastAll(origin, direction, step, ~0, QueryTriggerInteraction.Collide);
 
             foreach (var hit in hits.OrderBy(hit => hit.distance))
             {
@@ -101,6 +101,8 @@ namespace AlmostDelivered.Combat
             if (candidateTransform == transform || candidateTransform.IsChildOf(transform))
                 return true;
             if (owner != null && (candidateTransform == owner.transform || candidateTransform.IsChildOf(owner.transform)))
+                return true;
+            if (candidate.isTrigger && candidate.GetComponent<CombatHurtbox>() == null)
                 return true;
 
             if (pierceEnemies && piercedActors.Contains(candidate.GetComponentInParent<ActorHealth>()))
