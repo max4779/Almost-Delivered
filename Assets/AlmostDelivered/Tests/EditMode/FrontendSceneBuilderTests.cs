@@ -38,15 +38,15 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
-        public void BuildLeavesHubAsActiveStartScene()
+        public void BuildLeavesFrontendAsActiveStartScene()
         {
             FrontendSceneBuilder.BuildOrUpdateAll();
 
-            Assert.That(SceneManager.GetActiveScene().path, Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
-            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(FrontendSceneBuilder.DepartureHubScenePath));
+            Assert.That(SceneManager.GetActiveScene().path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
+            Assert.That(EditorBuildSettings.scenes[0].path, Is.EqualTo(FrontendSceneBuilder.FrontendScenePath));
             if (!Application.isBatchMode)
                 Assert.That(EditorSceneManager.playModeStartScene,
-                    Is.EqualTo(AssetDatabase.LoadAssetAtPath<SceneAsset>(FrontendSceneBuilder.DepartureHubScenePath)));
+                    Is.EqualTo(AssetDatabase.LoadAssetAtPath<SceneAsset>(FrontendSceneBuilder.FrontendScenePath)));
         }
 
         [Test]

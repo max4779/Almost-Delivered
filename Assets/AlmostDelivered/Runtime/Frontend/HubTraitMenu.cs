@@ -17,6 +17,7 @@ namespace AlmostDelivered.Frontend
         [SerializeField] private Button[] investButtons;
         [SerializeField] private Image[] traitCards;
         [SerializeField] private Image[] branchLinks;
+        private string lastRemoteStatus;
 
         public bool IsOpen => overlay != null && overlay.activeSelf;
 
@@ -57,6 +58,7 @@ namespace AlmostDelivered.Frontend
         private void Update()
         {
             if (IsOpen && Input.GetKeyDown(KeyCode.Escape)) Close();
+            if (IsOpen && lastRemoteStatus != RemoteTraitSync.Status) Refresh();
         }
 
         public void Open()
@@ -90,13 +92,14 @@ namespace AlmostDelivered.Frontend
 
         public void Refresh()
         {
+            lastRemoteStatus = RemoteTraitSync.Status;
             var progress = profile != null ? profile.Progress : null;
             var level = progress != null ? progress.level : 1;
             var available = progress != null ? progress.AvailablePoints : 0;
             if (entryLabel != null) entryLabel.text = $"특성  ·  Lv.{level}  ·  {available}P";
             if (summary != null)
                 summary.text = $"레벨 {level}  ·  사용 가능 {available}P / 총 {PlayerTraitCatalog.TotalPointLimit}P\n" +
-                    "아래 특성 3단계 → 위 특성 해금  ·  기지에서만 재분배";
+                    RemoteTraitSync.Status;
             if (traitLabels == null) return;
             for (var i = 0; i < PlayerTraitCatalog.All.Count && i < traitLabels.Length; i++)
             {

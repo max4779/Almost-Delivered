@@ -51,6 +51,7 @@ namespace AlmostDelivered.Gameplay
         {
             var traits = GetComponent<PlayerTraitProfile>() ?? gameObject.AddComponent<PlayerTraitProfile>();
             traits.EnsureLocalAccount();
+            RemoteTraitSync.Ensure().Attach(traits);
             SetWeaponType(PlayerWeaponLoadout.Selected);
             if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != GameSceneFlow.MissionPrototypeScene)
                 return;

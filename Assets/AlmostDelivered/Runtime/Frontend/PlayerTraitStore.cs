@@ -45,6 +45,7 @@ namespace AlmostDelivered.Frontend
     public static class LocalPlayerAccount
     {
         private const string GuestKey = "AlmostDelivered.LocalGuestId.v1";
+        private const string CloudGuestKey = "AlmostDelivered.CloudGuestId.v1";
         private static string currentAccountId;
 
         public static string CurrentAccountId
@@ -52,7 +53,11 @@ namespace AlmostDelivered.Frontend
             get
             {
                 if (!string.IsNullOrEmpty(currentAccountId)) return currentAccountId;
-                var guestId = PlayerPrefs.GetString(GuestKey, string.Empty);
+                if (FrontendAccountSession.IsSignedIn)
+                    return currentAccountId = FrontendAccountSession.AccountId;
+                var guestId = PlayerPrefs.GetString(CloudGuestKey, string.Empty);
+                if (string.IsNullOrWhiteSpace(guestId))
+                    guestId = PlayerPrefs.GetString(GuestKey, string.Empty);
                 if (string.IsNullOrWhiteSpace(guestId))
                 {
                     guestId = "guest:" + Guid.NewGuid().ToString("N");
@@ -68,6 +73,18 @@ namespace AlmostDelivered.Frontend
         {
             if (string.IsNullOrWhiteSpace(accountId)) throw new ArgumentException("Account ID is required.", nameof(accountId));
             currentAccountId = accountId;
+        }
+
+        public static void UseGuestAccount()
+        {
+            currentAccountId = null;
+        }
+
+        public static void UseCloudGuestAccount(string accountId)
+        {
+            UseAuthenticatedAccount(accountId);
+            PlayerPrefs.SetString(CloudGuestKey, accountId);
+            PlayerPrefs.Save();
         }
     }
 }

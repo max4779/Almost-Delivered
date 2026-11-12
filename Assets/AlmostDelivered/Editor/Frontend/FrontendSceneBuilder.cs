@@ -50,9 +50,9 @@ namespace AlmostDelivered.Editor.Frontend
             MissionPrototypeSceneBuilder.BuildOrUpdate();
             RegisterBuildSettings();
             AssetDatabase.SaveAssets();
-            EditorSceneManager.OpenScene(DepartureHubScenePath, OpenSceneMode.Single);
+            EditorSceneManager.OpenScene(FrontendScenePath, OpenSceneMode.Single);
             if (!Application.isBatchMode)
-                EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(DepartureHubScenePath);
+                EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(FrontendScenePath);
             Debug.Log("FRONTEND_HUB_BUILT " + FrontendScenePath + " " + DepartureHubScenePath);
         }
 
@@ -68,6 +68,22 @@ namespace AlmostDelivered.Editor.Frontend
                 Debug.LogException(exception);
                 EditorApplication.Exit(1);
             }
+        }
+
+        [MenuItem("Almost Delivered/Frontend/Add account screen to saved frontend")]
+        public static void AddAccountScreenToSavedFrontend()
+        {
+            var scene = EditorSceneManager.OpenScene(FrontendScenePath, OpenSceneMode.Single);
+            var controller = Object.FindObjectOfType<FrontendMenuController>();
+            var background = GameObject.Find("Background");
+            var menu = GameObject.Find("Menu Panel");
+            if (controller == null || background == null || menu == null)
+                throw new InvalidOperationException("Saved frontend is missing its menu or controller.");
+            AddAccountUi(background.transform, menu.transform, controller);
+            EditorSceneManager.SaveScene(scene);
+            RegisterBuildSettings();
+            EditorSceneManager.playModeStartScene = AssetDatabase.LoadAssetAtPath<SceneAsset>(FrontendScenePath);
+            Debug.Log("FRONTEND_ACCOUNT_SCREEN_UPDATED");
         }
 
         /// <summary>Update saved hub stations without rebuilding unrelated generated assets.</summary>
@@ -272,12 +288,112 @@ namespace AlmostDelivered.Editor.Frontend
             UiButton("Settings Placeholder", menuPanel.transform, "설정  ·  준비 중", new Color(.24f, .29f, .32f), false);
             var quitButton = UiButton("Quit Game", menuPanel.transform, "종료", new Color(.24f, .29f, .32f), true);
             UnityEventTools.AddPersistentListener(quitButton.onClick, controller.QuitGame);
+            AddAccountUi(background.transform, menuPanel.transform, controller);
 
             var footer = UiText("Footer", background.transform, "QUARTER-VIEW CO-OP DEFENSE PROTOTYPE", 16, new Color(.38f, .52f, .58f), TextAnchor.MiddleLeft);
             Anchor(footer.rectTransform, new Vector2(.083f, .04f), new Vector2(.6f, .1f), new Vector2(0f, .5f), Vector2.zero, Vector2.zero);
 
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             EditorSceneManager.SaveScene(scene, FrontendScenePath);
+        }
+
+        private static void AddAccountUi(Transform background, Transform menu, FrontendMenuController controller)
+        {
+            var existingOverlay = background.Find("Account Overlay");
+            if (existingOverlay != null)
+            {
+                var existingPanel = existingOverlay.Find("Account Panel") as RectTransform;
+                if (existingPanel != null) existingPanel.sizeDelta = new Vector2(720f, 750f);
+                return;
+            }
+            var account = controller.GetComponent<FrontendAccountPanel>() ??
+                controller.gameObject.AddComponent<FrontendAccountPanel>();
+
+            var status = UiText("Account Status", background,
+                "게스트로 시작하거나 계정에 로그인하세요", 23,
+                new Color(.64f, .83f, .87f), TextAnchor.MiddleLeft);
+            Anchor(status.rectTransform, new Vector2(.083f, .56f), new Vector2(.55f, .62f),
+                new Vector2(0f, .5f), Vector2.zero, Vector2.zero);
+
+            var open = UiButton("Open Account", menu, "계정 로그인 / 등록", AmberColor, true);
+            open.transform.SetSiblingIndex(1);
+            UnityEventTools.AddPersistentListener(open.onClick, controller.OpenAccount);
+            var logout = UiButton("Sign Out", menu, "로그아웃", new Color(.24f, .29f, .32f), true);
+            logout.transform.SetSiblingIndex(2);
+            UnityEventTools.AddPersistentListener(logout.onClick, account.SignOut);
+
+            var overlay = UiImage("Account Overlay", background,
+                new Color(.005f, .014f, .025f, .86f));
+            Stretch(overlay.rectTransform);
+            var panel = UiImage("Account Panel", overlay.transform,
+                new Color(.035f, .07f, .095f, 1f));
+            Anchor(panel.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                new Vector2(.5f, .5f), Vector2.zero, new Vector2(720f, 750f));
+            panel.rectTransform.sizeDelta = new Vector2(720f, 750f);
+
+            var title = UiText("Account Title", panel.transform, "승무원 로그인", 46,
+                Color.white, TextAnchor.MiddleCenter);
+            Anchor(title.rectTransform, new Vector2(.08f, .82f), new Vector2(.92f, .94f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+
+            var loginTab = UiButton("Login Tab", panel.transform, "로그인", CyanColor, true);
+            Anchor(loginTab.GetComponent<RectTransform>(), new Vector2(.08f, .71f), new Vector2(.48f, .8f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            UnityEventTools.AddPersistentListener(loginTab.onClick, account.OpenLogin);
+            var registerTab = UiButton("Register Tab", panel.transform, "회원가입", new Color(.19f, .37f, .41f), true);
+            Anchor(registerTab.GetComponent<RectTransform>(), new Vector2(.52f, .71f), new Vector2(.92f, .8f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            UnityEventTools.AddPersistentListener(registerTab.onClick, account.OpenRegister);
+
+            var emailLabel = UiText("Email Label", panel.transform, "이메일", 22,
+                new Color(.7f, .82f, .87f), TextAnchor.MiddleLeft);
+            Anchor(emailLabel.rectTransform, new Vector2(.09f, .63f), new Vector2(.91f, .69f),
+                new Vector2(0f, .5f), Vector2.zero, Vector2.zero);
+            var email = UiInput("Email Input", panel.transform, "name@example.com", false);
+            Anchor(email.GetComponent<RectTransform>(), new Vector2(.08f, .54f), new Vector2(.92f, .63f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            var passwordLabel = UiText("Password Label", panel.transform, "비밀번호", 22,
+                new Color(.7f, .82f, .87f), TextAnchor.MiddleLeft);
+            Anchor(passwordLabel.rectTransform, new Vector2(.09f, .47f), new Vector2(.91f, .53f),
+                new Vector2(0f, .5f), Vector2.zero, Vector2.zero);
+            var password = UiInput("Password Input", panel.transform, "10자 이상", true);
+            Anchor(password.GetComponent<RectTransform>(), new Vector2(.08f, .38f), new Vector2(.92f, .47f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+
+            var feedback = UiText("Account Feedback", panel.transform, "", 20,
+                AmberColor, TextAnchor.MiddleCenter);
+            Anchor(feedback.rectTransform, new Vector2(.08f, .29f), new Vector2(.92f, .37f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            var submit = UiButton("Submit Account", panel.transform, "로그인하고 시작", CyanColor, true);
+            Anchor(submit.GetComponent<RectTransform>(), new Vector2(.08f, .18f), new Vector2(.92f, .28f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            UnityEventTools.AddPersistentListener(submit.onClick, account.Submit);
+            var back = UiButton("Close Account", panel.transform, "돌아가기", new Color(.24f, .29f, .32f), true);
+            Anchor(back.GetComponent<RectTransform>(), new Vector2(.08f, .06f), new Vector2(.92f, .16f),
+                new Vector2(.5f, .5f), Vector2.zero, Vector2.zero);
+            UnityEventTools.AddPersistentListener(back.onClick, account.Close);
+
+            account.Configure(overlay.gameObject, email, password, title, feedback, status,
+                submit.GetComponentInChildren<Text>(), submit, logout);
+        }
+
+        private static InputField UiInput(string name, Transform parent, string hint, bool password)
+        {
+            var image = UiImage(name, parent, new Color(.08f, .14f, .17f));
+            var input = image.gameObject.AddComponent<InputField>();
+            var value = UiText("Value", image.transform, "", 27, Color.white, TextAnchor.MiddleLeft);
+            value.supportRichText = false;
+            Anchor(value.rectTransform, Vector2.zero, Vector2.one,
+                new Vector2(.5f, .5f), Vector2.zero, new Vector2(-32f, -8f));
+            var placeholder = UiText("Placeholder", image.transform, hint, 25,
+                new Color(.46f, .57f, .62f), TextAnchor.MiddleLeft);
+            Anchor(placeholder.rectTransform, Vector2.zero, Vector2.one,
+                new Vector2(.5f, .5f), Vector2.zero, new Vector2(-32f, -8f));
+            input.textComponent = value;
+            input.placeholder = placeholder;
+            input.contentType = password ? InputField.ContentType.Password : InputField.ContentType.EmailAddress;
+            input.characterLimit = password ? 128 : 254;
+            return input;
         }
 
         private static void BuildDepartureHub(IReadOnlyDictionary<string, Material> materials)
@@ -743,9 +859,9 @@ namespace AlmostDelivered.Editor.Frontend
         {
             var ordered = new List<EditorBuildSettingsScene>
             {
+                new EditorBuildSettingsScene(FrontendScenePath, true),
                 new EditorBuildSettingsScene(DepartureHubScenePath, true),
-                new EditorBuildSettingsScene(MissionPrototypeSceneBuilder.ScenePath, true),
-                new EditorBuildSettingsScene(FrontendScenePath, true)
+                new EditorBuildSettingsScene(MissionPrototypeSceneBuilder.ScenePath, true)
             };
 
             ordered.AddRange(EditorBuildSettings.scenes.Where(scene =>

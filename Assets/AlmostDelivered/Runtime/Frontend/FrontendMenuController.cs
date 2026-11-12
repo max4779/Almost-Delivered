@@ -16,6 +16,11 @@ namespace AlmostDelivered.Frontend
             GameSceneFlow.LoadDepartureHub();
         }
 
+        public void OpenAccount()
+        {
+            GetComponent<FrontendAccountPanel>()?.OpenLogin();
+        }
+
         public void QuitGame()
         {
             GameSceneFlow.QuitGame();

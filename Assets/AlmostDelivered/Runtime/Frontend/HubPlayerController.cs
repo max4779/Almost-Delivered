@@ -39,6 +39,7 @@ namespace AlmostDelivered.Frontend
         {
             var traits = GetComponent<PlayerTraitProfile>() ?? gameObject.AddComponent<PlayerTraitProfile>();
             traits.EnsureLocalAccount();
+            RemoteTraitSync.Ensure().Attach(traits);
             SetWeaponType(PlayerWeaponLoadout.Selected);
         }
 

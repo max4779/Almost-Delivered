@@ -18,6 +18,7 @@ namespace AlmostDelivered.Frontend
         public bool IsLocalOwner => isLocalOwner;
         public PlayerTraitProgress Progress => progress;
         public event Action Changed;
+        public event Action<PlayerTraitProgress> Committed;
 
         private void Awake()
         {
@@ -51,6 +52,17 @@ namespace AlmostDelivered.Frontend
             isLocalOwner = false;
             store = null;
             progress = Sanitize(replicatedProgress);
+            ApplyModifiers();
+            Changed?.Invoke();
+        }
+
+        public void ApplyServerSnapshot(string accountId, PlayerTraitProgress serverProgress)
+        {
+            if (!isLocalOwner || string.IsNullOrWhiteSpace(accountId)) return;
+            AccountId = accountId;
+            progress = Sanitize(serverProgress);
+            store = new LocalPlayerTraitStore();
+            store.Save(accountId, progress.Copy());
             ApplyModifiers();
             Changed?.Invoke();
         }
@@ -114,6 +126,7 @@ namespace AlmostDelivered.Frontend
             store.Save(AccountId, progress.Copy());
             ApplyModifiers();
             Changed?.Invoke();
+            Committed?.Invoke(progress.Copy());
         }
 
         private static PlayerTraitProgress Sanitize(PlayerTraitProgress source)
