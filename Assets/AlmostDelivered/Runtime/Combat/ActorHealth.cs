@@ -21,15 +21,17 @@ namespace AlmostDelivered.Combat
 
         public void SetInvulnerable(bool value) => IsInvulnerable = value;
 
-        public void ConfigureMaximum(float maximum, bool refill = true)
+        public void ConfigureMaximum(float maximum, bool refill = true, bool preserveRatio = false)
         {
             if (float.IsNaN(maximum) || float.IsInfinity(maximum) || maximum <= 0f)
             {
                 throw new ArgumentOutOfRangeException(nameof(maximum));
             }
 
+            var previousRatio = maxHealth > 0f ? Mathf.Clamp01(CurrentHealth / maxHealth) : 1f;
             maxHealth = maximum;
-            CurrentHealth = refill ? maximum : Mathf.Min(CurrentHealth, maximum);
+            CurrentHealth = preserveRatio ? previousRatio * maximum :
+                refill ? maximum : Mathf.Min(CurrentHealth, maximum);
             HealthChanged?.Invoke(CurrentHealth, maxHealth);
         }
 

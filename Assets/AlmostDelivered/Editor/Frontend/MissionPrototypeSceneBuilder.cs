@@ -160,6 +160,7 @@ namespace AlmostDelivered.Editor.Frontend
             slash.Configure(CreateSlashMaterial());
             slash.ConfigureSound(AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/MeleeSlash.wav"));
             var controller = player.AddComponent<MissionPlayerController>();
+            player.AddComponent<PlayerTraitProfile>();
             controller.Configure(character, attack, 6.5f);
             controller.ConfigureMelee(melee);
             controller.SetWeaponType(PlayerWeaponType.Ranged);

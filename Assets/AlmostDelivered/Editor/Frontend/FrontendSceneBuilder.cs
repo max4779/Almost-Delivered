@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
+using AlmostDelivered.Gameplay;
 using AlmostDelivered.Presentation;
 using AlmostDelivered.Presentation.Editor;
 using UnityEditor;
@@ -33,6 +34,10 @@ namespace AlmostDelivered.Editor.Frontend
         private static readonly Color CyanColor = new Color(.08f, .8f, .9f);
         private static readonly Color AmberColor = new Color(1f, .55f, .08f);
         private static readonly Color HazardColor = new Color(.95f, .72f, .08f);
+        private static readonly Vector3 CrewZoneCenter = new Vector3(9f, .025f, -6.8f);
+        private static readonly Vector3 CrewZoneSize = new Vector3(7f, .008f, 5.5f);
+        private const float ZoneFloorHeight = .025f;
+        private const float ZoneFloorThickness = .008f;
 
         [MenuItem("Almost Delivered/Frontend/Build frontend and departure hub")]
         public static void BuildOrUpdateAll()
@@ -63,6 +68,99 @@ namespace AlmostDelivered.Editor.Frontend
                 Debug.LogException(exception);
                 EditorApplication.Exit(1);
             }
+        }
+
+        /// <summary>Update saved hub stations without rebuilding unrelated generated assets.</summary>
+        public static void AddTraitsToSavedScenesFromCommandLine()
+        {
+            try
+            {
+                var hubScene = EditorSceneManager.OpenScene(DepartureHubScenePath, OpenSceneMode.Single);
+                var hubPlayer = Object.FindObjectOfType<HubPlayerController>();
+                var hubCanvas = Object.FindObjectOfType<HubGuideHud>();
+                var weaponStation = Object.FindObjectOfType<HubWeaponStation>();
+                var gate = Object.FindObjectOfType<HubDeploymentGate>();
+                var hub = GameObject.Find("Departure Hub");
+                if (hubPlayer == null || hubCanvas == null || weaponStation == null || gate == null || hub == null)
+                    throw new InvalidOperationException("Saved departure hub is missing its player or UI.");
+                if (hubPlayer.GetComponent<PlayerTraitProfile>() == null)
+                    hubPlayer.gameObject.AddComponent<PlayerTraitProfile>();
+                if (hubCanvas.GetComponent<HubTraitMenu>() == null)
+                    hubCanvas.gameObject.AddComponent<HubTraitMenu>();
+                PatchSavedHubLayout(hub.transform);
+                var stations = hub.transform.Find("Stations");
+                var crew = stations.Find("Crew Access Door");
+                var terminal = stations.Find("Mission Terminal");
+                var traitArea = crew.GetComponentInChildren<HubAreaStation>() ?? BuildCrewInteraction(crew);
+                var terminalArea = terminal.GetComponentInChildren<HubAreaStation>() ?? BuildTerminalInteraction(terminal);
+                DestroyCanvasChild(hubCanvas.transform, "Open Traits");
+                DestroyCanvasChild(hubCanvas.transform, "Trait Status Panel");
+                DestroyCanvasChild(hubCanvas.transform, "Trait Selection Overlay");
+                DestroyCanvasChild(hubCanvas.transform, "Mission Terminal Overlay");
+                BuildTraitMenu(hubCanvas.transform, weaponStation, traitArea);
+                BuildMissionInfoPanel(hubCanvas.transform, terminalArea);
+                var hint = hubCanvas.transform.Find("Interaction Hint Panel/Interaction Hint").GetComponent<Text>();
+                var weapon = hubCanvas.transform.Find("Current Weapon Panel/Current Weapon").GetComponent<Text>();
+                hubCanvas.Configure(weaponStation, gate, hint, weapon, traitArea, terminalArea);
+                var guide = hubCanvas.transform.Find("Hub Station Guide/Station Guide").GetComponent<Text>();
+                guide.text = "주황색  출격 게이트  ·  미션 시작\n청록색  장비 보관소  ·  무기 선택\n" +
+                    "보라색  작전 단말기  ·  작전 정보\n녹색  승무원 구역  ·  특성 관리";
+                hubCanvas.transform.Find("Hub Title Panel/Hub Subtitle").GetComponent<Text>().text =
+                    "무기·특성을 준비하고 출격하세요";
+                EditorSceneManager.SaveScene(hubScene);
+
+                var missionScene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath,
+                    OpenSceneMode.Single);
+                var missionPlayer = Object.FindObjectOfType<MissionPlayerController>();
+                if (missionPlayer == null)
+                    throw new InvalidOperationException("Saved mission is missing its player.");
+                if (missionPlayer.GetComponent<PlayerTraitProfile>() == null)
+                {
+                    missionPlayer.gameObject.AddComponent<PlayerTraitProfile>();
+                    EditorSceneManager.SaveScene(missionScene);
+                }
+                Debug.Log("HUB_TRAIT_TREE_AND_STATIONS_UPDATED");
+                EditorApplication.Exit(0);
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                EditorApplication.Exit(1);
+            }
+        }
+
+        private static void PatchSavedHubLayout(Transform hub)
+        {
+            var layout = hub.Find("Layout");
+            SetZoneFloor(layout, "Gate Zone Floor", new Vector3(0f, ZoneFloorHeight, 8.2f),
+                new Vector3(9f, ZoneFloorThickness, 3f));
+            SetZoneFloor(layout, "Equipment Zone Floor", new Vector3(11.5f, ZoneFloorHeight, .8f),
+                new Vector3(6.5f, ZoneFloorThickness, 7f));
+            SetZoneFloor(layout, "Terminal Zone Floor", new Vector3(-10.7f, ZoneFloorHeight, 1.2f),
+                new Vector3(7f, ZoneFloorThickness, 6f));
+            SetZoneFloor(layout, "Crew Zone Floor", CrewZoneCenter, CrewZoneSize);
+            for (var i = 0; i < 3; i++)
+                SetZoneFloor(layout, "East Barrier " + i,
+                    new Vector3(14.9f, .45f, -7f + i * 1.4f), new Vector3(.25f, .9f, 1.15f));
+            var door = hub.Find("Stations/Crew Access Door");
+            if (door == null) throw new InvalidOperationException("Saved hub is missing the crew area.");
+            door.Find("Crew Door").position = new Vector3(9f, 2f, -10.15f);
+            door.Find("Crew Door Light").position = new Vector3(9f, 4.45f, -9.9f);
+            door.Find("승무원 구역").position = new Vector3(9f, 3.2f, -9.92f);
+        }
+
+        private static void SetZoneFloor(Transform parent, string name, Vector3 position, Vector3 scale)
+        {
+            var part = parent != null ? parent.Find(name) : null;
+            if (part == null) throw new InvalidOperationException("Saved hub is missing " + name);
+            part.position = position;
+            part.localScale = scale;
+        }
+
+        private static void DestroyCanvasChild(Transform canvas, string name)
+        {
+            var child = canvas.Find(name);
+            if (child != null) Object.DestroyImmediate(child.gameObject);
         }
 
         private static void EnsureProjectFolders()
@@ -207,14 +305,14 @@ namespace AlmostDelivered.Editor.Frontend
             }
 
             // Flat colored panels leave collision and walking height unchanged.
-            VisualCube("Gate Zone Floor", layout, new Vector3(0f, .07f, 7.25f),
-                new Vector3(11f, .018f, 4.3f), materials["HubGateZone"]);
-            VisualCube("Equipment Zone Floor", layout, new Vector3(11.5f, .07f, .8f),
-                new Vector3(6.5f, .018f, 7f), materials["HubEquipmentZone"]);
-            VisualCube("Terminal Zone Floor", layout, new Vector3(-10.7f, .07f, 1.2f),
-                new Vector3(7f, .018f, 6f), materials["HubTerminalZone"]);
-            VisualCube("Crew Zone Floor", layout, new Vector3(-7.5f, .07f, -8f),
-                new Vector3(5.5f, .018f, 3.2f), materials["HubCrewZone"]);
+            VisualCube("Gate Zone Floor", layout, new Vector3(0f, ZoneFloorHeight, 8.2f),
+                new Vector3(9f, ZoneFloorThickness, 3f), materials["HubGateZone"]);
+            VisualCube("Equipment Zone Floor", layout, new Vector3(11.5f, ZoneFloorHeight, .8f),
+                new Vector3(6.5f, ZoneFloorThickness, 7f), materials["HubEquipmentZone"]);
+            VisualCube("Terminal Zone Floor", layout, new Vector3(-10.7f, ZoneFloorHeight, 1.2f),
+                new Vector3(7f, ZoneFloorThickness, 6f), materials["HubTerminalZone"]);
+            VisualCube("Crew Zone Floor", layout, CrewZoneCenter,
+                CrewZoneSize, materials["HubCrewZone"]);
 
             BuildDeploymentGate(stations, materials);
             BuildMissionTerminal(stations, materials);
@@ -247,6 +345,7 @@ namespace AlmostDelivered.Editor.Frontend
             player.AddComponent<MeleeSlashVfx>().ConfigureSound(
                 AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/MeleeSlash.wav"));
             player.AddComponent<HubPlayerController>();
+            player.AddComponent<PlayerTraitProfile>();
             player.GetComponentInChildren<ProceduralPoseAnimator>().BindMotionSource(player.transform);
             player.AddComponent<GunfireFeedback>().Configure(rangedAttack, muzzle,
                 AssetDatabase.LoadAssetAtPath<AudioClip>(WeaponAudioRoot + "/AutomaticRifleShot.wav"),
@@ -315,6 +414,39 @@ namespace AlmostDelivered.Editor.Frontend
             VisualCube("Briefing Table", terminal, new Vector3(-9.5f, .85f, 1.2f), new Vector3(3.2f, .22f, 3.8f), materials["Structure"]);
             VisualCube("Briefing Table Leg", terminal, new Vector3(-9.5f, .4f, 1.2f), new Vector3(.55f, .8f, .55f), materials["Dark"]);
             WorldLabel("작전 단말기", terminal, new Vector3(-11.42f, 3.35f, 1.2f), 34, CyanColor, TextAnchor.MiddleCenter, Quaternion.Euler(0f, 90f, 0f));
+            BuildTerminalInteraction(terminal);
+        }
+
+        private static HubAreaStation BuildTerminalInteraction(Transform terminal)
+        {
+            var prompt = WorldLabel("Terminal Interaction Prompt", terminal,
+                new Vector3(-10.7f, 1.55f, -1.4f), 32, CyanColor, TextAnchor.MiddleCenter);
+            prompt.text = "E  작전 정보";
+            var triggerObject = new GameObject("Mission Terminal Trigger", typeof(BoxCollider), typeof(HubAreaStation));
+            triggerObject.transform.SetParent(terminal, false);
+            triggerObject.transform.position = new Vector3(-10.7f, 1.5f, 1.2f);
+            var trigger = triggerObject.GetComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(7f, 3f, 6f);
+            var station = triggerObject.GetComponent<HubAreaStation>();
+            station.Configure(HubAreaType.MissionTerminal, prompt);
+            return station;
+        }
+
+        private static HubAreaStation BuildCrewInteraction(Transform door)
+        {
+            var prompt = WorldLabel("Crew Trait Prompt", door,
+                new Vector3(9f, 1.55f, -8.6f), 32, CyanColor, TextAnchor.MiddleCenter);
+            prompt.text = "E  특성 관리";
+            var triggerObject = new GameObject("Crew Trait Trigger", typeof(BoxCollider), typeof(HubAreaStation));
+            triggerObject.transform.SetParent(door, false);
+            triggerObject.transform.position = new Vector3(9f, 1.5f, -6.8f);
+            var trigger = triggerObject.GetComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.size = new Vector3(7f, 3f, 5.5f);
+            var station = triggerObject.GetComponent<HubAreaStation>();
+            station.Configure(HubAreaType.Traits, prompt);
+            return station;
         }
 
         private static void BuildEquipmentBay(Transform stations, IReadOnlyDictionary<string, Material> materials)
@@ -344,9 +476,10 @@ namespace AlmostDelivered.Editor.Frontend
         private static void BuildCrewDoor(Transform stations, IReadOnlyDictionary<string, Material> materials)
         {
             var door = Child(stations, "Crew Access Door");
-            VisualCube("Crew Door", door, new Vector3(-7.5f, 2f, -10.15f), new Vector3(4f, 4f, .35f), materials["Panel"]);
-            VisualCube("Crew Door Light", door, new Vector3(-7.5f, 4.45f, -9.9f), new Vector3(2f, .18f, .12f), materials["Cyan"]);
-            WorldLabel("승무원 구역", door, new Vector3(-7.5f, 3.2f, -9.92f), 28, CyanColor, TextAnchor.MiddleCenter);
+            VisualCube("Crew Door", door, new Vector3(9f, 2f, -10.15f), new Vector3(4f, 4f, .35f), materials["Panel"]);
+            VisualCube("Crew Door Light", door, new Vector3(9f, 4.45f, -9.9f), new Vector3(2f, .18f, .12f), materials["Cyan"]);
+            WorldLabel("승무원 구역", door, new Vector3(9f, 3.2f, -9.92f), 28, CyanColor, TextAnchor.MiddleCenter);
+            BuildCrewInteraction(door);
         }
 
         private static void BuildCargoAndDetails(Transform layout, IReadOnlyDictionary<string, Material> materials)
@@ -359,7 +492,8 @@ namespace AlmostDelivered.Editor.Frontend
             for (var i = 0; i < 3; i++)
             {
                 VisualCube("West Pipe " + i, layout, new Vector3(-15.2f, 4.8f - i * .55f, -5.5f), new Vector3(.35f, .35f, 7.5f), materials[i == 1 ? "Cyan" : "Dark"]);
-                VisualCube("East Barrier " + i, layout, new Vector3(10.6f + i * 1.4f, .45f, -6.2f), new Vector3(1.15f, .9f, .25f), materials[i == 1 ? "Hazard" : "Structure"]);
+                VisualCube("East Barrier " + i, layout, new Vector3(14.9f, .45f, -7f + i * 1.4f),
+                    new Vector3(.25f, .9f, 1.15f), materials[i == 1 ? "Hazard" : "Structure"]);
             }
 
             WorkLight("West Work Light", layout, new Vector3(-13.5f, 4.8f, -4.5f), AmberColor);
@@ -370,8 +504,10 @@ namespace AlmostDelivered.Editor.Frontend
         {
             var station = stations.GetComponentInChildren<HubWeaponStation>();
             var gate = stations.GetComponentInChildren<HubDeploymentGate>();
+            var traitArea = stations.Find("Crew Access Door/Crew Trait Trigger").GetComponent<HubAreaStation>();
+            var terminalArea = stations.Find("Mission Terminal/Mission Terminal Trigger").GetComponent<HubAreaStation>();
             var canvasObject = new GameObject("Hub Canvas", typeof(RectTransform), typeof(Canvas),
-                typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(HubGuideHud));
+                typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(HubGuideHud), typeof(HubTraitMenu));
             var canvas = canvasObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 20;
@@ -387,7 +523,7 @@ namespace AlmostDelivered.Editor.Frontend
             title.fontStyle = FontStyle.Bold;
             PlaceRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(24f, -16f), new Vector2(540f, 65f));
-            var subtitle = UiText("Hub Subtitle", titlePanel.transform, "무기를 고르고 출격 게이트로 이동하세요", 29,
+            var subtitle = UiText("Hub Subtitle", titlePanel.transform, "무기·특성을 준비하고 출격하세요", 29,
                 new Color(.7f, .85f, .9f), TextAnchor.MiddleLeft);
             PlaceRect(subtitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
                 new Vector2(24f, -83f), new Vector2(540f, 50f));
@@ -405,7 +541,7 @@ namespace AlmostDelivered.Editor.Frontend
             PlaceRect(mapPanel.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
                 new Vector2(24f, 225f), new Vector2(630f, 245f));
             var stationGuide = UiText("Station Guide", mapPanel.transform,
-                "주황색  출격 게이트  ·  미션 시작\n청록색  장비 보관소  ·  무기 선택\n보라색  작전 단말기  ·  준비 중\n녹색  승무원 구역  ·  준비 중",
+                "주황색  출격 게이트  ·  미션 시작\n청록색  장비 보관소  ·  무기 선택\n보라색  작전 단말기  ·  작전 정보\n녹색  승무원 구역  ·  특성 관리",
                 27, Color.white, TextAnchor.MiddleLeft);
             PlaceRect(stationGuide.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
                 new Vector2(22f, 18f), new Vector2(590f, 205f));
@@ -480,8 +616,127 @@ namespace AlmostDelivered.Editor.Frontend
             UnityEventTools.AddPersistentListener(closeButton.onClick, station.CloseMenu);
 
             station.ConfigureMenu(overlay.gameObject, menuSelection, rangedCard, revolverCard, meleeCard);
-            canvasObject.GetComponent<HubGuideHud>().Configure(station, gate, hint, currentWeapon);
+            BuildTraitMenu(canvasObject.transform, station, traitArea);
+            BuildMissionInfoPanel(canvasObject.transform, terminalArea);
+            canvasObject.GetComponent<HubGuideHud>().Configure(station, gate, hint, currentWeapon,
+                traitArea, terminalArea);
             new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        }
+
+        private static void BuildTraitMenu(Transform canvas, HubWeaponStation weaponStation,
+            HubAreaStation traitArea)
+        {
+            var localPlayer = Object.FindObjectOfType<HubPlayerController>();
+            var traitMenu = canvas.GetComponent<HubTraitMenu>();
+            var statusPanel = UiImage("Trait Status Panel", canvas, new Color(.02f, .045f, .065f, .92f));
+            PlaceRect(statusPanel.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-24f, -145f), new Vector2(430f, 76f));
+            var entryLabel = UiText("Trait Status", statusPanel.transform, string.Empty, 28,
+                CyanColor, TextAnchor.MiddleCenter);
+            Stretch(entryLabel.rectTransform);
+
+            var overlay = UiImage("Trait Selection Overlay", canvas, new Color(.005f, .015f, .025f, .86f));
+            Stretch(overlay.rectTransform);
+            var menu = UiImage("Trait Selection Menu", overlay.transform, new Color(.035f, .075f, .1f, 1f));
+            PlaceRect(menu.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                Vector2.zero, new Vector2(1200f, 820f));
+            var title = UiText("Trait Menu Title", menu.transform, "캐릭터 특성", 52,
+                Color.white, TextAnchor.MiddleCenter);
+            title.fontStyle = FontStyle.Bold;
+            PlaceRect(title.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
+                new Vector2(0f, -18f), new Vector2(1050f, 65f));
+            var summary = UiText("Trait Progress Summary", menu.transform, string.Empty, 25,
+                CyanColor, TextAnchor.MiddleCenter);
+            PlaceRect(summary.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
+                new Vector2(0f, -86f), new Vector2(1050f, 75f));
+
+            var labels = new Text[PlayerTraitCatalog.All.Count];
+            var buttons = new Button[PlayerTraitCatalog.All.Count];
+            var cards = new Image[PlayerTraitCatalog.All.Count];
+            var links = new Image[3];
+            var categoryNames = new[] { "전투", "생존", "호위" };
+            for (var branch = 0; branch < 3; branch++)
+            {
+                var x = (branch - 1) * 370f;
+                var heading = UiText("Trait Branch " + categoryNames[branch], menu.transform,
+                    categoryNames[branch], 30, CyanColor, TextAnchor.MiddleCenter);
+                heading.fontStyle = FontStyle.Bold;
+                PlaceRect(heading.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    new Vector2(x, 262f), new Vector2(300f, 42f));
+                links[branch] = UiImage("Trait Link " + categoryNames[branch], menu.transform,
+                    new Color(.3f, .34f, .38f, 1f));
+                PlaceRect(links[branch].rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    new Vector2(x, -25f), new Vector2(8f, 42f));
+                var arrow = UiText("Trait Direction " + categoryNames[branch], menu.transform,
+                    "▲", 30, CyanColor, TextAnchor.MiddleCenter);
+                PlaceRect(arrow.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    new Vector2(x, -3f), new Vector2(50f, 40f));
+            }
+            for (var i = 0; i < PlayerTraitCatalog.All.Count; i++)
+            {
+                var card = UiImage("Trait Card " + PlayerTraitCatalog.All[i].Id, menu.transform,
+                    new Color(.07f, .15f, .19f, 1f));
+                cards[i] = card;
+                var column = i / 2;
+                var row = i % 2;
+                PlaceRect(card.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    new Vector2((column - 1) * 370f, row == 0 ? -160f : 105f),
+                    new Vector2(340f, 230f));
+                labels[i] = UiText("Trait Description", card.transform, string.Empty, 26,
+                    Color.white, TextAnchor.MiddleCenter);
+                PlaceRect(labels[i].rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    new Vector2(0f, 36f), new Vector2(312f, 145f));
+                buttons[i] = UiButton("Invest Trait", card.transform, "+1 포인트", CyanColor, true);
+                PlaceRect(buttons[i].GetComponent<RectTransform>(), new Vector2(.5f, 0f),
+                    new Vector2(.5f, 0f), new Vector2(0f, 14f), new Vector2(290f, 55f));
+                switch (i)
+                {
+                    case 0: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest0); break;
+                    case 1: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest1); break;
+                    case 2: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest2); break;
+                    case 3: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest3); break;
+                    case 4: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest4); break;
+                    case 5: UnityEventTools.AddPersistentListener(buttons[i].onClick, traitMenu.Invest5); break;
+                }
+            }
+
+            var reset = UiButton("Reset Traits", menu.transform, "특성 재분배", AmberColor, true);
+            PlaceRect(reset.GetComponent<RectTransform>(), new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(-170f, 24f), new Vector2(310f, 62f));
+            UnityEventTools.AddPersistentListener(reset.onClick, traitMenu.ResetTraits);
+            var close = UiButton("Close Traits", menu.transform, "닫기", CyanColor, true);
+            PlaceRect(close.GetComponent<RectTransform>(), new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(170f, 24f), new Vector2(310f, 62f));
+            UnityEventTools.AddPersistentListener(close.onClick, traitMenu.Close);
+            traitMenu.Configure(localPlayer, weaponStation, overlay.gameObject, entryLabel,
+                summary, labels, buttons, cards, links);
+            traitMenu.BindStation(traitArea);
+            traitArea.BindTraitMenu(traitMenu);
+        }
+
+        private static void BuildMissionInfoPanel(Transform canvas, HubAreaStation terminalArea)
+        {
+            var overlay = UiImage("Mission Terminal Overlay", canvas,
+                new Color(.005f, .015f, .025f, .84f));
+            Stretch(overlay.rectTransform);
+            var panel = UiImage("Mission Terminal Panel", overlay.transform,
+                new Color(.035f, .075f, .1f, 1f));
+            PlaceRect(panel.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                Vector2.zero, new Vector2(900f, 540f));
+            var title = UiText("Mission Terminal Title", panel.transform, "작전 단말기", 48,
+                Color.white, TextAnchor.MiddleCenter);
+            PlaceRect(title.rectTransform, new Vector2(.5f, 1f), new Vector2(.5f, 1f),
+                new Vector2(0f, -32f), new Vector2(780f, 72f));
+            var body = UiText("Mission Terminal Briefing", panel.transform,
+                "실종된 화물을 회수하고 기동하세요.\n중계 지점에서 보급품을 확보하며 최종 회수 지점까지 호위합니다.",
+                29, new Color(.78f, .88f, .92f), TextAnchor.MiddleCenter);
+            PlaceRect(body.rectTransform, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                new Vector2(0f, 10f), new Vector2(780f, 225f));
+            var close = UiButton("Close Mission Terminal", panel.transform, "닫기", CyanColor, true);
+            PlaceRect(close.GetComponent<RectTransform>(), new Vector2(.5f, 0f), new Vector2(.5f, 0f),
+                new Vector2(0f, 28f), new Vector2(280f, 66f));
+            UnityEventTools.AddPersistentListener(close.onClick, terminalArea.Close);
+            terminalArea.BindInformationPanel(overlay.gameObject);
         }
 
         private static void RegisterBuildSettings()

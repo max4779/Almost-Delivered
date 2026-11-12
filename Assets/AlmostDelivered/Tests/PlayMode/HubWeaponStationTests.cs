@@ -6,6 +6,12 @@ namespace AlmostDelivered.Tests.PlayMode
 {
     public sealed class HubWeaponStationTests
     {
+        private sealed class MemoryStore : IPlayerTraitStore
+        {
+            public PlayerTraitProgress Load(string accountId) => new PlayerTraitProgress();
+            public void Save(string accountId, PlayerTraitProgress progress) { }
+        }
+
         private GameObject player;
         private GameObject stationObject;
         private GameObject promptObject;
@@ -27,6 +33,7 @@ namespace AlmostDelivered.Tests.PlayMode
         public void StationChangesWeaponOnlyWhenPlayerIsNearby()
         {
             player = new GameObject("Player", typeof(CharacterController), typeof(HubPlayerController));
+            player.AddComponent<PlayerTraitProfile>().BindLocalAccount("test-local", new MemoryStore());
             var visual = new GameObject("VisualRoot").transform;
             visual.SetParent(player.transform, false);
             var ranged = new GameObject("RangedWeapon").transform;
@@ -64,6 +71,7 @@ namespace AlmostDelivered.Tests.PlayMode
         public void SelectionRequiresPlayerCenterInsideColoredFloorBounds()
         {
             player = new GameObject("Player", typeof(CharacterController), typeof(HubPlayerController));
+            player.AddComponent<PlayerTraitProfile>().BindLocalAccount("test-local", new MemoryStore());
             stationObject = new GameObject("Station", typeof(BoxCollider), typeof(HubWeaponStation));
             stationObject.transform.position = new Vector3(11.5f, 1.5f, .8f);
             stationObject.GetComponent<BoxCollider>().size = new Vector3(6.5f, 3f, 7f);

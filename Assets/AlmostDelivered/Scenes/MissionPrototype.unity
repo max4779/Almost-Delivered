@@ -1421,6 +1421,7 @@ GameObject:
   - component: {fileID: 104669150}
   - component: {fileID: 104669149}
   - component: {fileID: 104669148}
+  - component: {fileID: 104669158}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -1698,6 +1699,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHealth: 100
+--- !u!114 &104669158
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 104669146}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: edb8e2e51a704ea0a2ef1c2f36cd01ef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &114078443
 GameObject:
   m_ObjectHideFlags: 0
@@ -5722,6 +5735,46 @@ MonoBehaviour:
   configuredCargoNoiseRadius: 26
   configuredCargoNoiseInterval: 0.65
   relayChoicesEnabled: 1
+  routeOptions:
+  - id: auto-repair
+    title: "\uC790\uB3D9 \uC218\uB9AC"
+    benefit: "\uD638\uC704 \uC911 \uD654\uBB3C \uCCB4\uB825 \uCD08\uB2F9 +5"
+    drawback: "\uB9E4 \uC2B5\uACA9\uC5D0 \uD654\uBB3C \uD30C\uAD34 \uC801 \uD569\uB958"
+    color: {r: 0.1, g: 0.32, b: 0.2, a: 1}
+    escortSpeedMultiplier: 1
+    cargoRepairPerSecond: 5
+    pulseDamage: 0
+    pulseInterval: 3
+    pulseRadius: 6
+    extraTravelEnemies: 0
+    forceCargoSaboteur: 1
+    enemyHealthMultiplier: 1
+  - id: overdrive
+    title: "\uAE09\uC18D \uC6B4\uC1A1"
+    benefit: "\uD654\uBB3C \uC18D\uB3C4 +50%"
+    drawback: "\uC774\uB3D9 \uC911 \uC801 \uBB34\uB9AC 2\uBA85 \uCD94\uAC00"
+    color: {r: 0.08, g: 0.27, b: 0.39, a: 1}
+    escortSpeedMultiplier: 1.5
+    cargoRepairPerSecond: 0
+    pulseDamage: 0
+    pulseInterval: 3
+    pulseRadius: 6
+    extraTravelEnemies: 2
+    forceCargoSaboteur: 0
+    enemyHealthMultiplier: 1
+  - id: shock-grid
+    title: "\uBC29\uC5B4 \uC804\uB958"
+    benefit: "3\uCD08\uB9C8\uB2E4 \uC8FC\uBCC0 \uC801 \uD53C\uD574 12"
+    drawback: "\uC774\uD6C4 \uC0DD\uC131\uB418\uB294 \uC801 \uCCB4\uB825 +25%"
+    color: {r: 0.29, g: 0.16, b: 0.37, a: 1}
+    escortSpeedMultiplier: 1
+    cargoRepairPerSecond: 0
+    pulseDamage: 12
+    pulseInterval: 3
+    pulseRadius: 6
+    extraTravelEnemies: 0
+    forceCargoSaboteur: 0
+    enemyHealthMultiplier: 1.25
   escortRadius: 4.5
 --- !u!4 &407559111
 Transform:
@@ -24869,7 +24922,7 @@ MonoBehaviour:
     m_FontStyle: 1
     m_BestFit: 0
     m_MinSize: 10
-    m_MaxSize: 40
+    m_MaxSize: 48
     m_Alignment: 1
     m_AlignByGeometry: 0
     m_RichText: 1

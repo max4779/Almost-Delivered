@@ -46,10 +46,13 @@ namespace AlmostDelivered.Gameplay
         private float rollRemaining;
         private Vector3 rollDirection;
         private ActorHealth health;
+        private float traitRecoveryMultiplier = 1f;
 
         public float Stamina => stamina;
         public float MaxStamina => maxStamina;
         public float RecoveryDelay => recoveryDelay;
+        public void SetTraitRecoveryMultiplier(float multiplier) =>
+            traitRecoveryMultiplier = Mathf.Max(0f, multiplier);
         public bool IsSprinting { get; private set; }
         public bool IsRolling => rollRemaining > 0f;
         public bool IsRollInvulnerable => isActiveAndEnabled && IsRolling;
@@ -121,7 +124,8 @@ namespace AlmostDelivered.Gameplay
             {
                 recoveryClock += deltaTime;
                 if (recoveryClock >= recoveryDelay)
-                    stamina = Mathf.Min(maxStamina, stamina + staminaRecoveryPerSecond * deltaTime);
+                    stamina = Mathf.Min(maxStamina,
+                        stamina + staminaRecoveryPerSecond * traitRecoveryMultiplier * deltaTime);
             }
 
             return direction * baseSpeed * (IsSprinting ? sprintSpeedMultiplier : 1f);

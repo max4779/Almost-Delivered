@@ -61,7 +61,8 @@ namespace AlmostDelivered.Frontend
                 prompt.gameObject.SetActive(CanSelect);
             if (IsMenuOpen && Input.GetKeyDown(KeyCode.Escape))
                 CloseMenu();
-            else if (CanSelect && !IsMenuOpen && Input.GetKeyDown(KeyCode.E))
+            else if (CanSelect && occupant != null && !occupant.IsInputLocked &&
+                     !IsMenuOpen && Input.GetKeyDown(KeyCode.E))
                 OpenMenu();
         }
 
@@ -98,7 +99,7 @@ namespace AlmostDelivered.Frontend
         private void OnTriggerEnter(Collider other)
         {
             var player = other.GetComponentInParent<HubPlayerController>();
-            if (player == null) return;
+            if (player == null || player.GetComponent<PlayerTraitProfile>()?.IsLocalOwner != true) return;
             occupant = player;
             Refresh();
         }

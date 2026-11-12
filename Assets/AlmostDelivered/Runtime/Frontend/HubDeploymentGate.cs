@@ -41,7 +41,7 @@ namespace AlmostDelivered.Frontend
 
         private void Update()
         {
-            if (CanLaunch && Input.GetKeyDown(KeyCode.E))
+            if (CanLaunch && occupant != null && !occupant.IsInputLocked && Input.GetKeyDown(KeyCode.E))
             {
                 RequestLaunch();
             }
@@ -58,7 +58,7 @@ namespace AlmostDelivered.Frontend
         private void OnTriggerEnter(Collider other)
         {
             var player = other.GetComponentInParent<HubPlayerController>();
-            if (player == null)
+            if (player == null || player.GetComponent<PlayerTraitProfile>()?.IsLocalOwner != true)
             {
                 return;
             }

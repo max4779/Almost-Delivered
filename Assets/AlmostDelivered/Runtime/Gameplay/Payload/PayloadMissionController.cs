@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Frontend;
 using AlmostDelivered.MapGeneration;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ namespace AlmostDelivered.Gameplay.Payload
     public sealed class PayloadMissionController : MonoBehaviour
     {
         private readonly PayloadPresenceSensor presenceSensor = new PayloadPresenceSensor();
+        private readonly HashSet<PlayerTraitProfile> escortProfiles = new HashSet<PlayerTraitProfile>();
 
         [SerializeField] private bool initializeOnStart;
         [SerializeField] private bool authority;
@@ -75,6 +77,33 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public event Action<PayloadMissionSnapshot> SnapshotChanged;
         public event Action<PayloadMissionPhase, PayloadMissionPhase> PhaseChanged;
+
+        public void RegisterEscortPlayer(PlayerTraitProfile profile)
+        {
+            if (profile != null) escortProfiles.Add(profile);
+        }
+
+        public void UnregisterEscortPlayer(PlayerTraitProfile profile)
+        {
+            if (profile != null) escortProfiles.Remove(profile);
+        }
+
+        private float HighestNearbyEscortMultiplier()
+        {
+            if (payloadTransform == null) return 1f;
+            var highest = 1f;
+            foreach (var profile in escortProfiles)
+            {
+                if (profile == null || profile.Progress == null) continue;
+                var health = profile.GetComponent<ActorHealth>();
+                if (health != null && health.IsDead) continue;
+                var delta = profile.transform.position - payloadTransform.position;
+                delta.y = 0f;
+                if (delta.sqrMagnitude > escortRadius * escortRadius) continue;
+                highest = Mathf.Max(highest, profile.EscortSpeedMultiplier);
+            }
+            return highest;
+        }
 
         public void Configure(
             bool isAuthority,
@@ -253,7 +282,12 @@ namespace AlmostDelivered.Gameplay.Payload
             if (cargoIntegrity != null && activationInputHeld && canInteract &&
                 previousPhase != PayloadMissionPhase.Recovering && previousPhase != PayloadMissionPhase.Activating &&
                 previousPhase != PayloadMissionPhase.Deploying && previousPhase != PayloadMissionPhase.Completed)
-                cargoIntegrity.Repair(cargoRepairPerSecond * deltaTime);
+                cargoIntegrity.Repair(cargoRepairPerSecond * deltaTime *
+                    (playerTransform.GetComponent<PlayerTraitProfile>()?.RepairMultiplier ?? 1f));
+
+            stateMachine.SetEscortSpeedMultiplier(
+                Mathf.Max(.01f, ActiveRouteOption != null ? ActiveRouteOption.escortSpeedMultiplier : 1f) *
+                HighestNearbyEscortMultiplier());
 
             stateMachine.Tick(deltaTime, cargoIntegrity != null && cargoIntegrity.IsBroken ? 0 : players,
                 enemies, activationInputHeld && canInteract);

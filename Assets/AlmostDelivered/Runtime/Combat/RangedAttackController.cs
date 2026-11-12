@@ -22,17 +22,27 @@ namespace AlmostDelivered.Combat
         [SerializeField] private bool pierceEnemies;
         private float reloadEndTime;
         private bool isReloading;
+        private float traitDamageMultiplier = 1f;
+        private float traitCooldownMultiplier = 1f;
 
         public int MagazineSize => magazineSize;
         public int RoundsRemaining => roundsRemaining;
         public bool IsReloading => isReloading;
         public float ReloadEndTime => reloadEndTime;
         public float Damage => damage;
+        public float EffectiveDamage => damage * traitDamageMultiplier;
+        public float EffectiveCooldown => cooldown * traitCooldownMultiplier;
         public float FireCooldown => cooldown;
         public float MaximumRange => projectileSpeed * projectileLifetime;
         public float ShotNoiseRadius => shotNoiseRadius;
         public Transform Muzzle => muzzle;
         public event Action ShotFired;
+
+        public void SetTraitModifiers(float damageMultiplier, float cooldownMultiplier)
+        {
+            traitDamageMultiplier = Mathf.Max(0f, damageMultiplier);
+            traitCooldownMultiplier = Mathf.Max(.1f, cooldownMultiplier);
+        }
 
         public void SetMuzzle(Transform muzzleTransform)
         {
@@ -163,11 +173,11 @@ namespace AlmostDelivered.Combat
                 ownerTeam.Team,
                 planarDirection,
                 projectileSpeed,
-                damage,
+                EffectiveDamage,
                 projectileLifetime,
                 pierceEnemies);
             clone.SetActive(true);
-            nextFireTime = now + cooldown;
+            nextFireTime = now + EffectiveCooldown;
             if (magazineSize > 0) roundsRemaining--;
             CombatNoiseSystem.Emit(muzzle.position, shotNoiseRadius, ownerTeam.Team);
             ShotFired?.Invoke();

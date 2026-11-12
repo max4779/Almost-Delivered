@@ -1,6 +1,7 @@
 using System;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
+using AlmostDelivered.Gameplay.Payload;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -21,6 +22,7 @@ namespace AlmostDelivered.Gameplay
         private ActorHealth health;
         private PlayerMobility mobility;
         private float verticalVelocity;
+        private PayloadMissionController traitMission;
 
         public PlayerWeaponType WeaponType => weaponType;
 
@@ -45,7 +47,33 @@ namespace AlmostDelivered.Gameplay
                 meleeAttack = GetComponent<MeleeAttackController>();
         }
 
-        private void Start() => SetWeaponType(PlayerWeaponLoadout.Selected);
+        private void Start()
+        {
+            var traits = GetComponent<PlayerTraitProfile>() ?? gameObject.AddComponent<PlayerTraitProfile>();
+            traits.EnsureLocalAccount();
+            SetWeaponType(PlayerWeaponLoadout.Selected);
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != GameSceneFlow.MissionPrototypeScene)
+                return;
+            traitMission = FindObjectOfType<PayloadMissionController>();
+            if (traitMission == null) return;
+            traitMission.RegisterEscortPlayer(traits);
+            traitMission.PhaseChanged += OnTraitMissionPhaseChanged;
+        }
+
+        private void OnDestroy()
+        {
+            if (traitMission == null) return;
+            traitMission.PhaseChanged -= OnTraitMissionPhaseChanged;
+            var traits = GetComponent<PlayerTraitProfile>();
+            if (traits != null) traitMission.UnregisterEscortPlayer(traits);
+        }
+
+        private void OnTraitMissionPhaseChanged(PayloadMissionPhase previous, PayloadMissionPhase current)
+        {
+            if (current != PayloadMissionPhase.Completed || traitMission == null || !traitMission.IsAuthority)
+                return;
+            GetComponent<PlayerTraitProfile>()?.GrantMissionLevel();
+        }
 
         public void ConfigureMelee(MeleeAttackController attack)
         {
@@ -67,6 +95,7 @@ namespace AlmostDelivered.Gameplay
             }
             PlayerWeaponLoadout.ConfigureMobility(mobility, selected);
             PlayerWeaponLoadout.ApplyVisual(gameObject, selected);
+            GetComponent<PlayerTraitProfile>()?.ApplyModifiers();
         }
 
         private void Update()

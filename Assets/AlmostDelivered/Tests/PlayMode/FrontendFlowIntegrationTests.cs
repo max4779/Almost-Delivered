@@ -267,6 +267,7 @@ namespace AlmostDelivered.Tests.PlayMode
             PlayerWeaponLoadout.Select(PlayerWeaponType.AutomaticRifle);
             yield return EditorSceneManager.LoadSceneAsyncInPlayMode(HubPath,
                 new LoadSceneParameters(LoadSceneMode.Single));
+            yield return null;
             var player = GameObject.Find("Player");
             var attack = player.GetComponent<RangedAttackController>();
             var station = Object.FindObjectOfType<HubWeaponStation>();

@@ -1,5 +1,6 @@
 using System.Linq;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay.Payload;
 using AlmostDelivered.MapGeneration;
 using NUnit.Framework;
@@ -69,6 +70,38 @@ namespace AlmostDelivered.Tests.PlayMode
             enemy.GetComponent<ActorHealth>().ApplyDamage(1000f);
             controller.Tick(1f);
             Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(20f));
+        }
+
+        [Test]
+        public void NearbyEscortUsesHighestAccountsTraitWithoutStacking()
+        {
+            var lowProgress = new PlayerTraitProgress { level = 2 };
+            lowProgress.TryInvest("escort.lead");
+            var firstProfile = player.AddComponent<PlayerTraitProfile>();
+            firstProfile.BindRemoteAccount("account-a", lowProgress);
+            var teammate = Actor("Teammate", CombatTeamId.Player);
+            teammate.transform.SetParent(root.transform, false);
+            var highProgress = new PlayerTraitProgress { level = 5 };
+            for (var i = 0; i < 5; i++) highProgress.TryInvest("escort.lead");
+            var secondProfile = teammate.AddComponent<PlayerTraitProfile>();
+            secondProfile.BindRemoteAccount("account-b", highProgress);
+            var controller = NewController();
+            controller.Configure(true, 12, Bounds(), player.transform, payload.transform, null, null,
+                10f, 0f, 4.5f);
+            controller.RegisterEscortPlayer(firstProfile);
+            controller.RegisterEscortPlayer(secondProfile);
+            player.transform.position = payload.transform.position;
+            teammate.transform.position = payload.transform.position + Vector3.right * 10f;
+            Physics.SyncTransforms();
+
+            controller.Tick(1f);
+            Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(11.2f).Within(.001f));
+
+            player.transform.position = payload.transform.position;
+            teammate.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+            controller.Tick(1f);
+            Assert.That(controller.Snapshot.RouteDistance, Is.EqualTo(24f).Within(.001f));
         }
 
         [Test]

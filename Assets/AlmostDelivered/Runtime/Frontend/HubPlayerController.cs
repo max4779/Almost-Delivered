@@ -35,7 +35,12 @@ namespace AlmostDelivered.Frontend
             mobility = GetComponent<PlayerMobility>();
         }
 
-        private void Start() => SetWeaponType(PlayerWeaponLoadout.Selected);
+        private void Start()
+        {
+            var traits = GetComponent<PlayerTraitProfile>() ?? gameObject.AddComponent<PlayerTraitProfile>();
+            traits.EnsureLocalAccount();
+            SetWeaponType(PlayerWeaponLoadout.Selected);
+        }
 
         public void SetWeaponType(PlayerWeaponType weapon)
         {
@@ -51,6 +56,7 @@ namespace AlmostDelivered.Frontend
             }
             PlayerWeaponLoadout.ConfigureMobility(mobility, weapon);
             PlayerWeaponLoadout.ApplyVisual(gameObject, weapon);
+            GetComponent<PlayerTraitProfile>()?.ApplyModifiers();
         }
 
         private void Update()

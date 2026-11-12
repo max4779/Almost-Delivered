@@ -16,8 +16,18 @@ namespace AlmostDelivered.Combat
         private Collider[] hits = new Collider[32];
         private readonly HashSet<ActorHealth> damaged = new HashSet<ActorHealth>();
         private float nextAttackTime;
+        private float traitDamageMultiplier = 1f;
+        private float traitCooldownMultiplier = 1f;
 
         public float Damage => damage;
+        public float EffectiveDamage => damage * traitDamageMultiplier;
+        public float EffectiveCooldown => cooldown * traitCooldownMultiplier;
+
+        public void SetTraitModifiers(float damageMultiplier, float cooldownMultiplier)
+        {
+            traitDamageMultiplier = Mathf.Max(0f, damageMultiplier);
+            traitCooldownMultiplier = Mathf.Max(.1f, cooldownMultiplier);
+        }
 
         public void Configure(float attackDamage, float attackReach, float attackArc, float attackCooldown,
             float attackNoiseRadius = 5f)
@@ -56,7 +66,7 @@ namespace AlmostDelivered.Combat
             var ownTeam = GetComponent<CombatTeam>();
             if (ownTeam == null) return false;
 
-            nextAttackTime = now + cooldown;
+            nextAttackTime = now + EffectiveCooldown;
             transform.rotation = Quaternion.LookRotation(attackDirection, Vector3.up);
             var animator = GetComponentInChildren<ProceduralPoseAnimator>();
             if (animator != null) animator.PlayPlayerSlash();
@@ -89,7 +99,7 @@ namespace AlmostDelivered.Combat
                     Vector3.Angle(attackDirection, direction) <= arc * .5f)
                 {
                     damaged.Add(targetHealth);
-                    targetHealth.ApplyDamage(damage);
+                    targetHealth.ApplyDamage(EffectiveDamage);
                     targetHealth.GetComponentInChildren<ProceduralPoseAnimator>()?.PlayHit();
                 }
             }
