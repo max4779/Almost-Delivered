@@ -2,7 +2,8 @@
   "name": "AlmostDelivered.CommanderAI.PlayModeTests",
   "references": [
     "AlmostDelivered.Runtime",
-    "Unity.ugui"
+    "Unity.ugui",
+    "Unity.Netcode.Runtime"
   ],
   "optionalUnityReferences": [
     "TestAssemblies"

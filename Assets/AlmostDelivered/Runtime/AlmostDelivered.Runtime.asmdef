@@ -1,4 +1,9 @@
 {
   "name": "AlmostDelivered.Runtime",
-  "rootNamespace": "AlmostDelivered"
+  "rootNamespace": "AlmostDelivered",
+  "references": [
+    "Unity.Netcode.Runtime",
+    "Unity.Netcode.Components",
+    "Unity.Networking.Transport"
+  ]
 }

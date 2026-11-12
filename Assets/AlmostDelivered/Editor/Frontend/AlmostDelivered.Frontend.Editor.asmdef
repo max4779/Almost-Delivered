@@ -4,7 +4,9 @@
   "references": [
     "AlmostDelivered.Runtime",
     "AlmostDelivered.Presentation.Editor",
-    "Unity.ugui"
+    "Unity.ugui",
+    "Unity.Netcode.Runtime",
+    "Unity.Netcode.Components"
   ],
   "includePlatforms": [
     "Editor"

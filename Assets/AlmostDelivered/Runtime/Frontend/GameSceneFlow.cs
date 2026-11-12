@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using AlmostDelivered.Networking;
 
 namespace AlmostDelivered.Frontend
 {
@@ -24,6 +25,28 @@ namespace AlmostDelivered.Frontend
                 throw new ArgumentException("Scene must be a declared frontend scene.", nameof(sceneName));
             }
 
+            if (NetworkSession.IsConnected)
+            {
+                if (sceneName == FrontendScene)
+                    NetworkSession.Instance.Disconnect();
+                else if (sceneName == MissionPrototypeScene && NetworkSession.IsClientOnly)
+                {
+                    NetworkSession.Instance.RequestMission();
+                    return;
+                }
+                else if (sceneName == DepartureHubScene && NetworkSession.IsClientOnly)
+                {
+                    NetworkSession.Instance.RequestReturnToHub();
+                    return;
+                }
+                else if (NetworkSession.IsClientOnly)
+                    return;
+                else
+                {
+                    NetworkSession.Instance.LoadSharedScene(sceneName);
+                    return;
+                }
+            }
             SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
         }
 
