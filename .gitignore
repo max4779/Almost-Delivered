@@ -11,6 +11,7 @@
 
 # Unity generated project and solution files
 *.csproj
+!/Server/AlmostDelivered.Api/AlmostDelivered.Api.csproj
 *.sln
 *.suo
 *.user
@@ -22,6 +23,10 @@
 *.mdb
 *.opendb
 *.VC.db
+
+# Standalone account API build output
+/Server/**/bin/
+/Server/**/obj/
 
 # IDE and editor state
 .vscode/

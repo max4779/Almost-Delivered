@@ -1,0 +1,23 @@
+[Unit]
+Description=Almost Delivered account API
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=almost-api
+Group=almost-api
+WorkingDirectory=/opt/almost-delivered/api
+ExecStart=/opt/almost-delivered/api/AlmostDelivered.Api --urls http://127.0.0.1:15001
+LoadCredential=db-connection:/etc/almost-delivered/db-connection
+StateDirectory=almost-delivered-api
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/almost-delivered-api
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target
