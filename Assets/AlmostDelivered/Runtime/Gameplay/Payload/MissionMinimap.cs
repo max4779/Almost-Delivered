@@ -9,6 +9,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public const float ContentPadding = 10f;
         [SerializeField] private List<RectTransform> routeSegments = new List<RectTransform>();
         [SerializeField] private List<RectTransform> checkpointMarkers = new List<RectTransform>();
+        [SerializeField] private List<RectTransform> sideMissionIcons = new List<RectTransform>();
         private readonly List<float> routeSegmentEndDistances = new List<float>();
         private readonly Dictionary<int, RectTransform> enemyIcons = new Dictionary<int, RectTransform>();
         private readonly List<int> staleEnemyIds = new List<int>();
@@ -18,6 +19,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private Transform payload;
         [SerializeField] private PayloadMissionController mission;
         [SerializeField] private PayloadWaveSpawner waves;
+        [SerializeField] private SideMissionDirector sideMissions;
         [SerializeField] private RectTransform panel;
         [SerializeField] private RectTransform playerIcon;
         [SerializeField] private RectTransform payloadIcon;
@@ -35,6 +37,22 @@ namespace AlmostDelivered.Gameplay.Payload
         public int EnemyIconCount => enemyIcons.Count;
         public RectTransform PlayerIcon => playerIcon;
         public RectTransform PayloadIcon => payloadIcon;
+
+        public void BindSideMissions(SideMissionDirector director)
+        {
+            foreach (var icon in sideMissionIcons) DestroyView(icon);
+            sideMissionIcons.Clear();
+            sideMissions = director;
+            if (panel == null || director == null) return;
+            for (var index = 0; index < director.Count; index++)
+            {
+                var commander = director.PlacementAt(index).kind == SideMissionKind.Commander;
+                var icon = CreateIcon($"Side Mission {index + 1}",
+                    commander ? new Color(1f, .45f, .18f) : new Color(.3f, 1f, .85f), 11f);
+                sideMissionIcons.Add(icon);
+            }
+            Refresh();
+        }
 
         public static Vector2 ProjectWorld(Vector3 worldPosition, Rect worldBounds, Rect minimapRect)
         {
@@ -110,6 +128,17 @@ namespace AlmostDelivered.Gameplay.Payload
             UpdateIcon(payloadIcon, payload, mapRect);
             RefreshPayloadIcon();
             RefreshEnemyIcons(mapRect);
+            for (var index = 0; index < sideMissionIcons.Count; index++)
+            {
+                var icon = sideMissionIcons[index];
+                if (icon == null) continue;
+                var placement = sideMissions.PlacementAt(index);
+                var state = sideMissions.StateAt(index);
+                icon.gameObject.SetActive(state == SideMissionState.Available || state == SideMissionState.Carrying);
+                icon.anchoredPosition = ProjectWorldInsidePanel(
+                    state == SideMissionState.Carrying && player != null ? player.position : placement.position,
+                    worldBounds, mapRect);
+            }
         }
 
         public RectTransform GetEnemyIcon(int enemyId)
@@ -321,12 +350,16 @@ namespace AlmostDelivered.Gameplay.Payload
                 DestroyView(icon);
             }
 
+            foreach (var icon in sideMissionIcons)
+                DestroyView(icon);
+
             DestroyView(playerIcon);
             DestroyView(payloadIcon);
             routeSegments.Clear();
             checkpointMarkers.Clear();
             routeSegmentEndDistances.Clear();
             enemyIcons.Clear();
+            sideMissionIcons.Clear();
             playerIcon = null;
             payloadIcon = null;
         }

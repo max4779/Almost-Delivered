@@ -254,6 +254,13 @@ namespace AlmostDelivered.Gameplay.Payload
             pursuingFromNoise = false;
         }
 
+        public void ReleaseGuardPostToCargo(Transform cargo)
+        {
+            guardPostEnabled = false;
+            guardPostEngaged = false;
+            ConfigureCargoAssault(cargo);
+        }
+
         public void AssignIdentity(int waveId, int enemyId)
         {
             WaveId = waveId;

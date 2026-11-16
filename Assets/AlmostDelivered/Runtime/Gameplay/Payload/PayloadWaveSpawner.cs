@@ -10,6 +10,8 @@ namespace AlmostDelivered.Gameplay.Payload
     {
         public const int RecoveryWaveId = 0;
         public const int PreplacedSentryWaveId = -2000;
+        public const int SideCommanderWaveId = -3001;
+        public const int SideCommanderEnemyId = -3001001;
         private const int ActivationSequenceBase = 900;
         private static readonly int[] CheckpointWaveCounts = { 10, 14, 18 };
 
@@ -200,6 +202,33 @@ namespace AlmostDelivered.Gameplay.Payload
 
             SpawnUntilCap();
             return identifiers.AsReadOnly();
+        }
+
+        public int SpawnSideCommanderGroup(Vector3 outpost)
+        {
+            if (!IsFinite(outpost)) return -1;
+            for (var index = 0; index < 5; index++)
+            {
+                var angle = index * Mathf.PI * 2f / 5f;
+                var position = index == 0
+                    ? outpost
+                    : outpost + new Vector3(Mathf.Cos(angle) * 4f, 0f, Mathf.Sin(angle) * 4f);
+                var enemyId = SideCommanderEnemyId - index;
+                var archetype = index == 0 ? MissionMobArchetype.CommanderBoss
+                    : index % 2 == 0 ? MissionMobArchetype.Ranged : MissionMobArchetype.Melee;
+                pending.Enqueue(new PendingEnemy(SideCommanderWaveId, enemyId,
+                    MissionMobDefinition.For(archetype), position, true, position,
+                    cargoTarget != null ? cargoTarget.position - position : Vector3.forward));
+            }
+            SpawnUntilCap();
+            return SideCommanderEnemyId;
+        }
+
+        public void ReleaseSideCommanderGroup()
+        {
+            foreach (var enemy in living.Values)
+                if (enemy != null && enemy.WaveId == SideCommanderWaveId && !enemy.IsDefeated)
+                    enemy.ReleaseGuardPostToCargo(cargoTarget);
         }
 
         public bool SpawnTravelGroup(

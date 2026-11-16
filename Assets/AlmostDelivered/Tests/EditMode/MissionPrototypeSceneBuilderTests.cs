@@ -17,7 +17,7 @@ namespace AlmostDelivered.Tests.EditMode
 {
     public sealed class MissionPrototypeSceneBuilderTests
     {
-        private static readonly Rect MissionBounds = new Rect(-28f, -50f, 56f, 100f);
+        private static readonly Rect MissionBounds = new Rect(-50f, -90f, 100f, 180f);
 
         [Test]
         public void BuildCreatesPayloadMissionAuthorityPlayerCameraHudAndMinimap()
@@ -86,11 +86,11 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(follow.Target, Is.EqualTo(player.transform));
 
             var buildPaths = EditorBuildSettings.scenes.Select(item => item.path).ToArray();
-            Assert.That(buildPaths.Take(3), Is.EqualTo(new[]
+            Assert.That(buildPaths.Take(3).ToArray(), Is.EqualTo(new[]
             {
+                FrontendSceneBuilder.FrontendScenePath,
                 FrontendSceneBuilder.DepartureHubScenePath,
-                MissionPrototypeSceneBuilder.ScenePath,
-                FrontendSceneBuilder.FrontendScenePath
+                MissionPrototypeSceneBuilder.ScenePath
             }));
         }
 
@@ -106,10 +106,10 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.That(generator.RandomizeOnStart, Is.False);
             Assert.That(generator.TerrainDetailCount, Is.Zero,
                 "Large rectangular floor-detail prefabs read as stray squares in the outdoor mission.");
-            Assert.That(generator.TraversableTerrainCount, Is.EqualTo(6));
-            Assert.That(generator.BlockingObstacleCount, Is.EqualTo(28));
-            Assert.That(generator.FoliageCount, Is.EqualTo(42));
-            Assert.That(spawner.ActiveCap, Is.EqualTo(18));
+            Assert.That(generator.TraversableTerrainCount, Is.EqualTo(14));
+            Assert.That(generator.BlockingObstacleCount, Is.EqualTo(65));
+            Assert.That(generator.FoliageCount, Is.EqualTo(100));
+            Assert.That(spawner.ActiveCap, Is.EqualTo(24));
             Assert.That(PayloadWaveSpawner.WaveCountFor(0, false), Is.EqualTo(10));
             Assert.That(PayloadWaveSpawner.WaveCountFor(1, false), Is.EqualTo(14));
             Assert.That(PayloadWaveSpawner.WaveCountFor(2, false), Is.EqualTo(18));
@@ -117,17 +117,42 @@ namespace AlmostDelivered.Tests.EditMode
 
             var route = PayloadRoutePlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, 5, 8f);
             var generatedPieces = generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true);
-            Assert.That(generatedPieces, Has.Length.EqualTo(76), "Generated map pieces must survive a saved-scene reload.");
+            Assert.That(generatedPieces, Has.Length.EqualTo(179), "Generated map pieces must survive a saved-scene reload.");
             Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TerrainDetail), Is.Zero);
-            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.EqualTo(6));
-            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.EqualTo(28));
-            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.EqualTo(42));
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.TraversableTerrain), Is.EqualTo(14));
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.BlockingObstacle), Is.EqualTo(65));
+            Assert.That(generatedPieces.Count(piece => piece.Category == MissionMapPieceCategory.Foliage), Is.EqualTo(100));
             var routeSensitivePieces = generatedPieces
                 .Where(piece => piece.Category != MissionMapPieceCategory.TerrainDetail)
                 .ToArray();
             foreach (var piece in routeSensitivePieces)
             foreach (var zone in route.CorridorExclusions)
                 Assert.That(Overlaps(piece.Position, piece.Footprint, zone.Center, zone.Size), Is.False, piece.name);
+            var sideAreas = SideMissionPlanner.BuildAccessExclusions(
+                SideMissionPlanner.Generate(MissionPrototypeSceneBuilder.MissionSeed, MissionBounds, route));
+            foreach (var piece in routeSensitivePieces)
+            foreach (var zone in sideAreas)
+                Assert.That(Overlaps(piece.Position, piece.Footprint, zone.Center, zone.Size), Is.False, piece.name);
+        }
+
+        [Test]
+        public void BuildPlacesTwoSideMissionsWithVisibleWorldAndMinimapTargets()
+        {
+            FrontendSceneBuilder.BuildOrUpdateAll();
+            EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
+            var director = Object.FindObjectOfType<SideMissionDirector>(true);
+            var minimap = Object.FindObjectOfType<MissionMinimap>(true);
+
+            Assert.That(director, Is.Not.Null);
+            Assert.That(director.Count, Is.EqualTo(2));
+            Assert.That(director.PlacementAt(0).kind, Is.Not.EqualTo(director.PlacementAt(1).kind));
+            Assert.That(Object.FindObjectsOfType<PayloadRoadView>(true), Has.Length.EqualTo(3));
+            Assert.That(minimap.transform.Find("Side Mission 1"), Is.Not.Null);
+            Assert.That(minimap.transform.Find("Side Mission 2"), Is.Not.Null);
+            Assert.That(Object.FindObjectsOfType<TextMesh>(true)
+                .Count(label => label.text == "BONUS CARGO"), Is.EqualTo(1));
+            Assert.That(Object.FindObjectsOfType<TextMesh>(true)
+                .Count(label => label.text == "COMMANDER"), Is.EqualTo(1));
         }
 
         [Test]
@@ -155,15 +180,17 @@ namespace AlmostDelivered.Tests.EditMode
             EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
             var roads = Object.FindObjectsOfType<PayloadRoadView>(true);
 
-            Assert.That(roads, Has.Length.EqualTo(1));
-            Assert.That(roads[0].RoadWidth, Is.EqualTo(5.5f));
-            Assert.That(roads[0].RoadMesh, Is.Not.Null);
-            Assert.That(roads[0].RoadMesh.vertexCount, Is.GreaterThan(0));
-            Assert.That(roads[0].RoadMesh.subMeshCount, Is.EqualTo(2));
-            Assert.That(roads[0].GetComponent<MeshRenderer>().sharedMaterials.Select(item => item.name),
+            Assert.That(roads, Has.Length.EqualTo(3));
+            var mainRoad = roads.Single(item => item.name == "Payload Road");
+            Assert.That(mainRoad.RoadWidth, Is.EqualTo(5.5f));
+            Assert.That(mainRoad.RoadMesh, Is.Not.Null);
+            Assert.That(mainRoad.RoadMesh.vertexCount, Is.GreaterThan(0));
+            Assert.That(mainRoad.RoadMesh.subMeshCount, Is.EqualTo(2));
+            Assert.That(mainRoad.GetComponent<MeshRenderer>().sharedMaterials.Select(item => item.name),
                 Is.EqualTo(new[] { "Earth", "Moss" }));
-            Assert.That(roads[0].RoadsideFoliageCount, Is.InRange(8, 30));
-            Assert.That(roads[0].GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(mainRoad.RoadsideFoliageCount, Is.InRange(8, 50));
+            Assert.That(mainRoad.GetComponentsInChildren<Collider>(true), Is.Empty);
+            Assert.That(roads.Count(item => item.name.StartsWith("Side Road ")), Is.EqualTo(2));
             Assert.That(Object.FindObjectsOfType<PayloadRouteView>(true), Is.Empty);
         }
 
@@ -174,7 +201,7 @@ namespace AlmostDelivered.Tests.EditMode
             var scene = EditorSceneManager.OpenScene(MissionPrototypeSceneBuilder.ScenePath, OpenSceneMode.Single);
             var appliers = Object.FindObjectsOfType<MissionEnvironmentThemeApplier>(true);
             var floor = Find(scene, "Mission Floor").GetComponent<Renderer>();
-            var road = Object.FindObjectOfType<PayloadRoadView>(true).GetComponent<MeshRenderer>();
+            var road = Find(scene, "Payload Road").GetComponent<MeshRenderer>();
             var mapGenerator = Object.FindObjectOfType<MissionMapGenerator>(true);
 
             Assert.That(appliers, Has.Length.EqualTo(1));

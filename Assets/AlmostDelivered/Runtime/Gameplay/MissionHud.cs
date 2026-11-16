@@ -22,6 +22,8 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadElapsedText;
         [SerializeField] private Text payloadActivationCountdownText;
         [SerializeField] private Text cargoHealthText;
+        [SerializeField] private SideMissionDirector sideMissions;
+        [SerializeField] private Text[] sideMissionTexts;
 
         public int RemainingBosses => bosses == null ? 0 : bosses.Count(boss => boss != null && !boss.IsDefeated);
         public bool HasPayloadViews => payloadMission != null && payloadPhaseText != null && payloadProgressText != null &&
@@ -71,6 +73,13 @@ namespace AlmostDelivered.Gameplay
             Refresh();
         }
 
+        public void BindSideMissions(SideMissionDirector director, Text[] labels)
+        {
+            sideMissions = director;
+            sideMissionTexts = labels;
+            Refresh();
+        }
+
         private void Update()
         {
             Refresh();
@@ -92,6 +101,17 @@ namespace AlmostDelivered.Gameplay
             }
 
             RefreshPayload();
+            if (sideMissions != null && sideMissionTexts != null)
+                for (var index = 0; index < sideMissionTexts.Length; index++)
+                    if (sideMissionTexts[index] != null)
+                    {
+                        sideMissionTexts[index].text = index < sideMissions.Count
+                            ? $"SIDE {index + 1}  {sideMissions.LabelAt(index)}"
+                            : string.Empty;
+                        sideMissionTexts[index].color = index < sideMissions.Count &&
+                            sideMissions.StateAt(index) == SideMissionState.Completed
+                            ? new Color(.3f, 1f, .55f) : new Color(1f, .83f, .35f);
+                    }
         }
 
         private void RefreshPayload()

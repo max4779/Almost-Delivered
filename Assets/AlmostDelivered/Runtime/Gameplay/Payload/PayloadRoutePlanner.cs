@@ -8,6 +8,13 @@ namespace AlmostDelivered.Gameplay.Payload
     {
         private const int CheckpointCount = 3;
 
+        public static PayloadRoutePlan CreateBranch(Vector3 start, Vector3 end)
+        {
+            var distance = Vector3.Distance(start, end);
+            return new PayloadRoutePlan(new[] { start, end }, new[] { 0f, distance },
+                Array.Empty<float>(), Array.Empty<MapExclusionZone>());
+        }
+
         public static PayloadRoutePlan Generate(int seed, Rect bounds, int interiorPointCount, float corridorWidth)
         {
             if (!IsFinitePositive(bounds.width) ||
