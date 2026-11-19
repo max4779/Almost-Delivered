@@ -96,12 +96,21 @@ namespace AlmostDelivered.Presentation.Editor
                         var blade=Child(right,"MeleeWeapon"); blade.gameObject.SetActive(false);
                         Part(blade,"Grip",PrimitiveType.Cube,new Vector3(.14f,-.4f,.16f),new Vector3(.16f,.16f,.35f),rust);
                         Part(blade,"Blade",PrimitiveType.Cube,new Vector3(.14f,-.4f,.72f),new Vector3(.2f,.08f,.9f),glow);
-                    } else {
+                    } else if (type != VisualArchetype.Ranged) {
                         Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
                     }
                     switch(type) {
                         case VisualArchetype.Shield: Part(left,"Shield",PrimitiveType.Cube,new Vector3(-.42f,-.3f,.15f),new Vector3(.7f,1,.15f),color); break;
-                        case VisualArchetype.Ranged: Part(right,"RangedWeapon",PrimitiveType.Cube,new Vector3(.17f,-.3f,.2f),new Vector3(.12f,.8f,.12f),gold); break;
+                        case VisualArchetype.Ranged:
+                            var carbine = Child(right,"Weapon");
+                            Part(carbine,"RangedWeapon",PrimitiveType.Cube,new Vector3(.14f,-.36f,.4f),new Vector3(.26f,.18f,.66f),rust);
+                            Part(carbine,"Carbine Stock",PrimitiveType.Cube,new Vector3(.14f,-.39f,-.06f),new Vector3(.22f,.17f,.34f),rust);
+                            Part(carbine,"Carbine Barrel",PrimitiveType.Cylinder,new Vector3(.14f,-.36f,.91f),new Vector3(.09f,.41f,.09f),gold,Quaternion.Euler(90f,0f,0f));
+                            Part(carbine,"Carbine Emitter",PrimitiveType.Sphere,new Vector3(.14f,-.36f,1.17f),new Vector3(.2f,.17f,.2f),glow);
+                            Part(carbine,"Carbine Cell",PrimitiveType.Cube,new Vector3(.14f,-.53f,.38f),new Vector3(.2f,.28f,.2f),glow);
+                            Part(carbine,"Carbine Rail",PrimitiveType.Cube,new Vector3(.14f,-.24f,.54f),new Vector3(.14f,.07f,.73f),gold);
+                            Child(carbine,"Carbine Muzzle").localPosition = new Vector3(.14f,-.36f,1.29f);
+                            break;
                         case VisualArchetype.Charger: Part(body,"Horns",PrimitiveType.Cube,new Vector3(0,1.65f,.62f),new Vector3(.7f,.16f,.9f),gold); break;
                         case VisualArchetype.Support: Part(left,"Totem",PrimitiveType.Cylinder,new Vector3(-.22f,-.2f,0),new Vector3(.12f,.75f,.12f),gold); break;
                         case VisualArchetype.Commander:
@@ -111,6 +120,7 @@ namespace AlmostDelivered.Presentation.Editor
                     }
                 }
                 var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right,type == VisualArchetype.Payload,leftLeg,rightLeg);
+                animator.ConfigureFirearmReady(type == VisualArchetype.Ranged);
                 var visual = root.AddComponent<LowPolyVisual>(); visual.Configure(type,root.transform,root.GetComponentsInChildren<Renderer>(true),left == null ? new[]{body} : new[]{body,left,right,leftLeg,rightLeg});
                 if (!visual.IsGameplayFree(out var reason)) throw new InvalidOperationException(reason);
                 PrefabUtility.SaveAsPrefabAsset(root,GetPrefabPath(type));

@@ -19,6 +19,15 @@ namespace AlmostDelivered.Tests.EditMode
         [Test] public void GeneratedPrefabs_HaveOneVisualRootAndNoGameplayComponents() {
             LowPolyAssetFactory.CreateOrUpdateAll(); foreach (var type in Types) { var prefab = LowPolyAssetFactory.LoadPrefab(type); Assert.AreEqual("VisualRoot", prefab.name); var visual = prefab.GetComponent<LowPolyVisual>(); Assert.NotNull(visual); Assert.True(visual.IsGameplayFree(out var reason), reason); Assert.AreEqual(1, prefab.GetComponentsInChildren<Transform>(true).Count(t => t.name == "VisualRoot")); }
         }
+        [Test] public void RangedPrefabHasDistinctCarbineAndMuzzle() {
+            LowPolyAssetFactory.CreateOrUpdateAll();
+            var prefab = LowPolyAssetFactory.LoadPrefab(VisualArchetype.Ranged);
+            var weapon = prefab.transform.Find("BodyPivot/RightArmPivot/Weapon");
+            Assert.NotNull(weapon);
+            Assert.NotNull(weapon.Find("Carbine Barrel"));
+            Assert.NotNull(weapon.Find("Carbine Cell"));
+            Assert.NotNull(weapon.Find("Carbine Muzzle"));
+        }
         [Test] public void GeneratedPrefabs_UseOnlyGeneratedSharedMaterials() {
             LowPolyAssetFactory.CreateOrUpdateAll(); foreach (var type in Types) foreach (var r in LowPolyAssetFactory.LoadPrefab(type).GetComponentsInChildren<Renderer>()) foreach (var m in r.sharedMaterials) { Assert.NotNull(m); StringAssert.StartsWith("Assets/AlmostDelivered/Art/Materials/Generated/", AssetDatabase.GetAssetPath(m)); }
         }

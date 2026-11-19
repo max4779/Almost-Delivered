@@ -129,6 +129,39 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void ThirdDistinctCargoDestructionFailsMissionAndPreventsRepair()
+        {
+            var integrity = payload.AddComponent<CargoIntegrity>();
+            var controller = NewController();
+            controller.Configure(true, 12, Bounds(), player.transform, payload.transform,
+                null, null, 10f, 0f, 4.5f);
+            player.transform.position = payload.transform.position;
+            Physics.SyncTransforms();
+
+            for (var loss = 1; loss <= 3; loss++)
+            {
+                integrity.ApplyDamage(integrity.MaximumHealth);
+                integrity.ApplyDamage(10f);
+                Assert.That(controller.Snapshot.CargoDestructions, Is.EqualTo(loss));
+                Assert.That(controller.Snapshot.CargoStocksRemaining, Is.EqualTo(3 - loss));
+                if (loss < 3)
+                {
+                    Assert.That(controller.Snapshot.Phase, Is.Not.EqualTo(PayloadMissionPhase.Failed));
+                    player.transform.position = payload.transform.position;
+                    Physics.SyncTransforms();
+                    controller.Tick(2f, true);
+                    Assert.That(integrity.IsBroken, Is.False);
+                }
+            }
+
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Failed));
+            var healthAtFailure = integrity.CurrentHealth;
+            controller.Tick(10f, true);
+            Assert.That(integrity.CurrentHealth, Is.EqualTo(healthAtFailure));
+            Assert.That(controller.AddFuel(10f), Is.Zero);
+        }
+
+        [Test]
         public void CargoInteractionMatchesTheVisibleFourPointFiveMeterRing()
         {
             var integrity = payload.AddComponent<CargoIntegrity>();
@@ -246,17 +279,24 @@ namespace AlmostDelivered.Tests.PlayMode
 
             controller.Tick(0f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
-            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
-            Assert.That(spawner.ActiveCount, Is.EqualTo(11));
+            Assert.That(controller.HasActivatedCargo, Is.False);
+            Assert.That(spawner.ActiveCount, Is.EqualTo(8));
+
+            controller.Tick(8f);
+            Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(8),
+                "Periodic and startup response enemies must wait until cargo activation finishes.");
 
             controller.Tick(1.5f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Activating));
             Assert.That(controller.Snapshot.ActivationProgress, Is.EqualTo(.5f).Within(.001f));
-            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(1)), Is.EqualTo(3));
-            Assert.That(spawner.ActiveCount, Is.EqualTo(14));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(8));
 
             controller.Tick(1.5f, true);
             Assert.That(controller.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escorting));
+            Assert.That(controller.HasActivatedCargo, Is.True);
+            Assert.That(spawner.LivingEnemies.Count(enemy => enemy.WaveId == PayloadWaveSpawner.ActivationWaveId(0)), Is.EqualTo(3));
+            Assert.That(spawner.ActiveCount, Is.EqualTo(11));
         }
 
         [Test]

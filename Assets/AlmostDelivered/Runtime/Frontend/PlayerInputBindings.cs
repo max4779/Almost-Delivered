@@ -8,16 +8,29 @@ namespace AlmostDelivered.Frontend
     public static class PlayerInputBindings
     {
         private const string PrefPrefix = "AlmostDelivered.Key.";
+        private const string RollMigrationKey = "AlmostDelivered.Key.Roll.CDefault.v1";
 
         public static KeyCode GetKey(PlayerAction action)
         {
-            var fallback = action == PlayerAction.Sprint ? KeyCode.LeftShift : KeyCode.LeftControl;
-            return (KeyCode)PlayerPrefs.GetInt(PrefPrefix + action, (int)fallback);
+            var fallback = action == PlayerAction.Sprint ? KeyCode.LeftShift : KeyCode.C;
+            var key = (KeyCode)PlayerPrefs.GetInt(PrefPrefix + action, (int)fallback);
+            if (action == PlayerAction.Roll && PlayerPrefs.GetInt(RollMigrationKey, 0) == 0)
+            {
+                PlayerPrefs.SetInt(RollMigrationKey, 1);
+                if (key == KeyCode.LeftControl || key == KeyCode.RightControl)
+                {
+                    key = KeyCode.C;
+                    PlayerPrefs.SetInt(PrefPrefix + action, (int)key);
+                }
+                PlayerPrefs.Save();
+            }
+            return key;
         }
 
         public static void SetKey(PlayerAction action, KeyCode key)
         {
             if (key == KeyCode.None) return;
+            if (action == PlayerAction.Roll) PlayerPrefs.SetInt(RollMigrationKey, 1);
             PlayerPrefs.SetInt(PrefPrefix + action, (int)key);
             PlayerPrefs.Save();
         }

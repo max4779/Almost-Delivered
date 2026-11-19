@@ -360,6 +360,7 @@ MonoBehaviour:
     scale: {x: 1, y: 1, z: 1}
   motionSource: {fileID: 0}
   hovering: 0
+  firearmReady: 0
 --- !u!114 &2685476553293588421
 MonoBehaviour:
   m_ObjectHideFlags: 0

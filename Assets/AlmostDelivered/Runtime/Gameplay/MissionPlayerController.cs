@@ -123,6 +123,19 @@ namespace AlmostDelivered.Gameplay
 
         public bool Move(Vector2 input, float deltaTime) => MoveWithActions(input, deltaTime, false, false);
 
+        public bool TryApplyKnockback(Vector3 sourcePosition, float distance)
+        {
+            if (!CanAct() || characterController == null || !characterController.enabled ||
+                health != null && health.IsInvulnerable || !IsFinite(sourcePosition) ||
+                !IsFinite(distance) || distance <= 0f)
+                return false;
+            var away = Vector3.ProjectOnPlane(transform.position - sourcePosition, Vector3.up);
+            if (away.sqrMagnitude < .0001f) away = transform.forward;
+            var start = transform.position;
+            characterController.Move(away.normalized * distance);
+            return (transform.position - start).sqrMagnitude > .0001f;
+        }
+
         public bool MoveWithActions(Vector2 input, float deltaTime, bool sprintHeld, bool rollPressed)
         {
             if (!CanAct() || characterController == null || !characterController.enabled)
@@ -221,7 +234,8 @@ namespace AlmostDelivered.Gameplay
                 turnSpeed * deltaTime);
         }
 
-        private bool CanAct() => enabled && (health == null || !health.IsDead);
+        private bool CanAct() => enabled && (health == null || !health.IsDead) &&
+            (traitMission == null || traitMission.Snapshot.Phase != PayloadMissionPhase.Failed);
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 

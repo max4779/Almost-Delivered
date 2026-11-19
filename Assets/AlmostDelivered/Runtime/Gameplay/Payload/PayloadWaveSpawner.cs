@@ -28,6 +28,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private int missionSeed;
         [SerializeField, Min(1)] private int activeCap = 18;
         private float enemyHealthMultiplier = 1f;
+        private MissionCommanderDirector commander;
 
         private readonly Queue<PendingEnemy> pending = new Queue<PendingEnemy>();
         private readonly Dictionary<int, MissionMobController> living = new Dictionary<int, MissionMobController>();
@@ -39,9 +40,27 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public IReadOnlyCollection<MissionMobController> LivingEnemies => living.Values;
         public int ActiveCount => living.Count;
+        public int CargoAssaultCount
+        {
+            get
+            {
+                var count = 0;
+                foreach (var enemy in living.Values)
+                    if (enemy != null && !enemy.IsDefeated &&
+                        enemy.WaveId != RecoveryWaveId &&
+                        enemy.WaveId != PreplacedSentryWaveId &&
+                        enemy.WaveId != SideCommanderWaveId)
+                        count++;
+                return count;
+            }
+        }
         public int PendingCount => pending.Count;
         public int ActiveCap => activeCap;
         public float EnemyHealthMultiplier => enemyHealthMultiplier;
+
+        public MissionMobController FindEnemy(int id) => living.TryGetValue(id, out var enemy) ? enemy : null;
+
+        public void SetCommander(MissionCommanderDirector director) => commander = director;
 
         public void SetEnemyHealthMultiplier(float multiplier)
         {
@@ -252,6 +271,11 @@ namespace AlmostDelivered.Gameplay.Payload
             var approachDistance = 18f + (float)random.NextDouble() * 6f;
             var minimumDistance = Mathf.Max(0f, exclusionRadius) + 2f;
             var travelGroup = new List<PendingEnemy>(encounter.GroupSize);
+            var includeCargoSaboteur = forceCargoSaboteur || encounter.SequenceId % 3 == 0;
+            MissionMobArchetype[] plannedArchetypes = null;
+            var hasCommanderPlan = commander != null &&
+                                   commander.TryPlanTravelGroup(encounter, includeCargoSaboteur,
+                                       out plannedArchetypes);
 
             for (var index = 0; index < encounter.GroupSize; index++)
             {
@@ -273,12 +297,15 @@ namespace AlmostDelivered.Gameplay.Payload
 
                 var enemyId = unchecked(-((encounter.SequenceId + 1) * 1000 + index + 1));
                 var standardArchetype = SelectStandardArchetype(random);
+                var archetype = hasCommanderPlan
+                    ? plannedArchetypes[index]
+                    : index == 0 && includeCargoSaboteur
+                        ? MissionMobArchetype.CargoSaboteur
+                        : standardArchetype;
                 travelGroup.Add(new PendingEnemy(
                     -(encounter.SequenceId + 1),
                     enemyId,
-                    MissionMobDefinition.For(index == 0 && (forceCargoSaboteur || encounter.SequenceId % 3 == 0)
-                        ? MissionMobArchetype.CargoSaboteur
-                        : standardArchetype),
+                    MissionMobDefinition.For(archetype),
                     candidate,
                     false,
                     default,
@@ -385,7 +412,10 @@ namespace AlmostDelivered.Gameplay.Payload
                 var muzzle = new GameObject("Muzzle").transform;
                 muzzle.SetParent(actor.transform, false);
                 muzzle.localPosition = new Vector3(0f, .65f, .8f);
-                rangedAttack.Configure(projectileTemplate, muzzle, 8f, 1f, 15f, 2.5f);
+                if (pendingEnemy.Definition.Archetype == MissionMobArchetype.Ranged)
+                    rangedAttack.Configure(projectileTemplate, muzzle, 8f, 1.2f, 22f, 1f);
+                else
+                    rangedAttack.Configure(projectileTemplate, muzzle, 8f, 1f, 15f, 2.5f);
             }
 
             var controller = actor.AddComponent<MissionMobController>();
@@ -415,6 +445,17 @@ namespace AlmostDelivered.Gameplay.Payload
                 visual.transform.localPosition = Vector3.zero;
                 visual.transform.localRotation = Quaternion.identity;
                 visual.GetComponent<ProceduralPoseAnimator>()?.BindMotionSource(actor.transform);
+                if (pendingEnemy.Definition.Archetype == MissionMobArchetype.Ranged && rangedAttack != null)
+                {
+                    var carbineMuzzle = visual.transform.Find(
+                        "BodyPivot/RightArmPivot/Weapon/Carbine Muzzle");
+                    if (carbineMuzzle != null)
+                    {
+                        rangedAttack.Muzzle.SetParent(carbineMuzzle, false);
+                        rangedAttack.Muzzle.localPosition = Vector3.zero;
+                        rangedAttack.Muzzle.localRotation = Quaternion.identity;
+                    }
+                }
             }
 
             WorldHealthBar.Attach(actor, new Vector3(0f, 2.2f, 0f));

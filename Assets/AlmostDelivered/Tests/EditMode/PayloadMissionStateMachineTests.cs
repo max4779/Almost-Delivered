@@ -85,6 +85,47 @@ namespace AlmostDelivered.Tests.EditMode
         }
 
         [Test]
+        public void FueledCargoMovesWithoutEscortAndStopsUntilRefueled()
+        {
+            var mission = CreateMission();
+            mission.ConfigureFuel(20f, 2f);
+
+            mission.Tick(1f, 0, 3);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(10f));
+            Assert.That(mission.Snapshot.FuelRemaining, Is.EqualTo(1f));
+
+            mission.Tick(3f, 0, 3);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(20f));
+            Assert.That(mission.Snapshot.FuelRemaining, Is.Zero);
+
+            mission.Tick(1f, 1, 0);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(20f));
+            Assert.That(mission.AddFuel(2f), Is.EqualTo(2f));
+            mission.Tick(1f, 0, 3);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(25f));
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.CheckpointDefense));
+            Assert.That(mission.Snapshot.FuelRemaining, Is.EqualTo(1.5f));
+        }
+
+        [Test]
+        public void RecoveryActivationLoadsInitialFuelAndBrokenCargoCannotMove()
+        {
+            var mission = CreateMission(requiresRecovery: true, activationDuration: 3f);
+            mission.ConfigureFuel(20f, 5f);
+            mission.RegisterRecoveryGuards(Array.Empty<int>());
+            mission.Tick(0f, 1, 0, true);
+            mission.Tick(3f, 1, 0, true);
+            Assert.That(mission.Snapshot.FuelRemaining, Is.EqualTo(5f));
+
+            mission.Tick(1f, 0, 0, movementBlocked: true);
+            Assert.That(mission.Snapshot.RouteDistance, Is.Zero);
+            Assert.That(mission.Snapshot.FuelRemaining, Is.EqualTo(5f));
+
+            mission.Tick(1f, 0, 0);
+            Assert.That(mission.Snapshot.RouteDistance, Is.EqualTo(10f));
+        }
+
+        [Test]
         public void ExtraPlayersDoNotIncreasePayloadSpeed()
         {
             var onePlayer = CreateMission();

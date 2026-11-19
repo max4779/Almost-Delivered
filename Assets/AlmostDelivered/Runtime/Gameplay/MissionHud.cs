@@ -22,6 +22,10 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadElapsedText;
         [SerializeField] private Text payloadActivationCountdownText;
         [SerializeField] private Text cargoHealthText;
+        [SerializeField] private Text cargoFuelText;
+        [SerializeField] private FuelDepotDirector fuelDepots;
+        [SerializeField] private MissionCommanderDirector fieldCommander;
+        [SerializeField] private Text commanderSignalText;
         [SerializeField] private SideMissionDirector sideMissions;
         [SerializeField] private Text[] sideMissionTexts;
 
@@ -73,6 +77,20 @@ namespace AlmostDelivered.Gameplay
             Refresh();
         }
 
+        public void BindFuel(Text fuelText, FuelDepotDirector depots)
+        {
+            cargoFuelText = fuelText;
+            fuelDepots = depots;
+            Refresh();
+        }
+
+        public void BindCommander(MissionCommanderDirector commander, Text signalText)
+        {
+            fieldCommander = commander;
+            commanderSignalText = signalText;
+            Refresh();
+        }
+
         public void BindSideMissions(SideMissionDirector director, Text[] labels)
         {
             sideMissions = director;
@@ -101,6 +119,24 @@ namespace AlmostDelivered.Gameplay
             }
 
             RefreshPayload();
+            if (commanderSignalText != null)
+            {
+                var scoutId = 0;
+                var live = fieldCommander != null &&
+                    fieldCommander.TryGetLiveScoutSight(out scoutId, out _);
+                var visible = live || fieldCommander != null &&
+                    Time.time - fieldCommander.LastReportTime < 10f;
+                commanderSignalText.gameObject.SetActive(visible);
+                if (visible)
+                {
+                    var profile = fieldCommander?.LatestScoutProfile;
+                    commanderSignalText.text = live && profile != null
+                        ? $"SCOUT {scoutId} LIVE  |  {profile.WeaponLabel}  |  " +
+                          $"FIRE {profile.ShotsObserved}  RELOAD {profile.ReloadsObserved}  " +
+                          $"MELEE {profile.MeleeAttacksObserved}  ROLL {profile.ObservedRolls}"
+                        : "COMMANDER SEARCHING LAST KNOWN POSITION";
+                }
+            }
             if (sideMissions != null && sideMissionTexts != null)
                 for (var index = 0; index < sideMissionTexts.Length; index++)
                     if (sideMissionTexts[index] != null)
@@ -154,6 +190,22 @@ namespace AlmostDelivered.Gameplay
                     : cargo.CurrentHealth <= cargo.MaximumHealth * .3f
                         ? new Color(1f, .65f, .12f, 1f)
                         : Color.white;
+            }
+
+            if (cargoFuelText != null && state.UsesFuel)
+            {
+                var remaining = Mathf.CeilToInt(state.FuelRemaining);
+                var capacity = Mathf.CeilToInt(state.FuelCapacity);
+                cargoFuelText.text = state.Phase == PayloadMissionPhase.Recovering ||
+                                     state.Phase == PayloadMissionPhase.Activating
+                    ? $"START FUEL  {Mathf.CeilToInt(payloadMission.StartingFuelSeconds)}s  ·  LOAD ON STARTUP"
+                    : fuelDepots != null && fuelDepots.CarryingIndex >= 0
+                        ? $"FUEL  {remaining}s / {capacity}s  ·  RETURN CELL TO CARGO · E"
+                        : state.IsOutOfFuel
+                            ? $"FUEL EMPTY  ·  FIND A CELL AND REFUEL WITH E"
+                            : $"FUEL  {remaining}s / {capacity}s";
+                cargoFuelText.color = state.IsOutOfFuel
+                    ? new Color(1f, .38f, .2f) : new Color(.45f, 1f, .72f);
             }
 
             RefreshActivationCountdown(state);
@@ -221,8 +273,10 @@ namespace AlmostDelivered.Gameplay
                 return "LOADING SUPPLIES";
             if (state.Phase == PayloadMissionPhase.FinalDefense)
                 return "DEFEND DESTINATION";
-            if (state.EnemiesInRange > 0)
+            if (!state.UsesFuel && state.EnemiesInRange > 0)
                 return "CONTESTED";
+            if (state.IsOutOfFuel)
+                return "OUT OF FUEL";
             if (state.IsEscortActive)
                 return "MOVING";
             return "WAITING";

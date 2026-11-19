@@ -27,6 +27,10 @@ namespace AlmostDelivered.Gameplay.Payload
         private bool isWaveRegistered;
         private float activationElapsed;
         private bool isActivationInputHeld;
+        private bool fuelDriven;
+        private float fuelCapacity;
+        private float initialFuel;
+        private float fuelRemaining;
 
         public PayloadMissionStateMachine(
             float routeLength,
@@ -51,10 +55,42 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public event Action<PayloadWaveRequest> WaveRequested;
 
+        public void Fail()
+        {
+            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed) return;
+            phase = PayloadMissionPhase.Failed;
+            isEscortActive = false;
+            isActivationInputHeld = false;
+            remainingEnemies.Clear();
+            isWaveRegistered = false;
+            activeWaveId = -1;
+        }
+
         public void SetEscortSpeedMultiplier(float value)
         {
             if (!IsFinite(value) || value < 0f) throw new ArgumentOutOfRangeException(nameof(value));
             escortSpeedMultiplier = value;
+        }
+
+        public void ConfigureFuel(float capacitySeconds, float startingSeconds)
+        {
+            if (!IsFinite(capacitySeconds) || capacitySeconds < 0f ||
+                !IsFinite(startingSeconds) || startingSeconds < 0f)
+                throw new ArgumentOutOfRangeException(nameof(capacitySeconds));
+            fuelDriven = capacitySeconds > 0f;
+            fuelCapacity = Mathf.Max(0f, capacitySeconds);
+            initialFuel = Mathf.Clamp(startingSeconds, 0f, fuelCapacity);
+            fuelRemaining = !requiresRecovery ? initialFuel : 0f;
+        }
+
+        public float AddFuel(float seconds)
+        {
+            if (!IsFinite(seconds) || seconds < 0f) throw new ArgumentOutOfRangeException(nameof(seconds));
+            if (!fuelDriven || phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed)
+                return 0f;
+            var before = fuelRemaining;
+            fuelRemaining = Mathf.Min(fuelCapacity, fuelRemaining + seconds);
+            return fuelRemaining - before;
         }
 
         public PayloadMissionSnapshot Snapshot => new PayloadMissionSnapshot(
@@ -74,9 +110,11 @@ namespace AlmostDelivered.Gameplay.Payload
                                  phase == PayloadMissionPhase.Completed)
                 ? activationDuration <= Mathf.Epsilon ? 1f : Mathf.Clamp01(activationElapsed / activationDuration)
                 : 0f,
-            isActivationInputHeld);
+            isActivationInputHeld, fuelRemaining: fuelDriven ? fuelRemaining : -1f,
+            fuelCapacity: fuelDriven ? fuelCapacity : -1f);
 
-        public void Tick(float deltaTime, int playersInRange, int enemiesInRange, bool activationInputHeld = false)
+        public void Tick(float deltaTime, int playersInRange, int enemiesInRange,
+            bool activationInputHeld = false, bool movementBlocked = false)
         {
             if (!IsFinite(deltaTime) || deltaTime < 0f)
             {
@@ -132,6 +170,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 if (activationDuration <= Mathf.Epsilon || activationElapsed + .0001f >= activationDuration)
                 {
                     activationElapsed = activationDuration;
+                    if (fuelDriven) fuelRemaining = Mathf.Min(fuelCapacity, fuelRemaining + initialFuel);
                     phase = PayloadMissionPhase.Escorting;
                     isActivationInputHeld = false;
                 }
@@ -149,9 +188,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (phase != PayloadMissionPhase.Escorting ||
-                this.playersInRange == 0 ||
-                this.enemiesInRange > 0 ||
+            if (phase != PayloadMissionPhase.Escorting || movementBlocked ||
+                (fuelDriven ? fuelRemaining <= Mathf.Epsilon :
+                    this.playersInRange == 0 || this.enemiesInRange > 0) ||
                 routeLength <= Mathf.Epsilon)
             {
                 return;
@@ -161,7 +200,14 @@ namespace AlmostDelivered.Gameplay.Payload
             var targetDistance = nextCheckpointIndex < checkpointDistances.Length
                 ? checkpointDistances[nextCheckpointIndex]
                 : routeLength;
-            routeDistance = Mathf.Min(targetDistance, routeDistance + movementSpeed * escortSpeedMultiplier * deltaTime);
+            var speed = movementSpeed * escortSpeedMultiplier;
+            var travelTime = fuelDriven ? Mathf.Min(deltaTime, fuelRemaining) : deltaTime;
+            if (speed > Mathf.Epsilon)
+                travelTime = Mathf.Min(travelTime, Mathf.Max(0f, targetDistance - routeDistance) / speed);
+            else
+                travelTime = 0f;
+            routeDistance = Mathf.Min(targetDistance, routeDistance + speed * travelTime);
+            if (fuelDriven) fuelRemaining = Mathf.Max(0f, fuelRemaining - travelTime);
 
             if (routeDistance + .0001f < targetDistance)
             {

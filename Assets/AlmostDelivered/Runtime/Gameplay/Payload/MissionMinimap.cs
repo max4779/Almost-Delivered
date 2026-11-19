@@ -10,9 +10,12 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private List<RectTransform> routeSegments = new List<RectTransform>();
         [SerializeField] private List<RectTransform> checkpointMarkers = new List<RectTransform>();
         [SerializeField] private List<RectTransform> sideMissionIcons = new List<RectTransform>();
+        [SerializeField] private List<RectTransform> fuelIcons = new List<RectTransform>();
         private readonly List<float> routeSegmentEndDistances = new List<float>();
         private readonly Dictionary<int, RectTransform> enemyIcons = new Dictionary<int, RectTransform>();
         private readonly List<int> staleEnemyIds = new List<int>();
+        private readonly Dictionary<int, RectTransform> scoutIcons = new Dictionary<int, RectTransform>();
+        private readonly List<int> staleScoutIds = new List<int>();
 
         [SerializeField] private Rect worldBounds;
         [SerializeField] private Transform player;
@@ -20,6 +23,9 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private PayloadMissionController mission;
         [SerializeField] private PayloadWaveSpawner waves;
         [SerializeField] private SideMissionDirector sideMissions;
+        [SerializeField] private FuelDepotDirector fuelDepots;
+        [SerializeField] private MissionCommanderDirector scoutDirector;
+        [SerializeField] private bool showScoutsForDevelopment = true;
         [SerializeField] private RectTransform panel;
         [SerializeField] private RectTransform playerIcon;
         [SerializeField] private RectTransform payloadIcon;
@@ -35,6 +41,8 @@ namespace AlmostDelivered.Gameplay.Payload
         public int RouteSegmentCount => routeSegments.Count;
         public int CheckpointMarkerCount => checkpointMarkers.Count;
         public int EnemyIconCount => enemyIcons.Count;
+        public int ScoutIconCount => scoutIcons.Count;
+        public bool ShowScoutsForDevelopment => showScoutsForDevelopment;
         public RectTransform PlayerIcon => playerIcon;
         public RectTransform PayloadIcon => payloadIcon;
 
@@ -51,6 +59,29 @@ namespace AlmostDelivered.Gameplay.Payload
                     commander ? new Color(1f, .45f, .18f) : new Color(.3f, 1f, .85f), 11f);
                 sideMissionIcons.Add(icon);
             }
+            Refresh();
+        }
+
+        public void BindFuelDepots(FuelDepotDirector director)
+        {
+            foreach (var icon in fuelIcons) DestroyView(icon);
+            fuelIcons.Clear();
+            fuelDepots = director;
+            if (panel == null || director == null) return;
+            for (var index = 0; index < director.Count; index++)
+                fuelIcons.Add(CreateIcon($"Fuel Depot {index + 1}", new Color(.4f, 1f, .5f), 6f));
+            Refresh();
+        }
+
+        public void BindScouts(MissionCommanderDirector director)
+        {
+            scoutDirector = director;
+            Refresh();
+        }
+
+        public void SetScoutDebugVisibility(bool visible)
+        {
+            showScoutsForDevelopment = visible;
             Refresh();
         }
 
@@ -128,6 +159,7 @@ namespace AlmostDelivered.Gameplay.Payload
             UpdateIcon(payloadIcon, payload, mapRect);
             RefreshPayloadIcon();
             RefreshEnemyIcons(mapRect);
+            RefreshScoutIcons(mapRect);
             for (var index = 0; index < sideMissionIcons.Count; index++)
             {
                 var icon = sideMissionIcons[index];
@@ -138,6 +170,15 @@ namespace AlmostDelivered.Gameplay.Payload
                 icon.anchoredPosition = ProjectWorldInsidePanel(
                     state == SideMissionState.Carrying && player != null ? player.position : placement.position,
                     worldBounds, mapRect);
+            }
+            for (var index = 0; index < fuelIcons.Count; index++)
+            {
+                var icon = fuelIcons[index];
+                if (icon == null || fuelDepots == null) continue;
+                icon.gameObject.SetActive(!fuelDepots.IsCollected(index));
+                var position = fuelDepots.CarryingIndex == index && player != null
+                    ? player.position : fuelDepots.PlacementAt(index).position;
+                icon.anchoredPosition = ProjectWorldInsidePanel(position, worldBounds, mapRect);
             }
         }
 
@@ -305,6 +346,34 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
+        private void RefreshScoutIcons(Rect mapRect)
+        {
+            staleScoutIds.Clear();
+            foreach (var pair in scoutIcons) staleScoutIds.Add(pair.Key);
+            if (showScoutsForDevelopment && scoutDirector != null)
+            {
+                foreach (var scout in scoutDirector.Scouts)
+                {
+                    if (scout == null || scout.IsDefeated) continue;
+                    staleScoutIds.Remove(scout.ReporterId);
+                    if (!scoutIcons.TryGetValue(scout.ReporterId, out var icon))
+                    {
+                        icon = CreateIcon($"Scout {scout.ReporterId}",
+                            new Color(.92f, .38f, 1f, 1f), 9f);
+                        scoutIcons.Add(scout.ReporterId, icon);
+                    }
+                    icon.anchoredPosition = ProjectWorldInsidePanel(
+                        scout.transform.position, worldBounds, mapRect);
+                }
+            }
+            foreach (var reporterId in staleScoutIds)
+            {
+                var icon = scoutIcons[reporterId];
+                scoutIcons.Remove(reporterId);
+                DestroyView(icon);
+            }
+        }
+
         private void UpdateIcon(RectTransform icon, Transform target, Rect mapRect)
         {
             if (icon == null)
@@ -349,8 +418,12 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 DestroyView(icon);
             }
+            foreach (var icon in scoutIcons.Values)
+                DestroyView(icon);
 
             foreach (var icon in sideMissionIcons)
+                DestroyView(icon);
+            foreach (var icon in fuelIcons)
                 DestroyView(icon);
 
             DestroyView(playerIcon);
@@ -359,7 +432,9 @@ namespace AlmostDelivered.Gameplay.Payload
             checkpointMarkers.Clear();
             routeSegmentEndDistances.Clear();
             enemyIcons.Clear();
+            scoutIcons.Clear();
             sideMissionIcons.Clear();
+            fuelIcons.Clear();
             playerIcon = null;
             payloadIcon = null;
         }

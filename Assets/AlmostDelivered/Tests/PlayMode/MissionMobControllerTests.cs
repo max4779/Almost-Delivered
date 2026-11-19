@@ -1,5 +1,6 @@
 using System.Collections;
 using AlmostDelivered.Combat;
+using AlmostDelivered.Gameplay;
 using AlmostDelivered.Gameplay.Payload;
 using NUnit.Framework;
 using UnityEngine;
@@ -42,7 +43,8 @@ namespace AlmostDelivered.Tests.PlayMode
             controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Melee), target.transform, null);
 
             controller.Tick(0f, .5f);
-            Assert.That(mob.transform.position.z, Is.EqualTo(2f).Within(.001f));
+            Assert.That(mob.transform.position.z,
+                Is.EqualTo(controller.Definition.MoveSpeed * .5f).Within(.001f));
 
             mob.transform.position = new Vector3(0f, 0f, 9f);
             controller.Tick(.1f, 0f);
@@ -66,7 +68,8 @@ namespace AlmostDelivered.Tests.PlayMode
                 controller.ConfigureCargoAssault(cargo.transform);
 
                 controller.Tick(0f, .5f);
-                Assert.That(mob.transform.position.z, Is.EqualTo(2f).Within(.001f));
+                Assert.That(mob.transform.position.z,
+                    Is.EqualTo(controller.Definition.MoveSpeed * .5f).Within(.001f));
                 Assert.That(controller.IsPursuingPlayer, Is.False);
 
                 target.transform.position = new Vector3(2f, 0f, 5f);
@@ -352,7 +355,7 @@ namespace AlmostDelivered.Tests.PlayMode
             CombatNoiseSystem.Emit(Vector3.forward * 9f, 12f, CombatTeamId.Player);
 
             Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Pursuing));
-            Assert.That(controller.LastKnownPlayerPosition, Is.EqualTo(target.transform.position));
+            Assert.That(controller.LastKnownPlayerPosition, Is.EqualTo(Vector3.forward * 9f));
             Assert.That(controller.IsAlerted, Is.False);
             controller.Tick(0f, .5f);
             Assert.That(mob.transform.position.z, Is.GreaterThan(0f));
@@ -421,7 +424,7 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void RangedApproachesStandOffRangeThenFires()
+        public void RangedHoldsFiringPositionInsteadOfChasingPlayer()
         {
             projectileTemplate = new GameObject("Projectile Template", typeof(CombatProjectile));
             projectileTemplate.SetActive(false);
@@ -433,11 +436,89 @@ namespace AlmostDelivered.Tests.PlayMode
             controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged), target.transform, attack);
 
             controller.Tick(0f, .5f);
-            Assert.That(mob.transform.position.z, Is.EqualTo(1.5f).Within(.001f));
-
-            mob.transform.position = new Vector3(0f, 0f, 4.5f);
-            controller.Tick(0f, 0f);
+            Assert.That(mob.transform.position.z, Is.EqualTo(0f).Within(.001f));
             Assert.That(Object.FindObjectsOfType<CombatProjectile>(), Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void RangedFollowsBehindShieldWhileAdvancing()
+        {
+            var shield = Actor("Shield ally", CombatTeamId.Enemy, Vector3.forward * 4f);
+            try
+            {
+                var shieldController = shield.AddComponent<MissionMobController>();
+                shieldController.AssignIdentity(8, 8002);
+                shieldController.Configure(MissionMobDefinition.For(MissionMobArchetype.Shield),
+                    target.transform, null);
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.AssignIdentity(8, 8001);
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged),
+                    target.transform, null);
+
+                controller.Tick(0f, .5f);
+
+                Assert.That(mob.transform.position.z, Is.GreaterThan(0f));
+                Assert.That(mob.transform.position.z, Is.LessThan(shield.transform.position.z));
+            }
+            finally
+            {
+                Object.DestroyImmediate(shield);
+            }
+        }
+
+        [Test]
+        public void RangedReturnsTowardCargoWhenPlayerRunsOutOfRange()
+        {
+            var cargo = new GameObject("Cargo");
+            try
+            {
+                cargo.transform.position = Vector3.back * 10f;
+                target.transform.position = Vector3.forward * 30f;
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged),
+                    target.transform, null);
+                controller.ConfigureCargoAssault(cargo.transform);
+                CombatNoiseSystem.Emit(Vector3.zero, 4f, CombatTeamId.Player);
+
+                controller.Tick(0f, .5f);
+
+                Assert.That(mob.transform.position.z, Is.LessThan(0f));
+                Assert.That(controller.AwarenessState, Is.EqualTo(MissionMobAwarenessState.Unaware));
+            }
+            finally
+            {
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
+        public void RangedShootsCargoFromStandOffDistance()
+        {
+            var cargo = new GameObject("Cargo", typeof(CargoIntegrity));
+            projectileTemplate = new GameObject("Projectile Template", typeof(CombatProjectile));
+            projectileTemplate.SetActive(false);
+            try
+            {
+                cargo.transform.position = Vector3.forward * 5f;
+                target.transform.position = Vector3.forward * 20f;
+                var attack = mob.AddComponent<RangedAttackController>();
+                var muzzle = new GameObject("Muzzle").transform;
+                muzzle.SetParent(mob.transform, false);
+                attack.Configure(projectileTemplate, muzzle, 8f, 1f, 22f, 1f);
+                var controller = mob.AddComponent<MissionMobController>();
+                controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged),
+                    target.transform, attack);
+                controller.ConfigureCargoAssault(cargo.transform);
+
+                controller.Tick(0f, .5f);
+
+                Assert.That(mob.transform.position.z, Is.EqualTo(0f).Within(.001f));
+                Assert.That(cargo.GetComponent<CargoIntegrity>().CurrentHealth, Is.EqualTo(192f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(cargo);
+            }
         }
 
         [Test]
@@ -453,6 +534,70 @@ namespace AlmostDelivered.Tests.PlayMode
             Assert.That(mob.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(90f));
             Assert.That(controller.Definition.MoveSpeed, Is.EqualTo(2.2f));
             Assert.That(mob.transform.position.z, Is.EqualTo(2.2f).Within(.001f));
+        }
+
+        [Test]
+        public void ShieldMovesInFrontOfRangedAllyInItsWave()
+        {
+            var cargo = new GameObject("Cargo");
+            var ranged = Actor("Ranged ally", CombatTeamId.Enemy, Vector3.right * 5f);
+            try
+            {
+                cargo.transform.position = Vector3.forward * 20f;
+                target.transform.position = Vector3.forward * 20f;
+                var rangedController = ranged.AddComponent<MissionMobController>();
+                rangedController.AssignIdentity(-4, -4002);
+                rangedController.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged),
+                    target.transform, null);
+                rangedController.ConfigureCargoAssault(cargo.transform);
+                var shield = mob.AddComponent<MissionMobController>();
+                shield.AssignIdentity(-4, -4001);
+                shield.Configure(MissionMobDefinition.For(MissionMobArchetype.Shield),
+                    target.transform, null);
+                shield.ConfigureCargoAssault(cargo.transform);
+
+                shield.Tick(0f, .5f);
+
+                Assert.That(mob.transform.position.x, Is.GreaterThan(0f));
+                Assert.That(mob.transform.position.z, Is.GreaterThan(0f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(ranged);
+                Object.DestroyImmediate(cargo);
+            }
+        }
+
+        [Test]
+        public void RangedEnemyRetreatsWhenPlayerGetsTooClose()
+        {
+            target.transform.position = Vector3.forward * 2f;
+            var controller = mob.AddComponent<MissionMobController>();
+            controller.Configure(MissionMobDefinition.For(MissionMobArchetype.Ranged),
+                target.transform, null);
+
+            controller.Tick(0f, .5f);
+
+            Assert.That(mob.transform.position.z, Is.LessThan(0f));
+        }
+
+        [Test]
+        public void ShieldPushesPlayerOneBodyWidthWithReducedDamage()
+        {
+            target.transform.position = Vector3.forward * 1.4f;
+            var character = target.AddComponent<CharacterController>();
+            character.height = 2f;
+            character.radius = .5f;
+            character.center = Vector3.up;
+            target.AddComponent<MissionPlayerController>().Configure(character, null, 6f);
+            var shield = mob.AddComponent<MissionMobController>();
+            shield.Configure(MissionMobDefinition.For(MissionMobArchetype.Shield),
+                target.transform, null);
+
+            shield.Tick(0f, 0f);
+
+            Assert.That(target.GetComponent<ActorHealth>().CurrentHealth, Is.EqualTo(95f));
+            Assert.That(target.transform.position.z, Is.EqualTo(2.4f).Within(.1f));
         }
 
         [UnityTest]

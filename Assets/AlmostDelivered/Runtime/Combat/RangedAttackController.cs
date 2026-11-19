@@ -37,6 +37,7 @@ namespace AlmostDelivered.Combat
         public float ShotNoiseRadius => shotNoiseRadius;
         public Transform Muzzle => muzzle;
         public event Action ShotFired;
+        public event Action ReloadStarted;
 
         public void SetTraitModifiers(float damageMultiplier, float cooldownMultiplier)
         {
@@ -130,6 +131,7 @@ namespace AlmostDelivered.Combat
                 return false;
             isReloading = true;
             reloadEndTime = now + reloadDuration;
+            ReloadStarted?.Invoke();
             return true;
         }
 

@@ -22,6 +22,7 @@ namespace AlmostDelivered.Combat
         public float Damage => damage;
         public float EffectiveDamage => damage * traitDamageMultiplier;
         public float EffectiveCooldown => cooldown * traitCooldownMultiplier;
+        public event Action AttackPerformed;
 
         public void SetTraitModifiers(float damageMultiplier, float cooldownMultiplier)
         {
@@ -73,6 +74,7 @@ namespace AlmostDelivered.Combat
             var wind = GetComponent<MeleeSlashVfx>();
             wind?.Play(reach, arc, attackDirection);
             CombatNoiseSystem.Emit(transform.position, noiseRadius, ownTeam.Team);
+            AttackPerformed?.Invoke();
 
             var center = transform.position + Vector3.up * .65f;
             int count;

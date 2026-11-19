@@ -20,6 +20,7 @@ namespace AlmostDelivered.Presentation
         [SerializeField] private NeutralPose rightLeg;
         [SerializeField] private Transform motionSource;
         [SerializeField] private bool hovering;
+        [SerializeField] private bool firearmReady;
         private Vector3 previousSourcePosition;
         private float movementPhase;
         private float attackRemaining;
@@ -60,6 +61,8 @@ namespace AlmostDelivered.Presentation
             playerMobility = source != null ? source.GetComponent<PlayerMobility>() : null;
             ResetMotion();
         }
+
+        public void ConfigureFirearmReady(bool ready) => firearmReady = ready;
 
         public void PlayAttack()
         {
@@ -122,7 +125,7 @@ namespace AlmostDelivered.Presentation
                 ? gunshotStrength * Mathf.Pow(gunshotRemaining / gunshotDuration, 1.2f)
                 : 0f;
             var rifleFireActive = rifleFiring && gunshotRemaining > 0f;
-            var armSwing = rifleFireActive ? 0f : swing;
+            var armSwing = rifleFireActive || firearmReady ? 0f : swing;
             var blend = 1f - Mathf.Exp(-(slashing ? 26f : IdleDamping) * delta);
             var poseBlend = recoil > 0f ? 1f - Mathf.Exp(-55f * delta) : blend;
 
@@ -147,9 +150,9 @@ namespace AlmostDelivered.Presentation
                 new Vector3((sprinting ? 13f : 0f) - hit * 26f - melee * 12f - recoil * 7f,
                     melee * 10f + slashYaw * .12f, 0f), poseBlend);
             leftArm.Apply(Vector3.zero, new Vector3(armSwing * (sprinting ? 38f : 25f) - attack * 15f + melee * 25f + hit * 22f -
-                (rifleFireActive ? 30f : recoil * 12f), rifleFireActive ? -12f : 0f, 0f), poseBlend);
+                (rifleFireActive || firearmReady ? 30f : recoil * 12f), rifleFireActive || firearmReady ? -12f : 0f, 0f), poseBlend);
             rightArm.Apply(new Vector3(0f, 0f, -recoil * .12f),
-                new Vector3(-armSwing * (sprinting ? 38f : 25f) - attack * 75f - melee * 115f - (slashing ? 18f : 0f) - recoil * 30f,
+                new Vector3(-armSwing * (sprinting ? 38f : 25f) - (firearmReady ? 15f : 0f) - attack * 75f - melee * 115f - (slashing ? 18f : 0f) - recoil * 30f,
                 -melee * 25f + slashYaw, hit * 18f + recoil * 8f), poseBlend);
             firearm.Apply(new Vector3(0f, 0f, -recoil * .18f),
                 new Vector3(-recoil * 24f, 0f, recoil * 7f), poseBlend);

@@ -20,7 +20,7 @@ namespace AlmostDelivered.Editor.Frontend
         public const string ScenePath = "Assets/AlmostDelivered/Scenes/MissionPrototype.unity";
         public const int MissionSeed = 4711;
 
-        private static readonly Rect MissionBounds = new Rect(-50f, -90f, 100f, 180f);
+        private static readonly Rect MissionBounds = new Rect(-125f, -250f, 250f, 500f);
         private const float RouteCorridorWidth = 8f;
         private const float RoadWidth = 5.5f;
         private const string FontPath = "Assets/AlmostDelivered/Art/Fonts/NotoSansCJKkr-Regular.otf";
@@ -38,6 +38,7 @@ namespace AlmostDelivered.Editor.Frontend
             var root = new GameObject("Mission Prototype");
             var route = PayloadRoutePlanner.Generate(MissionSeed, MissionBounds, 5, RouteCorridorWidth);
             var sideMissionPlan = SideMissionPlanner.Generate(MissionSeed, MissionBounds, route);
+            var fuelDepotPlan = FuelDepotPlanner.Generate(MissionSeed, MissionBounds, route, 8);
             var environmentTheme = AssetDatabase.LoadAssetAtPath<MissionEnvironmentTheme>(
                 MissionMapAssetFactory.GrasslandEnvironmentThemePath);
             if (environmentTheme == null)
@@ -46,18 +47,19 @@ namespace AlmostDelivered.Editor.Frontend
             var groundRenderer = BuildArena(root.transform, environmentTheme);
             var road = BuildPayloadRoad(root.transform, route, environmentTheme);
             var projectileTemplate = BuildProjectile(root.transform);
+            var enemyProjectileTemplate = BuildEnemyProjectile(root.transform);
             var recoveryDropPosition = RecoveryDropPosition(route);
             var player = BuildPlayer(root.transform, recoveryDropPosition + Vector3.up, projectileTemplate);
             var payload = BuildPayload(root.transform, route.Points[0]);
             var mapGenerator = BuildMapGenerator(root.transform, environmentTheme.MapTheme,
-                recoveryDropPosition, sideMissionPlan);
+                recoveryDropPosition, sideMissionPlan, fuelDepotPlan);
             root.AddComponent<MissionEnvironmentThemeApplier>().Configure(
                 environmentTheme,
                 groundRenderer,
                 road.GetComponent<MeshRenderer>(),
                 mapGenerator);
             var anchors = BuildSpawnAnchors(root.transform, route);
-            var waveSpawner = BuildWaveSpawner(root.transform, player.transform, projectileTemplate, anchors);
+            var waveSpawner = BuildWaveSpawner(root.transform, player.transform, enemyProjectileTemplate, anchors);
 
             var controllerObject = new GameObject("Payload Mission Controller");
             controllerObject.transform.SetParent(root.transform, false);
@@ -70,7 +72,7 @@ namespace AlmostDelivered.Editor.Frontend
                 payload.transform,
                 mapGenerator,
                 waveSpawner,
-                .6f,
+                .8f,
                 0f,
                 4.5f,
                 5,
@@ -79,18 +81,24 @@ namespace AlmostDelivered.Editor.Frontend
                 6,
                 3f,
                 8,
-                true);
+                true,
+                240f,
+                150f);
 
             BuildPayloadEscortRadius(payload.transform, mission);
             BuildPayloadActivationView(payload.transform, mission);
             BuildSupplyRelays(root.transform, payload.transform, mission, route);
             var sideMissions = BuildSideMissions(root.transform, mission, waveSpawner,
                 player.transform, payload.transform, sideMissionPlan, environmentTheme);
+            var fuelDepots = BuildFuelDepots(root.transform, mission, player.transform,
+                payload.transform, fuelDepotPlan);
+            var commanderNetwork = BuildCommanderNetwork(root.transform, mission, waveSpawner,
+                mapGenerator, player.GetComponent<ObservableActor>(), environmentTheme);
 
             BuildCamera(player.transform);
             BuildLighting(root.transform);
             BuildHud(player.GetComponent<ActorHealth>(), player.transform, payload.transform,
-                mission, waveSpawner, route, sideMissions);
+                mission, waveSpawner, route, sideMissions, fuelDepots, commanderNetwork);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             Debug.Log("MISSION_PROTOTYPE_BUILT " + ScenePath);
@@ -145,9 +153,23 @@ namespace AlmostDelivered.Editor.Frontend
             return projectile;
         }
 
+        private static GameObject BuildEnemyProjectile(Transform parent)
+        {
+            var projectile = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            projectile.name = "Enemy Pulse Template";
+            projectile.transform.SetParent(parent, false);
+            projectile.transform.localScale = Vector3.one * .24f;
+            projectile.GetComponent<Renderer>().sharedMaterial = Material("Amber");
+            projectile.GetComponent<SphereCollider>().isTrigger = true;
+            projectile.AddComponent<CombatProjectile>();
+            projectile.SetActive(false);
+            return projectile;
+        }
+
         private static GameObject BuildPlayer(Transform parent, Vector3 position, GameObject projectileTemplate)
         {
             var player = Actor("Player", parent, position, CombatTeamId.Player, VisualArchetype.Player, true);
+            player.AddComponent<ObservableActor>();
             UnityEngine.Object.DestroyImmediate(player.GetComponent<CapsuleCollider>());
             var character = player.AddComponent<CharacterController>();
             character.height = 2f;
@@ -365,11 +387,74 @@ namespace AlmostDelivered.Editor.Frontend
             return director;
         }
 
+        private static FuelDepotDirector BuildFuelDepots(Transform parent,
+            PayloadMissionController mission, Transform player, Transform payload,
+            FuelDepotPlacement[] placements)
+        {
+            var root = new GameObject("Fuel Depots");
+            root.transform.SetParent(parent, false);
+            var cells = new GameObject[placements.Length];
+            var markers = new GameObject[placements.Length];
+            for (var index = 0; index < placements.Length; index++)
+            {
+                var position = placements[index].position;
+                var marker = new GameObject($"Fuel Depot {index + 1}");
+                marker.transform.SetParent(root.transform, false);
+                marker.transform.position = position;
+                markers[index] = marker;
+                Primitive(PrimitiveType.Cylinder, "Depot Ring", marker.transform,
+                    new Vector3(0f, .08f, 0f), new Vector3(3.5f, .08f, 3.5f), Material("Cyan"));
+                var labelObject = new GameObject("Fuel Label", typeof(TextMesh));
+                labelObject.transform.SetParent(marker.transform, false);
+                labelObject.transform.localPosition = new Vector3(0f, 2.55f, -2f);
+                var label = labelObject.GetComponent<TextMesh>();
+                label.text = "FUEL CELL · E";
+                label.anchor = TextAnchor.MiddleCenter;
+                label.alignment = TextAlignment.Center;
+                label.fontSize = 40;
+                label.characterSize = .07f;
+                label.color = new Color(.45f, 1f, .65f);
+
+                var cell = new GameObject($"Portable Fuel Cell {index + 1}");
+                cell.transform.SetParent(root.transform, false);
+                cell.transform.position = position;
+                Primitive(PrimitiveType.Cylinder, "Cell Body", cell.transform,
+                    new Vector3(0f, .65f, 0f), new Vector3(.7f, .65f, .7f), Material("Dark"));
+                Primitive(PrimitiveType.Cylinder, "Cell Core", cell.transform,
+                    new Vector3(0f, .9f, 0f), new Vector3(.48f, .43f, .48f), Material("Cyan"));
+                cells[index] = cell;
+            }
+            var director = root.AddComponent<FuelDepotDirector>();
+            director.Configure(mission, player, payload, placements, cells, markers, 150f);
+            return director;
+        }
+
+        private static MissionCommanderDirector BuildCommanderNetwork(Transform parent,
+            PayloadMissionController mission, PayloadWaveSpawner waves,
+            MissionMapGenerator map, ObservableActor player, MissionEnvironmentTheme theme)
+        {
+            var root = new GameObject("Field Commander Network");
+            root.transform.SetParent(parent, false);
+            var foliage = new Color(.22f, .4f, .19f);
+            if (theme.MapTheme != null && theme.MapTheme.Foliage.Count > 0 &&
+                theme.MapTheme.Foliage[0].Prefab != null)
+            {
+                var renderer = theme.MapTheme.Foliage[0].Prefab.GetComponentInChildren<Renderer>();
+                if (renderer != null && renderer.sharedMaterial != null)
+                    foliage = renderer.sharedMaterial.color;
+            }
+            var director = root.AddComponent<MissionCommanderDirector>();
+            director.Configure(mission, waves, map, player, MissionBounds, MissionSeed,
+                theme.GroundMaterial != null ? theme.GroundMaterial.color : foliage, foliage);
+            return director;
+        }
+
         private static MissionMapGenerator BuildMapGenerator(
             Transform parent,
             MissionMapTheme theme,
             Vector3 recoveryDropPosition,
-            SideMissionPlacement[] sideMissions)
+            SideMissionPlacement[] sideMissions,
+            FuelDepotPlacement[] fuelDepots)
         {
             var mapObject = new GameObject("Mission Map Generator");
             mapObject.transform.SetParent(parent, false);
@@ -379,16 +464,18 @@ namespace AlmostDelivered.Editor.Frontend
                 new MissionMapProtectedZone(new Vector2(0f, MissionBounds.yMin + 4f), new Vector2(8f, 8f)),
                 new MissionMapProtectedZone(new Vector2(0f, MissionBounds.yMax - 4f), new Vector2(8f, 8f)),
                 new MissionMapProtectedZone(
-                    new Vector2(recoveryDropPosition.x, recoveryDropPosition.z), new Vector2(9f, 9f))
+                    new Vector2(recoveryDropPosition.x, recoveryDropPosition.z), new Vector2(14f, 14f))
             };
             foreach (var exclusion in SideMissionPlanner.BuildAccessExclusions(sideMissions))
+                protectedZones.Add(new MissionMapProtectedZone(exclusion.Center, exclusion.Size));
+            foreach (var exclusion in FuelDepotPlanner.BuildAccessExclusions(fuelDepots))
                 protectedZones.Add(new MissionMapProtectedZone(exclusion.Center, exclusion.Size));
             generator.Configure(
                 theme,
                 new Vector2(MissionBounds.width * .5f, MissionBounds.height * .5f),
-                0, 14, 65, 100, protectedZones.ToArray(),
+                0, 25, 130, 190, protectedZones.ToArray(),
                 false,
-                9000);
+                15000);
             return generator;
         }
 
@@ -402,9 +489,10 @@ namespace AlmostDelivered.Editor.Frontend
             }
 
             var lateral = new Vector3(-routeDirection.z, 0f, routeDirection.x);
-            var candidate = cargoPosition + lateral * 17f + routeDirection * 2f;
-            candidate.x = Mathf.Clamp(candidate.x, MissionBounds.xMin + 3f, MissionBounds.xMax - 3f);
-            candidate.z = Mathf.Clamp(candidate.z, MissionBounds.yMin + 3f, MissionBounds.yMax - 3f);
+            var approach = route.EvaluateDistance(58f);
+            var candidate = approach + lateral * 16f;
+            candidate.x = Mathf.Clamp(candidate.x, MissionBounds.xMin + 8f, MissionBounds.xMax - 8f);
+            candidate.z = Mathf.Clamp(candidate.z, MissionBounds.yMin + 8f, MissionBounds.yMax - 8f);
             return candidate;
         }
 
@@ -486,7 +574,8 @@ namespace AlmostDelivered.Editor.Frontend
 
         private static void BuildHud(ActorHealth health, Transform player, Transform payload,
             PayloadMissionController mission, PayloadWaveSpawner waves, PayloadRoutePlan route,
-            SideMissionDirector sideMissions)
+            SideMissionDirector sideMissions, FuelDepotDirector fuelDepots,
+            MissionCommanderDirector commanderNetwork)
         {
             var canvasObject = new GameObject("Mission HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(MissionHud));
             canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
@@ -503,10 +592,14 @@ namespace AlmostDelivered.Editor.Frontend
             var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -234f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -278f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var cargoHealth = HudText("Cargo Health", canvasObject.transform, new Vector2(24f, -322f), new Vector2(760f, 42f), 24, TextAnchor.UpperLeft);
+            var cargoFuel = HudText("Cargo Fuel", canvasObject.transform,
+                new Vector2(24f, -365f), new Vector2(850f, 38f), 22, TextAnchor.UpperLeft);
             var sideMissionOne = HudText("Side Mission 1", canvasObject.transform,
-                new Vector2(24f, -370f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
+                new Vector2(24f, -410f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
             var sideMissionTwo = HudText("Side Mission 2", canvasObject.transform,
-                new Vector2(24f, -408f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
+                new Vector2(24f, -448f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
+            var commanderSignal = HudText("Scout Signal", canvasObject.transform,
+                new Vector2(24f, -492f), new Vector2(920f, 38f), 21, TextAnchor.UpperLeft);
             var activationCountdown = HudText(
                 "Activation Countdown",
                 canvasObject.transform,
@@ -524,10 +617,12 @@ namespace AlmostDelivered.Editor.Frontend
             var minimapRect = minimapObject.GetComponent<RectTransform>();
             minimapRect.anchorMin = minimapRect.anchorMax = minimapRect.pivot = Vector2.one;
             minimapRect.anchoredPosition = new Vector2(-24f, -24f);
-            minimapRect.sizeDelta = new Vector2(260f, 210f);
+            minimapRect.sizeDelta = new Vector2(300f, 340f);
             minimapObject.GetComponent<Image>().color = new Color(.02f, .04f, .06f, .78f);
             minimapObject.GetComponent<MissionMinimap>().Configure(MissionBounds, route, player, payload, mission, waves);
             minimapObject.GetComponent<MissionMinimap>().BindSideMissions(sideMissions);
+            minimapObject.GetComponent<MissionMinimap>().BindFuelDepots(fuelDepots);
+            minimapObject.GetComponent<MissionMinimap>().BindScouts(commanderNetwork);
 
             var hud = canvasObject.GetComponent<MissionHud>();
             hud.BindViews(controls, playerHealth, targetCount);
@@ -535,6 +630,8 @@ namespace AlmostDelivered.Editor.Frontend
             hud.ConfigurePayload(mission, phase, progress, checkpoint, escort, elapsed);
             hud.BindActivationCountdown(activationCountdown);
             hud.BindCargoHealth(cargoHealth);
+            hud.BindFuel(cargoFuel, fuelDepots);
+            hud.BindCommander(commanderNetwork, commanderSignal);
             hud.BindSideMissions(sideMissions, new[] { sideMissionOne, sideMissionTwo });
             BuildPlayerHealthBar(canvasObject.transform, health);
             PlayerStaminaHudBuilder.Build(canvasObject.transform,
@@ -558,6 +655,107 @@ namespace AlmostDelivered.Editor.Frontend
             damageFlashObject.GetComponent<PlayerDamageFlashView>().Configure(
                 health,
                 damageFlashObject.GetComponent<Image>());
+            BuildCargoStockHud(canvasObject.transform, mission);
+        }
+
+        private static void BuildCargoStockHud(Transform canvas, PayloadMissionController mission)
+        {
+            var card = new GameObject("Cargo Stock Blueprint", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(Image), typeof(CargoStockHud));
+            card.transform.SetParent(canvas, false);
+            var cardRect = card.GetComponent<RectTransform>();
+            cardRect.anchorMin = cardRect.anchorMax = cardRect.pivot = Vector2.one;
+            cardRect.anchoredPosition = new Vector2(-24f, -382f);
+            cardRect.sizeDelta = new Vector2(300f, 178f);
+            var background = card.GetComponent<Image>();
+            background.color = new Color(.015f, .035f, .055f, .88f);
+            background.raycastTarget = false;
+
+            var stock = HudText("Cargo Stocks", card.transform, new Vector2(12f, -8f),
+                new Vector2(276f, 30f), 22, TextAnchor.MiddleLeft);
+            stock.fontStyle = FontStyle.Bold;
+            stock.color = new Color(.72f, .96f, 1f);
+
+            var modules = new Image[3];
+            for (var index = 0; index < modules.Length; index++)
+            {
+                var frame = new GameObject($"Blueprint Module {index} Frame", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(Image));
+                frame.transform.SetParent(card.transform, false);
+                var frameRect = frame.GetComponent<RectTransform>();
+                frameRect.anchorMin = frameRect.anchorMax = frameRect.pivot = new Vector2(0f, 1f);
+                frameRect.anchoredPosition = new Vector2(12f + index * 92f, -48f);
+                frameRect.sizeDelta = new Vector2(86f, 66f);
+                var frameImage = frame.GetComponent<Image>();
+                frameImage.color = new Color(.5f, .8f, .85f, .8f);
+                frameImage.raycastTarget = false;
+
+                var module = new GameObject($"Blueprint Module {index}", typeof(RectTransform),
+                    typeof(CanvasRenderer), typeof(Image));
+                module.transform.SetParent(frame.transform, false);
+                var moduleRect = module.GetComponent<RectTransform>();
+                moduleRect.anchorMin = Vector2.zero;
+                moduleRect.anchorMax = Vector2.one;
+                moduleRect.offsetMin = new Vector2(3f, 3f);
+                moduleRect.offsetMax = new Vector2(-3f, -3f);
+                modules[index] = module.GetComponent<Image>();
+                modules[index].raycastTarget = false;
+
+                var mark = HudText($"Module {index} Mark", module.transform,
+                    new Vector2(0f, 0f), new Vector2(80f, 60f), 25,
+                    TextAnchor.MiddleCenter);
+                mark.text = index == 0 ? "L" : index == 1 ? "C" : "R";
+                mark.color = new Color(.03f, .15f, .2f, .9f);
+                mark.raycastTarget = false;
+            }
+
+            var health = HudText("Cargo Stock Health", card.transform, new Vector2(12f, -119f),
+                new Vector2(276f, 26f), 20, TextAnchor.MiddleLeft);
+            health.color = Color.white;
+            var healthTrack = new GameObject("Cargo Stock Health Track", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(Image));
+            healthTrack.transform.SetParent(card.transform, false);
+            var trackRect = healthTrack.GetComponent<RectTransform>();
+            trackRect.anchorMin = trackRect.anchorMax = trackRect.pivot = new Vector2(0f, 1f);
+            trackRect.anchoredPosition = new Vector2(12f, -150f);
+            trackRect.sizeDelta = new Vector2(276f, 12f);
+            healthTrack.GetComponent<Image>().color = new Color(.12f, .18f, .2f, .95f);
+            healthTrack.GetComponent<Image>().raycastTarget = false;
+            var fill = new GameObject("Cargo Stock Health Fill", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(Image));
+            fill.transform.SetParent(healthTrack.transform, false);
+            var fillRect = fill.GetComponent<RectTransform>();
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = Vector2.one;
+            fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
+            var fillImage = fill.GetComponent<Image>();
+            fillImage.type = Image.Type.Filled;
+            fillImage.fillMethod = Image.FillMethod.Horizontal;
+            fillImage.raycastTarget = false;
+
+            var gameOver = new GameObject("Cargo Game Over", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(Image));
+            gameOver.transform.SetParent(canvas, false);
+            var overlayRect = gameOver.GetComponent<RectTransform>();
+            overlayRect.anchorMin = Vector2.zero;
+            overlayRect.anchorMax = Vector2.one;
+            overlayRect.offsetMin = overlayRect.offsetMax = Vector2.zero;
+            var veil = gameOver.GetComponent<Image>();
+            veil.color = new Color(.05f, .005f, .01f, .8f);
+            veil.raycastTarget = false;
+            var title = HudText("Game Over Title", gameOver.transform, Vector2.zero,
+                new Vector2(900f, 110f), 74, TextAnchor.MiddleCenter, false, true);
+            title.text = "GAME OVER";
+            title.fontStyle = FontStyle.Bold;
+            title.color = new Color(1f, .24f, .2f);
+            title.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -420f);
+            var detail = HudText("Game Over Detail", gameOver.transform, Vector2.zero,
+                new Vector2(900f, 56f), 27, TextAnchor.MiddleCenter, false, true);
+            detail.text = "CARGO DESTROYED THREE TIMES  ·  ESC TO RETURN TO BASE";
+            detail.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -535f);
+            gameOver.SetActive(false);
+
+            card.GetComponent<CargoStockHud>().Configure(mission, modules, stock, health, fillImage, gameOver);
         }
 
         private static void BuildPlayerHealthBar(Transform canvas, ActorHealth health)

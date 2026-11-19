@@ -48,7 +48,10 @@ namespace AlmostDelivered.Gameplay.Payload
             float cargoMaximumHealth = -1f,
             bool isCargoBroken = false,
             bool isRelayChoicePending = false,
-            string activeRouteOptionId = null)
+            string activeRouteOptionId = null,
+            float fuelRemaining = -1f,
+            float fuelCapacity = -1f,
+            int cargoDestructions = 0)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -68,6 +71,9 @@ namespace AlmostDelivered.Gameplay.Payload
             IsCargoBroken = isCargoBroken;
             IsRelayChoicePending = isRelayChoicePending;
             ActiveRouteOptionId = activeRouteOptionId;
+            FuelRemaining = fuelRemaining;
+            FuelCapacity = fuelCapacity;
+            CargoDestructions = cargoDestructions;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -105,5 +111,11 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool IsRelayChoicePending { get; }
 
         public string ActiveRouteOptionId { get; }
+        public float FuelRemaining { get; }
+        public float FuelCapacity { get; }
+        public int CargoDestructions { get; }
+        public int CargoStocksRemaining => System.Math.Max(0, 3 - CargoDestructions);
+        public bool UsesFuel => FuelCapacity > 0f;
+        public bool IsOutOfFuel => UsesFuel && FuelRemaining <= .001f;
     }
 }

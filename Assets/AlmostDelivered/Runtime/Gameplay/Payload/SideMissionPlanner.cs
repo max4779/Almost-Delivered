@@ -49,7 +49,8 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 var anchor = route.EvaluateDistance(route.TotalLength * (index + 1f) / (count + 1f));
                 var side = index % 2 == 0 ? firstSide : -firstSide;
-                var offset = 27f + (float)random.NextDouble() * 5f;
+                var offset = Mathf.Min(bounds.width * .36f,
+                    62f + (float)random.NextDouble() * 12f);
                 var position = new Vector3(
                     Mathf.Clamp(anchor.x + side * offset, bounds.xMin + 8f, bounds.xMax - 8f),
                     0f,

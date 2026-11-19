@@ -51,17 +51,17 @@ namespace AlmostDelivered.Gameplay.Payload
             switch (archetype)
             {
                 case MissionMobArchetype.Ranged:
-                    return new MissionMobDefinition(archetype, 45f, 3f, 1.2f, 8f, 1.2f, 6f);
+                    return new MissionMobDefinition(archetype, 45f, 3f, 1.2f, 8f, 1.2f, 9f);
                 case MissionMobArchetype.Shield:
-                    return new MissionMobDefinition(archetype, 90f, 2.2f, 1.6f, 12f, 1.2f, 0f);
+                    return new MissionMobDefinition(archetype, 90f, 2.2f, 1.6f, 5f, 1.2f, 0f);
                 case MissionMobArchetype.CommanderBoss:
                     return new MissionMobDefinition(archetype, 220f, 2.5f, 1.5f, 12f, 1f, 7f);
                 case MissionMobArchetype.ChargerBoss:
-                    return new MissionMobDefinition(archetype, 300f, 3.8f, 1.7f, 16f, 1.1f, 0f);
+                    return new MissionMobDefinition(archetype, 300f, 4.5f, 1.7f, 16f, 1.1f, 0f);
                 case MissionMobArchetype.CargoSaboteur:
-                    return new MissionMobDefinition(archetype, 75f, 3.8f, 2.3f, 22f, 1.4f, 0f);
+                    return new MissionMobDefinition(archetype, 75f, 4.5f, 2.3f, 22f, 1.4f, 0f);
                 default:
-                    return new MissionMobDefinition(MissionMobArchetype.Melee, 60f, 4f, 1.4f, 10f, 1f, 0f);
+                    return new MissionMobDefinition(MissionMobArchetype.Melee, 60f, 4.8f, 1.4f, 10f, 1f, 0f);
             }
         }
     }
@@ -69,6 +69,13 @@ namespace AlmostDelivered.Gameplay.Payload
     [RequireComponent(typeof(ActorHealth), typeof(CombatTeam))]
     public sealed class MissionMobController : MonoBehaviour
     {
+        private const float ShieldEscortDistance = 2.2f;
+        private const float ShieldEscortSearchRadius = 14f;
+        private const float ShieldPushDistance = 1f;
+        private const float RangedRetreatStart = 4f;
+        private const float RangedRetreatStop = 7f;
+        private const float RangedCoverDistance = 2.8f;
+        private const float RangedEngagementRange = 20f;
         private static readonly HashSet<MissionMobController> ActiveMobs = new HashSet<MissionMobController>();
 
         [SerializeField] private Transform target;
@@ -120,6 +127,11 @@ namespace AlmostDelivered.Gameplay.Payload
         private Vector3 detourNear;
         private Vector3 detourFar;
         private bool headingToFar;
+        private MissionMobController escortedRanged;
+        private float nextEscortSearchAt;
+        private MissionMobController protectingShield;
+        private float nextShieldSearchAt;
+        private bool rangedRetreating;
 
         public MissionMobDefinition Definition { get; private set; }
         public int WaveId { get; private set; } = -1;
@@ -136,6 +148,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public GameObject AlertIndicator => alertIndicator;
 
         public event Action<MissionMobController> Removed;
+        public event Action<MissionMobController, Vector3> VisualContactObserved;
 
         private void Awake()
         {
@@ -227,6 +240,11 @@ namespace AlmostDelivered.Gameplay.Payload
             lastKnownHealth = health.CurrentHealth;
             suppressDamageAlert = false;
             ClearDetour();
+            escortedRanged = null;
+            nextEscortSearchAt = float.NegativeInfinity;
+            protectingShield = null;
+            nextShieldSearchAt = float.NegativeInfinity;
+            rangedRetreating = false;
         }
 
         public void ConfigureGuardPost(Vector3 position, float awarenessRadius)
@@ -259,6 +277,15 @@ namespace AlmostDelivered.Gameplay.Payload
             guardPostEnabled = false;
             guardPostEngaged = false;
             ConfigureCargoAssault(cargo);
+        }
+
+        public void InvestigateCommanderReport(Vector3 observedPosition)
+        {
+            if (IsDefeated || IsCargoSaboteur) return;
+            ReceiveAlert(false, observedPosition);
+            awarenessState = MissionMobAwarenessState.Vigilant;
+            vigilanceRemaining = vigilanceDuration;
+            hasShownAlert = true;
         }
 
         public void AssignIdentity(int waveId, int enemyId)
@@ -306,15 +333,21 @@ namespace AlmostDelivered.Gameplay.Payload
                     hasLastKnownPlayerPosition = true;
                 }
                 else if (awarenessState == MissionMobAwarenessState.Unaware && CanDetectTarget(toPlayer))
+                {
+                    var firstVisual = !hasSeenPlayer;
                     ReceiveAlert(!assaultingCargo, target.position, true);
+                    if (firstVisual) VisualContactObserved?.Invoke(this, target.position);
+                }
                 else if (awarenessState != MissionMobAwarenessState.Unaware &&
                          (hasSeenPlayer ? CanTrackTarget(toPlayer) : CanDetectTarget(toPlayer)))
                 {
+                    var firstVisual = !hasSeenPlayer;
                     awarenessState = MissionMobAwarenessState.Pursuing;
                     hasSeenPlayer = true;
                     vigilanceRemaining = hasShownAlert ? vigilanceDuration : soundMemoryDuration;
                     lastKnownPlayerPosition = target.position;
                     hasLastKnownPlayerPosition = true;
+                    if (firstVisual) VisualContactObserved?.Invoke(this, target.position);
                 }
                 else if (awarenessState == MissionMobAwarenessState.Pursuing)
                 {
@@ -339,6 +372,17 @@ namespace AlmostDelivered.Gameplay.Payload
                 }
             }
 
+            if (Definition.Archetype == MissionMobArchetype.Ranged && assaultingCargo &&
+                cargoTarget != null && toPlayer.sqrMagnitude >
+                RangedEngagementRange * RangedEngagementRange)
+            {
+                awarenessState = MissionMobAwarenessState.Unaware;
+                pursuingFromNoise = false;
+                hasLastKnownPlayerPosition = false;
+                hasSeenPlayer = false;
+                ClearDetour();
+            }
+
             if (IsCargoSaboteur && cargoTarget == null)
             {
                 Move(Vector3.zero, deltaTime);
@@ -359,6 +403,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
+            if (TryEscortRanged(now, deltaTime, pursuingPlayer))
+                return;
+
             if (destination == null)
             {
                 Move(Vector3.zero, deltaTime);
@@ -374,6 +421,50 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var distance = toTarget.magnitude;
             var direction = toTarget / distance;
+            if (Definition.Archetype == MissionMobArchetype.Ranged && pursuingPlayer)
+            {
+                if (distance < RangedRetreatStart) rangedRetreating = true;
+                if (distance >= RangedRetreatStop) rangedRetreating = false;
+                if (rangedRetreating && TryRetreat(direction, out var retreatDirection))
+                {
+                    ClearDetour();
+                    RotateTowards(direction, deltaTime);
+                    TryFireAtPlayer(direction, distance, now);
+                    Move(retreatDirection, deltaTime);
+                    return;
+                }
+                var shield = FindProtectingShield(now);
+                if (shield != null)
+                {
+                    var shieldToPlayer = Vector3.ProjectOnPlane(
+                        target.position - shield.transform.position, Vector3.up);
+                    if (shieldToPlayer.sqrMagnitude > .01f)
+                    {
+                        var coverPosition = shield.transform.position -
+                                            shieldToPlayer.normalized * RangedCoverDistance;
+                        if (Vector3.Distance(transform.position, coverPosition) > .8f)
+                            MoveToKnownPosition(coverPosition, deltaTime);
+                        else
+                            Move(Vector3.zero, deltaTime);
+                        RotateTowards(direction, deltaTime);
+                        TryFireAtPlayer(direction, distance, now);
+                        return;
+                    }
+                }
+                if (distance <= RangedEngagementRange)
+                {
+                    ClearDetour();
+                    RotateTowards(direction, deltaTime);
+                    TryFireAtPlayer(direction, distance, now);
+                    Move(Vector3.zero, deltaTime);
+                    return;
+                }
+                if (cargoTarget != null)
+                    MoveToKnownPosition(cargoTarget.position, deltaTime);
+                else
+                    Move(Vector3.zero, deltaTime);
+                return;
+            }
             Collider obstacle = null;
             var blocked = characterController != null && FindBlockingObstacle(direction, distance, out obstacle);
             if (blocked && detourObstacle != obstacle && detourObstacle == null)
@@ -401,6 +492,25 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
+            if (Definition.Archetype == MissionMobArchetype.Ranged && !pursuingPlayer &&
+                cargoTarget != null)
+            {
+                if (distance > Definition.StandOffRange || blocked || detourObstacle != null)
+                    Move(navigationDirection, deltaTime);
+                else
+                {
+                    Move(Vector3.zero, deltaTime);
+                    var cargo = cargoTarget.GetComponent<CargoIntegrity>();
+                    if (cargo != null && rangedAttack != null &&
+                        rangedAttack.TryFire(cargoTarget.position, now))
+                    {
+                        cargo.ApplyDamage(Definition.ContactDamage);
+                        GetComponentInChildren<ProceduralPoseAnimator>()?.PlayGunshot(false);
+                    }
+                }
+                return;
+            }
+
             var contactRange = pursuingPlayer ? Definition.ContactRange : 2.3f;
             if (distance > contactRange || (pursuingPlayer && blocked) || detourObstacle != null)
             {
@@ -410,7 +520,12 @@ namespace AlmostDelivered.Gameplay.Payload
 
             if (pursuingPlayer && now >= nextContactTime)
             {
+                var canPush = Definition.Archetype == MissionMobArchetype.Shield &&
+                              !targetHealth.IsInvulnerable;
                 targetHealth.ApplyDamage(Definition.ContactDamage);
+                if (canPush)
+                    target.GetComponent<MissionPlayerController>()?.TryApplyKnockback(
+                        transform.position, ShieldPushDistance);
                 GetComponentInChildren<ProceduralPoseAnimator>()?.PlayMeleeAttack();
                 nextContactTime = now + Definition.ContactCooldown;
             }
@@ -424,6 +539,106 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             Move(Vector3.zero, deltaTime);
+        }
+
+        private bool TryEscortRanged(float now, float deltaTime, bool pursuingPlayer)
+        {
+            if (Definition.Archetype != MissionMobArchetype.Shield || EnemyId == -1 ||
+                (pursuingPlayer && Vector3.Distance(transform.position, target.position) <=
+                    Definition.ContactRange + .2f) ||
+                (!pursuingPlayer && cargoTarget != null &&
+                    Vector3.Distance(transform.position, cargoTarget.position) <= 2.3f))
+                return false;
+
+            if (escortedRanged == null || escortedRanged.IsDefeated ||
+                escortedRanged.WaveId != WaveId ||
+                Vector3.Distance(transform.position, escortedRanged.transform.position) >
+                    ShieldEscortSearchRadius)
+                escortedRanged = null;
+            if (escortedRanged == null && now >= nextEscortSearchAt)
+            {
+                nextEscortSearchAt = now + .5f;
+                var closestDistance = ShieldEscortSearchRadius;
+                foreach (var candidate in ActiveMobs)
+                {
+                    if (candidate == null || candidate == this || candidate.IsDefeated ||
+                        candidate.WaveId != WaveId ||
+                        candidate.Definition.Archetype != MissionMobArchetype.Ranged)
+                        continue;
+                    var distance = Vector3.Distance(transform.position, candidate.transform.position);
+                    if (distance >= closestDistance) continue;
+                    closestDistance = distance;
+                    escortedRanged = candidate;
+                }
+            }
+            if (escortedRanged == null) return false;
+
+            var threat = pursuingPlayer && target != null
+                ? target.position
+                : cargoTarget != null ? cargoTarget.position : target.position;
+            var offset = Vector3.ProjectOnPlane(threat - escortedRanged.transform.position,
+                Vector3.up);
+            if (offset.sqrMagnitude < .01f) return false;
+            var destination = escortedRanged.transform.position +
+                              offset.normalized * ShieldEscortDistance;
+            if (Vector3.Distance(transform.position, destination) <= .6f)
+                RotateTowards(offset.normalized, deltaTime);
+            MoveToKnownPosition(destination, deltaTime);
+            return true;
+        }
+
+        private MissionMobController FindProtectingShield(float now)
+        {
+            if (EnemyId == -1) return null;
+            if (protectingShield == null || protectingShield.IsDefeated ||
+                protectingShield.WaveId != WaveId ||
+                Vector3.Distance(transform.position, protectingShield.transform.position) >
+                    ShieldEscortSearchRadius)
+                protectingShield = null;
+            if (protectingShield != null || now < nextShieldSearchAt)
+                return protectingShield;
+            nextShieldSearchAt = now + .5f;
+            var closestDistance = ShieldEscortSearchRadius;
+            foreach (var candidate in ActiveMobs)
+            {
+                if (candidate == null || candidate == this || candidate.IsDefeated ||
+                    candidate.WaveId != WaveId ||
+                    candidate.Definition.Archetype != MissionMobArchetype.Shield)
+                    continue;
+                var distance = Vector3.Distance(transform.position, candidate.transform.position);
+                if (distance >= closestDistance) continue;
+                closestDistance = distance;
+                protectingShield = candidate;
+            }
+            return protectingShield;
+        }
+
+        private void TryFireAtPlayer(Vector3 direction, float distance, float now)
+        {
+            if (rangedAttack == null || distance > RangedEngagementRange ||
+                FindBlockingObstacle(direction, distance, out _)) return;
+            if (rangedAttack.TryFire(target.position, now))
+                GetComponentInChildren<ProceduralPoseAnimator>()?.PlayGunshot(false);
+        }
+
+        private bool TryRetreat(Vector3 towardPlayer, out Vector3 retreatDirection)
+        {
+            var away = -towardPlayer;
+            var sideways = new Vector3(away.z, 0f, -away.x);
+            var preference = EnemyId % 2 == 0 ? 1f : -1f;
+            for (var index = 0; index < 5; index++)
+            {
+                var candidate = index == 0 ? away :
+                    index == 1 ? (away + sideways * preference).normalized :
+                    index == 2 ? (away - sideways * preference).normalized :
+                    index == 3 ? sideways * preference : -sideways * preference;
+                if (characterController != null &&
+                    FindBlockingObstacle(candidate, 2f, out _)) continue;
+                retreatDirection = candidate;
+                return true;
+            }
+            retreatDirection = Vector3.zero;
+            return false;
         }
 
         private bool FindBlockingObstacle(Vector3 direction, float distance, out Collider obstacle)
@@ -601,8 +816,9 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 if (!hasShownAlert)
                 {
-                    ReceiveAlert(false, target.position, true);
+                    ReceiveAlert(false, noise.Position);
                     pursuingFromNoise = true;
+                    awarenessState = MissionMobAwarenessState.Pursuing;
                 }
                 else
                 {

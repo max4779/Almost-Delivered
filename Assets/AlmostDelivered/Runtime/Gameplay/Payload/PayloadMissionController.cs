@@ -23,6 +23,8 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private MissionMapGenerator configuredMapGenerator;
         [SerializeField] private PayloadWaveSpawner waveSpawner;
         [SerializeField] private float configuredMovementSpeed;
+        [SerializeField, Min(0f)] private float fuelCapacitySeconds;
+        [SerializeField, Min(0f)] private float startingFuelSeconds;
         [SerializeField] private float configuredDeploymentDuration;
         [SerializeField] private float configuredCorridorWidth = 3f;
         [SerializeField] private int configuredInteriorPointCount = 5;
@@ -42,9 +44,12 @@ namespace AlmostDelivered.Gameplay.Payload
         private PayloadMissionSnapshot snapshot;
         private float activationNoiseCooldown;
         private int activationWaveMask;
+        private bool cargoActivated;
         private bool relayChoicePending;
         private string activeRouteOptionId;
         private float shockPulseCooldown;
+        private int cargoDestructionCount;
+        private bool wasCargoBroken;
 
         public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
@@ -62,6 +67,9 @@ namespace AlmostDelivered.Gameplay.Payload
         public int PreplacedSentryCount => configuredPreplacedSentryCount;
         public CargoIntegrity CargoHealth => cargoIntegrity;
         public float CargoInteractionRadius => escortRadius;
+        public float FuelCapacitySeconds => fuelCapacitySeconds;
+        public float StartingFuelSeconds => startingFuelSeconds;
+        public bool HasActivatedCargo => cargoActivated;
         public bool CanInteractWithCargo
         {
             get
@@ -122,7 +130,9 @@ namespace AlmostDelivered.Gameplay.Payload
             int recoveryGuardCount = 6,
             float cargoActivationDuration = 3f,
             int preplacedSentryCount = 8,
-            bool enableRelayChoices = false)
+            bool enableRelayChoices = false,
+            float fuelCapacity = 0f,
+            float startingFuel = 0f)
         {
             if (stateMachine != null)
             {
@@ -143,6 +153,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 waveSpawner.ConfigureCargoTarget(payload);
             escortRadius = Mathf.Max(0f, radius);
             configuredMovementSpeed = movementSpeed;
+            fuelCapacitySeconds = Mathf.Max(0f, fuelCapacity);
+            startingFuelSeconds = Mathf.Max(0f, startingFuel);
             configuredDeploymentDuration = deploymentDuration;
             configuredInteriorPointCount = interiorPointCount;
             configuredCorridorWidth = corridorWidth;
@@ -180,8 +192,12 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void Initialize()
         {
+            if (cargoIntegrity != null) cargoIntegrity.Changed -= HandleCargoHealthChanged;
             if (cargoIntegrity == null && payloadTransform != null)
                 cargoIntegrity = payloadTransform.GetComponent<CargoIntegrity>();
+            cargoDestructionCount = 0;
+            wasCargoBroken = cargoIntegrity != null && cargoIntegrity.IsBroken;
+            if (cargoIntegrity != null) cargoIntegrity.Changed += HandleCargoHealthChanged;
             RoutePlan = PayloadRoutePlanner.Generate(configuredSeed, configuredBounds, configuredInteriorPointCount, configuredCorridorWidth);
             stateMachine = new PayloadMissionStateMachine(
                 RoutePlan.TotalLength,
@@ -190,6 +206,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 configuredDeploymentDuration,
                 requiresCargoRecovery,
                 configuredCargoActivationDuration);
+            stateMachine.ConfigureFuel(fuelCapacitySeconds, startingFuelSeconds);
             stateMachine.WaveRequested += HandleWaveRequested;
             escortDirector = authority && waveSpawner != null
                 ? new PayloadEscortDirector(configuredSeed)
@@ -197,6 +214,7 @@ namespace AlmostDelivered.Gameplay.Payload
             pendingEscortEncounter = null;
             activationNoiseCooldown = 0f;
             activationWaveMask = 0;
+            cargoActivated = !requiresCargoRecovery;
             relayChoicePending = false;
             activeRouteOptionId = null;
             shockPulseCooldown = 0f;
@@ -249,6 +267,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void OnDestroy()
         {
+            if (cargoIntegrity != null) cargoIntegrity.Changed -= HandleCargoHealthChanged;
             if (stateMachine != null)
             {
                 stateMachine.WaveRequested -= HandleWaveRequested;
@@ -268,6 +287,8 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 return;
             }
+
+            if (stateMachine.Snapshot.Phase == PayloadMissionPhase.Failed) return;
 
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var canInteract = CanInteractWithCargo;
@@ -289,12 +310,11 @@ namespace AlmostDelivered.Gameplay.Payload
                 Mathf.Max(.01f, ActiveRouteOption != null ? ActiveRouteOption.escortSpeedMultiplier : 1f) *
                 HighestNearbyEscortMultiplier());
 
-            stateMachine.Tick(deltaTime, cargoIntegrity != null && cargoIntegrity.IsBroken ? 0 : players,
-                enemies, activationInputHeld && canInteract);
+            stateMachine.Tick(deltaTime, players, enemies, activationInputHeld && canInteract,
+                cargoIntegrity != null && cargoIntegrity.IsBroken);
             var currentState = stateMachine.Snapshot;
             BeginRelayChoiceIfNeeded(previousPhase, currentState.Phase);
             HandleActivationTransition(previousPhase, currentState.Phase);
-            TickActivationWaves(previousPhase, currentState);
             payloadTransform.position = RoutePlan.EvaluateDistance(stateMachine.Snapshot.RouteDistance);
             payloadTransform.rotation = Quaternion.LookRotation(
                 RoutePlan.EvaluateDirection(stateMachine.Snapshot.RouteDistance), Vector3.up);
@@ -323,6 +343,14 @@ namespace AlmostDelivered.Gameplay.Payload
             return true;
         }
 
+        public float AddFuel(float seconds)
+        {
+            if (!authority || stateMachine == null) return 0f;
+            var added = stateMachine.AddFuel(seconds);
+            if (added > 0f) PublishSnapshot(snapshot.Phase);
+            return added;
+        }
+
         public bool ApplySnapshot(PayloadMissionSnapshot value)
         {
             if (authority || RoutePlan == null)
@@ -332,6 +360,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
             var previousPhase = snapshot.Phase;
             snapshot = value;
+            cargoDestructionCount = Mathf.Clamp(value.CargoDestructions, 0, 3);
+            wasCargoBroken = value.IsCargoBroken;
             relayChoicePending = value.IsRelayChoicePending;
             activeRouteOptionId = value.ActiveRouteOptionId;
             if (cargoIntegrity != null && value.CargoMaximumHealth > 0f && value.CargoHealth >= 0f)
@@ -388,26 +418,17 @@ namespace AlmostDelivered.Gameplay.Payload
 
         private void HandleActivationTransition(PayloadMissionPhase previousPhase, PayloadMissionPhase currentPhase)
         {
-            if (previousPhase == PayloadMissionPhase.Activating || currentPhase != PayloadMissionPhase.Activating)
+            if (previousPhase != PayloadMissionPhase.Activating && currentPhase == PayloadMissionPhase.Activating)
             {
+                activationNoiseCooldown = configuredCargoNoiseInterval;
+                EmitCargoNoise();
                 return;
             }
 
-            activationNoiseCooldown = configuredCargoNoiseInterval;
-            TrySpawnActivationWave(0);
-            EmitCargoNoise();
-        }
-
-        private void TickActivationWaves(PayloadMissionPhase previousPhase, PayloadMissionSnapshot currentState)
-        {
-            if (previousPhase != PayloadMissionPhase.Activating && currentState.Phase != PayloadMissionPhase.Activating)
+            if (previousPhase == PayloadMissionPhase.Activating && currentPhase == PayloadMissionPhase.Escorting)
             {
-                return;
-            }
-
-            if (currentState.ActivationProgress >= .5f)
-            {
-                TrySpawnActivationWave(1);
+                cargoActivated = true;
+                TrySpawnActivationWave(0);
             }
         }
 
@@ -466,46 +487,52 @@ namespace AlmostDelivered.Gameplay.Payload
             out Vector3[] positions,
             out Vector3[] facings)
         {
-            var count = Mathf.Max(0, requestedCount);
-            positions = new Vector3[count];
-            facings = new Vector3[count];
-            if (count == 0 || RoutePlan == null)
+            positions = Array.Empty<Vector3>();
+            facings = Array.Empty<Vector3>();
+            if (requestedCount <= 0 || RoutePlan == null)
             {
                 return;
             }
 
-            var campCount = Mathf.CeilToInt(count / 2f);
-            for (var index = 0; index < count; index++)
+            var objectives = new List<Vector3>();
+            foreach (var distance in RoutePlan.CheckpointDistances)
+                objectives.Add(RoutePlan.EvaluateDistance(distance));
+            foreach (var side in SideMissionPlanner.Generate(configuredSeed, configuredBounds, RoutePlan))
+                objectives.Add(side.position);
+            foreach (var depot in FuelDepotPlanner.Generate(configuredSeed, configuredBounds, RoutePlan, 8))
+                objectives.Add(depot.position);
+
+            var blockers = new List<MapExclusionZone>();
+            if (configuredMapGenerator != null && configuredMapGenerator.GeneratedRoot != null)
             {
-                var campIndex = index / 2;
-                var campT = (campIndex + 1f) / (campCount + 1f);
-                var routeDistance = RoutePlan.TotalLength * Mathf.Lerp(.18f, .82f, campT);
-                var routeCenter = RoutePlan.EvaluateDistance(routeDistance);
-                var before = RoutePlan.EvaluateDistance(Mathf.Max(0f, routeDistance - 1f));
-                var after = RoutePlan.EvaluateDistance(Mathf.Min(RoutePlan.TotalLength, routeDistance + 1f));
-                var forward = HorizontalDirection(after - before, Vector3.forward);
-                var right = new Vector3(forward.z, 0f, -forward.x);
-                var side = campIndex % 2 == 0 ? 1f : -1f;
-                var slotOffset = index % 2 == 0 ? -1.4f : 1.4f;
-                var position = routeCenter + right * side * 6f + forward * slotOffset;
-                position.x = Mathf.Clamp(position.x, configuredBounds.xMin + 1f, configuredBounds.xMax - 1f);
-                position.z = Mathf.Clamp(position.z, configuredBounds.yMin + 1f, configuredBounds.yMax - 1f);
-                position.y = 0f;
-                positions[index] = position;
-                facings[index] = HorizontalDirection(routeCenter - position, -right * side);
+                foreach (var piece in configuredMapGenerator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true))
+                    if (piece.Category == MissionMapPieceCategory.BlockingObstacle)
+                        blockers.Add(new MapExclusionZone(piece.Position, piece.Footprint));
+            }
+
+            positions = MissionRoamingSpawnPlanner.Generate(configuredSeed, configuredBounds, RoutePlan,
+                playerTransform != null ? playerTransform.position : RoutePlan.Points[0],
+                objectives, blockers, requestedCount);
+            facings = new Vector3[positions.Length];
+            var random = new System.Random(unchecked(configuredSeed * 32452843 + 4133));
+            for (var index = 0; index < positions.Length; index++)
+            {
+                var angle = (float)random.NextDouble() * Mathf.PI * 2f;
+                facings[index] = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
             }
         }
 
         private void TickEscortDirector(float deltaTime)
         {
-            if (escortDirector == null || waveSpawner == null || RoutePlan == null || payloadTransform == null)
+            if (!cargoActivated || escortDirector == null || waveSpawner == null ||
+                RoutePlan == null || payloadTransform == null)
             {
                 return;
             }
 
             if (snapshot.Phase != PayloadMissionPhase.Escorting)
             {
-                escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.ActiveCount, out _);
+                escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.CargoAssaultCount, out _);
                 return;
             }
 
@@ -515,7 +542,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (!escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.ActiveCount, out var encounter))
+            if (waveSpawner.PendingCount >= 12 ||
+                !escortDirector.Tick(deltaTime, snapshot.Phase, waveSpawner.CargoAssaultCount, out var encounter))
             {
                 return;
             }
@@ -620,6 +648,20 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
+        private void HandleCargoHealthChanged(float current, float maximum, bool broken)
+        {
+            if (!authority || stateMachine == null) return;
+            if (broken && !wasCargoBroken &&
+                stateMachine.Snapshot.Phase != PayloadMissionPhase.Completed &&
+                stateMachine.Snapshot.Phase != PayloadMissionPhase.Failed)
+            {
+                cargoDestructionCount = Mathf.Min(3, cargoDestructionCount + 1);
+                if (cargoDestructionCount >= 3) stateMachine.Fail();
+            }
+            wasCargoBroken = broken;
+            PublishSnapshot(snapshot.Phase);
+        }
+
         private PayloadMissionSnapshot ComposeSnapshot()
         {
             var state = stateMachine.Snapshot;
@@ -631,7 +673,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 cargoIntegrity != null ? cargoIntegrity.CurrentHealth : -1f,
                 cargoIntegrity != null ? cargoIntegrity.MaximumHealth : -1f,
                 cargoIntegrity != null && cargoIntegrity.IsBroken,
-                relayChoicePending, activeRouteOptionId);
+                relayChoicePending, activeRouteOptionId,
+                state.FuelRemaining, state.FuelCapacity, cargoDestructionCount);
         }
 
         private RelayRouteOptionDefinition FindRouteOption(string optionId)
