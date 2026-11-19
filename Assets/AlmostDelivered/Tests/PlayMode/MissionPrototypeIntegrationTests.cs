@@ -367,7 +367,7 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator CommanderPlansRifleCounterOnlyAfterScoutSightAndStopsAfterDeath()
+        public IEnumerator CommanderUsesBudgetBeforeSightAndChangesPlanAfterScoutReport()
         {
             yield return LoadMission();
             var network = Object.FindObjectOfType<MissionCommanderDirector>();
@@ -376,7 +376,9 @@ namespace AlmostDelivered.Tests.PlayMode
             var waves = Object.FindObjectOfType<PayloadWaveSpawner>();
             var encounter = new PayloadEscortEncounter(7, 5, PayloadAssaultPattern.LeftAmbush);
 
-            Assert.That(network.TryPlanTravelGroup(encounter, false, out _), Is.False);
+            Assert.That(network.TryPlanTravelGroup(encounter, false, out var blindPlan), Is.True);
+            Assert.That(MissionCommanderAssaultPlanner.SpentTokens(blindPlan, network.WaveBudget),
+                Is.LessThanOrEqualTo(network.WaveBudget.tokensPerWave));
             player.GetComponent<MissionPlayerController>().SetWeaponType(PlayerWeaponType.Ranged);
             player.GetComponent<MissionPlayerController>().enabled = false;
             var character = player.GetComponent<CharacterController>();
@@ -390,11 +392,45 @@ namespace AlmostDelivered.Tests.PlayMode
 
             Assert.That(network.HasLiveScoutSight, Is.True);
             Assert.That(network.TryPlanTravelGroup(encounter, false, out var plan), Is.True);
-            Assert.That(plan.Count(type => type == MissionMobArchetype.Shield), Is.EqualTo(3));
+            Assert.That(plan.Count(type => type == MissionMobArchetype.Shield), Is.GreaterThanOrEqualTo(1));
+            Assert.That(plan.Count(type => type == MissionMobArchetype.Shield),
+                Is.LessThanOrEqualTo(plan.Count(type => type == MissionMobArchetype.Ranged) * 2));
 
             waves.FindEnemy(PayloadWaveSpawner.SideCommanderEnemyId)
                 .GetComponent<ActorHealth>().ApplyDamage(1000f);
             Assert.That(network.TryPlanTravelGroup(encounter, false, out _), Is.False);
+        }
+
+        [UnityTest]
+        public IEnumerator CommanderCanSpendAWaveOnReconAndCapsLivingScouts()
+        {
+            yield return LoadMission();
+            var network = Object.FindObjectOfType<MissionCommanderDirector>();
+            var cargo = GameObject.Find("Payload").transform;
+            var minimap = Object.FindObjectOfType<MissionMinimap>();
+
+            Assert.That(network.Scouts.Count, Is.EqualTo(3));
+            Assert.That(network.TryDeployRecon(0, cargo.position, false), Is.True);
+            Assert.That(network.Scouts.Count, Is.EqualTo(5));
+            Assert.That(network.WaveBudget.reconPatrolSize * network.WaveBudget.scoutCost,
+                Is.LessThanOrEqualTo(network.WaveBudget.tokensPerWave));
+            Assert.That(network.TryDeployRecon(1, cargo.position, false), Is.False);
+            minimap.Refresh();
+            Assert.That(minimap.ScoutIconCount, Is.EqualTo(5));
+        }
+
+        [UnityTest]
+        public IEnumerator CommanderCheckpointWaveUsesBudgetIncludingFinalBoss()
+        {
+            yield return LoadMission();
+            var network = Object.FindObjectOfType<MissionCommanderDirector>();
+            Assert.That(network.TryPlanCheckpointGroup(5, false, out var standard), Is.True);
+            Assert.That(MissionCommanderAssaultPlanner.SpentTokens(standard, network.WaveBudget),
+                Is.LessThanOrEqualTo(network.WaveBudget.tokensPerWave));
+            Assert.That(network.TryPlanCheckpointGroup(6, true, out var final), Is.True);
+            Assert.That(final[0], Is.EqualTo(MissionMobArchetype.ChargerBoss));
+            Assert.That(MissionCommanderAssaultPlanner.SpentTokens(final, network.WaveBudget),
+                Is.LessThanOrEqualTo(network.WaveBudget.tokensPerWave));
         }
 
         private static void ClearWave(PayloadWaveSpawner waves)

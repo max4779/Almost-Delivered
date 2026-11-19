@@ -28,6 +28,19 @@ namespace AlmostDelivered.Tests.EditMode
             Assert.NotNull(weapon.Find("Carbine Cell"));
             Assert.NotNull(weapon.Find("Carbine Muzzle"));
         }
+        [Test] public void ShieldPrefabCarriesFramedPlateInFrontOfTorso() {
+            LowPolyAssetFactory.CreateOrUpdateAll();
+            var prefab = LowPolyAssetFactory.LoadPrefab(VisualArchetype.Shield);
+            var arm = prefab.transform.Find("BodyPivot/LeftArmPivot");
+            var grip = arm.Find("Shield Grip");
+            Assert.NotNull(grip);
+            Assert.NotNull(grip.Find("Shield"));
+            Assert.NotNull(grip.Find("Shield Core"));
+            Assert.NotNull(grip.Find("Shield Upper Rim"));
+            Assert.That(grip.position.z, Is.GreaterThan(prefab.transform.Find("BodyPivot/Body").position.z));
+            Assert.That(new SerializedObject(prefab.GetComponent<ProceduralPoseAnimator>())
+                .FindProperty("shieldReady").boolValue, Is.True);
+        }
         [Test] public void GeneratedPrefabs_UseOnlyGeneratedSharedMaterials() {
             LowPolyAssetFactory.CreateOrUpdateAll(); foreach (var type in Types) foreach (var r in LowPolyAssetFactory.LoadPrefab(type).GetComponentsInChildren<Renderer>()) foreach (var m in r.sharedMaterials) { Assert.NotNull(m); StringAssert.StartsWith("Assets/AlmostDelivered/Art/Materials/Generated/", AssetDatabase.GetAssetPath(m)); }
         }

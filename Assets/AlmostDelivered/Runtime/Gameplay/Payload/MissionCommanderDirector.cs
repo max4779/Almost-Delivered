@@ -19,6 +19,7 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private int seed;
         [SerializeField] private Color groundColor = new Color(.25f, .35f, .2f);
         [SerializeField] private Color foliageColor = new Color(.2f, .4f, .18f);
+        [SerializeField] private CommanderWaveBudget waveBudget = new CommanderWaveBudget();
         private SquadController squad;
         private ActorHealth commanderHealth;
         private bool initialized;
@@ -30,6 +31,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private RangedAttackController observedRanged;
         private MeleeAttackController observedMelee;
         private float nextTacticalOrderAt = float.NegativeInfinity;
+        private int nextScoutId = 1;
 
         public int ReportCount { get; private set; }
         public int TrackedMobCount => trackedMobs.Count;
@@ -56,24 +58,87 @@ namespace AlmostDelivered.Gameplay.Payload
         }
         public bool IsCoordinating => squad != null && squad.State == SquadAlertState.Alerted &&
                                       commanderHealth != null && !commanderHealth.IsDead;
+        public bool CanCommand => initialized && commanderHealth != null && !commanderHealth.IsDead;
+        public CommanderWaveBudget WaveBudget => waveBudget ?? (waveBudget = new CommanderWaveBudget());
 
         public bool TryGetCombatProfile(int actorId, out MissionScoutCombatProfile profile) =>
             combatProfiles.TryGetValue(actorId, out profile);
 
         public bool TryPlanTravelGroup(PayloadEscortEncounter encounter, bool includeCargoSaboteur,
             out MissionMobArchetype[] archetypes)
+            => TryPlanTravelGroup(encounter, includeCargoSaboteur, encounter.GroupSize, 0, out archetypes);
+
+        public bool TryPlanTravelGroup(PayloadEscortEncounter encounter, bool includeCargoSaboteur,
+            int maximumUnits, int bonusTokens, out MissionMobArchetype[] archetypes)
         {
             archetypes = null;
-            if (!IsCoordinating) return false;
+            if (!CanCommand) return false;
+            archetypes = MissionCommanderAssaultPlanner.PlanBudget(LatestProfile(), WaveBudget,
+                Mathf.Max(1, WaveBudget.tokensPerWave) + Mathf.Max(0, bonusTokens),
+                maximumUnits, includeCargoSaboteur,
+                unchecked(seed * 486187739 + encounter.SequenceId * 397));
+            return archetypes.Length > 0;
+        }
+
+        public bool TryPlanCheckpointGroup(int waveId, bool finalWave,
+            out MissionMobArchetype[] archetypes)
+        {
+            archetypes = null;
+            if (!CanCommand) return false;
+            var budget = Mathf.Max(1, WaveBudget.tokensPerWave);
+            if (finalWave) budget -= WaveBudget.CostFor(MissionMobArchetype.ChargerBoss);
+            var escorts = MissionCommanderAssaultPlanner.PlanBudget(LatestProfile(), WaveBudget,
+                budget, 12, true, unchecked(seed * 486187739 + waveId * 397));
+            if (escorts.Length == 0) return false;
+            if (!finalWave)
+            {
+                archetypes = escorts;
+                return true;
+            }
+            archetypes = new MissionMobArchetype[escorts.Length + 1];
+            archetypes[0] = MissionMobArchetype.ChargerBoss;
+            Array.Copy(escorts, 0, archetypes, 1, escorts.Length);
+            return true;
+        }
+
+        public bool TryDeployRecon(int sequenceId, Vector3 cargoPosition, bool forcedAssault)
+        {
+            if (!CanCommand || forcedAssault ||
+                Time.time - LastScoutObservationTime <= WaveBudget.freshIntelSeconds) return false;
+            var livingScouts = 0;
+            foreach (var scout in scouts)
+                if (scout != null && !scout.IsDefeated) livingScouts++;
+            var count = Mathf.Min(Mathf.Max(1, WaveBudget.reconPatrolSize),
+                Mathf.Max(0, WaveBudget.maximumLivingScouts - livingScouts),
+                Mathf.Max(1, WaveBudget.tokensPerWave) / Mathf.Max(1, WaveBudget.scoutCost));
+            if (count <= 0) return false;
+
+            for (var index = 0; index < count; index++)
+            {
+                var id = nextScoutId++;
+                var routeDistance = mission != null ? mission.Snapshot.RouteDistance : 0f;
+                var anchor = mission?.RoutePlan != null
+                    ? mission.RoutePlan.EvaluateDistance(Mathf.Min(mission.RoutePlan.TotalLength,
+                        routeDistance + 20f + index * 14f))
+                    : cargoPosition;
+                var position = FindCover(anchor, id + sequenceId);
+                var destination = FindCover(anchor + new Vector3(index == 0 ? -16f : 16f, 0f, 18f), id + 101);
+                var scout = CreateScout(position, id);
+                scout.ConfigurePatrol(destination);
+                scouts.Add(scout);
+                squad.RegisterMember(id, scout.GetComponent<ActorHealth>());
+            }
+            return true;
+        }
+
+        private MissionScoutCombatProfile LatestProfile()
+        {
             MissionScoutCombatProfile latest = null;
             foreach (var profile in combatProfiles.Values)
                 if (profile.HasObservedWeapon &&
                     (latest == null || profile.LastObservedAt > latest.LastObservedAt))
                     latest = profile;
-            if (latest == null) return false;
-            archetypes = MissionCommanderAssaultPlanner.Plan(latest, encounter.GroupSize,
-                includeCargoSaboteur, unchecked(seed * 486187739 + encounter.SequenceId * 397));
-            return archetypes.Length == encounter.GroupSize;
+            return latest;
         }
 
         public void Configure(PayloadMissionController missionController, PayloadWaveSpawner spawner,
@@ -117,14 +182,16 @@ namespace AlmostDelivered.Gameplay.Payload
             }
             if (observedMelee != null)
                 observedMelee.AttackPerformed += HandleObservedMelee;
+            nextScoutId = 1;
             for (var index = 0; index < 3; index++)
             {
                 var anchor = mission.RoutePlan.EvaluateDistance(
                     mission.RoutePlan.TotalLength * (index + 1f) / 4f);
                 var position = FindCover(anchor, index);
-                var scout = CreateScout(position, index + 1);
+                var id = nextScoutId++;
+                var scout = CreateScout(position, id);
                 scouts.Add(scout);
-                squad.RegisterMember(index + 1, scout.GetComponent<ActorHealth>());
+                squad.RegisterMember(id, scout.GetComponent<ActorHealth>());
             }
             waves.EnemyRemoved += HandleEnemyRemoved;
             RefreshTrackedMobs();
@@ -194,6 +261,12 @@ namespace AlmostDelivered.Gameplay.Payload
                 var distance = Vector3.Distance(candidate, anchor);
                 if (distance < 12f || distance > 42f ||
                     Vector3.Distance(candidate, player.transform.position) < 48f) continue;
+                var occupied = false;
+                foreach (var scout in scouts)
+                    if (scout != null && !scout.IsDefeated &&
+                        Vector3.Distance(candidate, scout.transform.position) < 8f)
+                    { occupied = true; break; }
+                if (occupied) continue;
                 var score = Mathf.Abs(distance - 21f) +
                             Mathf.Abs(candidate.z - anchor.z) * .2f +
                             Mathf.Abs(candidate.x) * .001f;

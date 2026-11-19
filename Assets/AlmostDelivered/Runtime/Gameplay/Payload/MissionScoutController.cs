@@ -22,6 +22,10 @@ namespace AlmostDelivered.Gameplay.Payload
         private float fleeUntil;
         private float nextSense;
         private Vector3 lastSeenPosition;
+        private Vector3 patrolOrigin;
+        private Vector3 patrolDestination;
+        private bool hasPatrol;
+        private bool returningFromPatrol;
 
         public int ReporterId => reporterId;
         public bool IsDefeated => health != null && health.IsDead;
@@ -41,6 +45,14 @@ namespace AlmostDelivered.Gameplay.Payload
             character = GetComponent<CharacterController>();
             health = GetComponent<ActorHealth>();
             BuildVisual(ground, foliage, seed);
+        }
+
+        public void ConfigurePatrol(Vector3 destination)
+        {
+            patrolOrigin = transform.position;
+            patrolDestination = destination;
+            hasPatrol = (patrolDestination - patrolOrigin).sqrMagnitude > 4f;
+            returningFromPatrol = false;
         }
 
         private void OnEnable()
@@ -98,6 +110,26 @@ namespace AlmostDelivered.Gameplay.Payload
             else if (visual != null)
                 visual.localPosition = Vector3.zero;
 
+            if (now >= fleeUntil && !IsWatchingPlayer && hasPatrol)
+                TickPatrol();
+
+        }
+
+        private void TickPatrol()
+        {
+            var target = returningFromPatrol ? patrolOrigin : patrolDestination;
+            var offset = Vector3.ProjectOnPlane(target - transform.position, Vector3.up);
+            if (offset.sqrMagnitude < 2.25f)
+            {
+                returningFromPatrol = !returningFromPatrol;
+                return;
+            }
+            var direction = offset.normalized;
+            var next = transform.position + direction * (fleeSpeed * .7f * Time.deltaTime);
+            if (!bounds.Contains(new Vector2(next.x, next.z))) return;
+            character.Move(direction * (fleeSpeed * .7f * Time.deltaTime));
+            transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                Quaternion.LookRotation(direction, Vector3.up), 360f * Time.deltaTime);
         }
 
         private bool CanSeePlayer()

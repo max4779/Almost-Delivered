@@ -100,7 +100,18 @@ namespace AlmostDelivered.Presentation.Editor
                         Part(right,"Weapon",PrimitiveType.Cube,new Vector3(.14f,-.45f,.32f),new Vector3(.12f,.12f,.85f),gold);
                     }
                     switch(type) {
-                        case VisualArchetype.Shield: Part(left,"Shield",PrimitiveType.Cube,new Vector3(-.42f,-.3f,.15f),new Vector3(.7f,1,.15f),color); break;
+                        case VisualArchetype.Shield:
+                            var shieldGrip = Child(left,"Shield Grip");
+                            shieldGrip.localPosition = new Vector3(.38f,-.32f,.45f);
+                            Part(shieldGrip,"Shield Handle",PrimitiveType.Cube,new Vector3(0f,0f,-.15f),new Vector3(.16f,.55f,.26f),rust);
+                            Part(shieldGrip,"Shield",PrimitiveType.Cube,new Vector3(0f,0f,.07f),new Vector3(1.7f,1.28f,.18f),rust);
+                            Part(shieldGrip,"Shield Upper Rim",PrimitiveType.Cube,new Vector3(0f,.57f,.18f),new Vector3(1.74f,.13f,.09f),gold);
+                            Part(shieldGrip,"Shield Lower Rim",PrimitiveType.Cube,new Vector3(0f,-.57f,.18f),new Vector3(1.74f,.13f,.09f),gold);
+                            Part(shieldGrip,"Shield Left Rim",PrimitiveType.Cube,new Vector3(-.81f,0f,.18f),new Vector3(.12f,1.22f,.09f),gold);
+                            Part(shieldGrip,"Shield Right Rim",PrimitiveType.Cube,new Vector3(.81f,0f,.18f),new Vector3(.12f,1.22f,.09f),gold);
+                            Part(shieldGrip,"Shield Core",PrimitiveType.Cube,new Vector3(0f,.05f,.2f),new Vector3(.3f,.38f,.06f),glow);
+                            Part(shieldGrip,"Shield Sight",PrimitiveType.Cube,new Vector3(0f,.39f,.2f),new Vector3(.6f,.08f,.06f),gold);
+                            break;
                         case VisualArchetype.Ranged:
                             var carbine = Child(right,"Weapon");
                             Part(carbine,"RangedWeapon",PrimitiveType.Cube,new Vector3(.14f,-.36f,.4f),new Vector3(.26f,.18f,.66f),rust);
@@ -121,6 +132,7 @@ namespace AlmostDelivered.Presentation.Editor
                 }
                 var animator = root.AddComponent<ProceduralPoseAnimator>(); animator.Configure(body,left,right,type == VisualArchetype.Payload,leftLeg,rightLeg);
                 animator.ConfigureFirearmReady(type == VisualArchetype.Ranged);
+                animator.ConfigureShieldReady(type == VisualArchetype.Shield);
                 var visual = root.AddComponent<LowPolyVisual>(); visual.Configure(type,root.transform,root.GetComponentsInChildren<Renderer>(true),left == null ? new[]{body} : new[]{body,left,right,leftLeg,rightLeg});
                 if (!visual.IsGameplayFree(out var reason)) throw new InvalidOperationException(reason);
                 PrefabUtility.SaveAsPrefabAsset(root,GetPrefabPath(type));

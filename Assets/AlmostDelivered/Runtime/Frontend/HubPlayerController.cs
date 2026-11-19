@@ -33,6 +33,7 @@ namespace AlmostDelivered.Frontend
             rangedAttack = GetComponent<RangedAttackController>();
             meleeAttack = GetComponent<MeleeAttackController>();
             mobility = GetComponent<PlayerMobility>();
+            mobility?.SetUnlimitedStamina(true);
         }
 
         private void Start()

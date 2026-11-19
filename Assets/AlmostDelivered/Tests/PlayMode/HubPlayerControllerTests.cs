@@ -59,16 +59,20 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
-        public void SprintAndRollMoveTheHubPlayerAndSpendStamina()
+        public void SprintAndRollMoveTheHubPlayerWithoutSpendingStamina()
         {
             var stamina = player.GetComponent<AlmostDelivered.Gameplay.PlayerMobility>();
-            movement.MoveWithActions(Vector2.right, .1f, true, false);
+            movement.MoveWithActions(Vector2.right, 10f, true, false);
             Assert.That(player.transform.position.x, Is.GreaterThan(.6f));
-            Assert.That(stamina.Stamina, Is.LessThan(stamina.MaxStamina));
+            Assert.That(stamina.Stamina, Is.EqualTo(stamina.MaxStamina));
 
             movement.MoveWithActions(Vector2.right, .1f, false, true);
             Assert.That(stamina.IsRolling, Is.True);
             Assert.That(player.transform.position.x, Is.GreaterThan(1.8f));
+            Assert.That(stamina.Stamina, Is.EqualTo(stamina.MaxStamina));
+
+            movement.SetWeaponType(PlayerWeaponType.Revolver);
+            Assert.That(stamina.Stamina, Is.EqualTo(stamina.MaxStamina));
         }
 
         [Test]

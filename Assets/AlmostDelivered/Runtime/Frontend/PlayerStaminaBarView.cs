@@ -26,7 +26,9 @@ namespace AlmostDelivered.Frontend
             var ratio = mobility.MaxStamina > 0f ? mobility.Stamina / mobility.MaxStamina : 0f;
             if (fill != null) fill.fillAmount = Mathf.Clamp01(ratio);
             if (label != null)
-                label.text = $"STAMINA  {Mathf.CeilToInt(mobility.Stamina)} / {Mathf.CeilToInt(mobility.MaxStamina)}";
+                label.text = mobility.UnlimitedStamina
+                    ? "STAMINA  UNLIMITED"
+                    : $"STAMINA  {Mathf.CeilToInt(mobility.Stamina)} / {Mathf.CeilToInt(mobility.MaxStamina)}";
         }
     }
 }

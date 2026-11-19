@@ -124,14 +124,18 @@ namespace AlmostDelivered.Gameplay.Payload
                 throw new InvalidOperationException("The previous payload wave is still active.");
             }
 
-            var count = WaveCountFor(checkpointIndex, finalWave);
+            MissionMobArchetype[] commanderPlan = null;
+            var hasCommanderPlan = commander != null &&
+                commander.TryPlanCheckpointGroup(waveId, finalWave, out commanderPlan);
+            var count = hasCommanderPlan ? commanderPlan.Length : WaveCountFor(checkpointIndex, finalWave);
             var random = new System.Random(unchecked(missionSeed * 486187739 + waveId * 397 + checkpointIndex * 31));
             var anchor = ResolveAnchor(checkpointIndex);
             var identifiers = new int[count];
 
             for (var index = 0; index < count; index++)
             {
-                var archetype = SelectArchetype(random, finalWave, index);
+                var archetype = hasCommanderPlan ? commanderPlan[index] :
+                    SelectArchetype(random, finalWave, index);
                 var enemyId = unchecked(waveId * 1000 + index + 1);
                 identifiers[index] = enemyId;
                 checkpointEnemyIds.Add(enemyId);
@@ -257,12 +261,19 @@ namespace AlmostDelivered.Gameplay.Payload
             Rect missionBounds,
             float exclusionRadius,
             Camera visibilityCamera = null,
-            bool forceCargoSaboteur = false)
+            bool forceCargoSaboteur = false,
+            bool allowRecon = true,
+            int bonusTokens = 0,
+            int maximumCommanderUnits = 0)
         {
             if (encounter.GroupSize <= 0 || !IsFinite(payloadPosition))
             {
                 return false;
             }
+
+            if (allowRecon && commander != null &&
+                commander.TryDeployRecon(encounter.SequenceId, payloadPosition, forceCargoSaboteur))
+                return true;
 
             var forward = HorizontalDirection(routeDirection, Vector3.forward);
             var right = new Vector3(forward.z, 0f, -forward.x);
@@ -270,14 +281,18 @@ namespace AlmostDelivered.Gameplay.Payload
             var approach = ApproachDirection(encounter.Pattern, forward, right);
             var approachDistance = 18f + (float)random.NextDouble() * 6f;
             var minimumDistance = Mathf.Max(0f, exclusionRadius) + 2f;
-            var travelGroup = new List<PendingEnemy>(encounter.GroupSize);
             var includeCargoSaboteur = forceCargoSaboteur || encounter.SequenceId % 3 == 0;
             MissionMobArchetype[] plannedArchetypes = null;
             var hasCommanderPlan = commander != null &&
                                    commander.TryPlanTravelGroup(encounter, includeCargoSaboteur,
+                                       maximumCommanderUnits > 0
+                                           ? Mathf.Min(maximumCommanderUnits, Mathf.Max(1, 12 - CargoAssaultCount))
+                                           : Mathf.Max(1, 12 - CargoAssaultCount), bonusTokens,
                                        out plannedArchetypes);
+            var groupSize = hasCommanderPlan ? plannedArchetypes.Length : encounter.GroupSize;
+            var travelGroup = new List<PendingEnemy>(groupSize);
 
-            for (var index = 0; index < encounter.GroupSize; index++)
+            for (var index = 0; index < groupSize; index++)
             {
                 var angle = (float)(random.NextDouble() * Math.PI * 2d);
                 var scatter = 3f + (float)random.NextDouble() * 2f;
@@ -339,7 +354,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 payloadPosition,
                 routeDirection,
                 missionBounds,
-                exclusionRadius);
+                exclusionRadius,
+                null, false, false, 0, 3);
         }
 
         private void OnDisable()

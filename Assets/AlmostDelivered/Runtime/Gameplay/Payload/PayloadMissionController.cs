@@ -573,7 +573,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 configuredBounds,
                 escortRadius,
                 Camera.main,
-                option != null && option.forceCargoSaboteur))
+                option != null && option.forceCargoSaboteur,
+                true,
+                extraEnemies))
             {
                 pendingEscortEncounter = null;
             }

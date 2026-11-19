@@ -51,6 +51,12 @@ namespace AlmostDelivered.Gameplay
         public float Stamina => stamina;
         public float MaxStamina => maxStamina;
         public float RecoveryDelay => recoveryDelay;
+        public bool UnlimitedStamina { get; private set; }
+        public void SetUnlimitedStamina(bool enabled)
+        {
+            UnlimitedStamina = enabled;
+            if (enabled) stamina = maxStamina;
+        }
         public void SetTraitRecoveryMultiplier(float multiplier) =>
             traitRecoveryMultiplier = Mathf.Max(0f, multiplier);
         public bool IsSprinting { get; private set; }
@@ -82,7 +88,7 @@ namespace AlmostDelivered.Gameplay
             rollStaminaCost = Mathf.Max(0f, settings.rollStaminaCost);
             rollDuration = Mathf.Max(.01f, settings.rollDuration);
             rollSpeed = Mathf.Max(0f, settings.rollSpeed);
-            stamina = remainingRatio * maxStamina;
+            stamina = UnlimitedStamina ? maxStamina : remainingRatio * maxStamina;
         }
 
         public Vector3 Step(Vector2 input, bool sprintHeld, bool rollPressed, float deltaTime, float baseSpeed)
@@ -93,9 +99,10 @@ namespace AlmostDelivered.Gameplay
 
             input = Vector2.ClampMagnitude(input, 1f);
             var direction = new Vector3(input.x, 0f, input.y);
-            if (rollPressed && !IsRolling && stamina >= rollStaminaCost)
+            if (UnlimitedStamina) stamina = maxStamina;
+            if (rollPressed && !IsRolling && (UnlimitedStamina || stamina >= rollStaminaCost))
             {
-                stamina -= rollStaminaCost;
+                if (!UnlimitedStamina) stamina -= rollStaminaCost;
                 rollRemaining = rollDuration;
                 rollDirection = direction.sqrMagnitude > .0001f
                     ? direction.normalized
@@ -114,11 +121,13 @@ namespace AlmostDelivered.Gameplay
             SyncInvulnerability();
 
             var moving = direction.sqrMagnitude > .0001f;
-            IsSprinting = moving && sprintHeld && stamina > 0f;
-            if (IsSprinting)
+            IsSprinting = moving && sprintHeld && (UnlimitedStamina || stamina > 0f);
+            if (IsSprinting && !UnlimitedStamina)
                 stamina = Mathf.Max(0f, stamina - sprintDrainPerSecond * deltaTime);
 
-            if (moving && sprintHeld)
+            if (UnlimitedStamina)
+                recoveryClock = 0f;
+            else if (moving && sprintHeld)
                 recoveryClock = 0f;
             else
             {
