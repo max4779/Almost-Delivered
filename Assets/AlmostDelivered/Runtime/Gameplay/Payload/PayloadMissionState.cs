@@ -1,3 +1,5 @@
+using UnityEngine;
+
 namespace AlmostDelivered.Gameplay.Payload
 {
     public enum PayloadMissionPhase
@@ -9,7 +11,10 @@ namespace AlmostDelivered.Gameplay.Payload
         CheckpointDefense,
         FinalDefense,
         Completed,
-        Failed
+        Failed,
+        EvacuationTravel,
+        EvacuationDefense,
+        Escaped
     }
 
     public readonly struct PayloadWaveRequest
@@ -51,7 +56,9 @@ namespace AlmostDelivered.Gameplay.Payload
             string activeRouteOptionId = null,
             float fuelRemaining = -1f,
             float fuelCapacity = -1f,
-            int cargoDestructions = 0)
+            int cargoDestructions = 0,
+            Vector3 evacuationTarget = default,
+            float evacuationSecondsRemaining = 0f)
         {
             Phase = phase;
             ElapsedTime = elapsedTime;
@@ -74,6 +81,8 @@ namespace AlmostDelivered.Gameplay.Payload
             FuelRemaining = fuelRemaining;
             FuelCapacity = fuelCapacity;
             CargoDestructions = cargoDestructions;
+            EvacuationTarget = evacuationTarget;
+            EvacuationSecondsRemaining = evacuationSecondsRemaining;
         }
 
         public PayloadMissionPhase Phase { get; }
@@ -114,6 +123,8 @@ namespace AlmostDelivered.Gameplay.Payload
         public float FuelRemaining { get; }
         public float FuelCapacity { get; }
         public int CargoDestructions { get; }
+        public Vector3 EvacuationTarget { get; }
+        public float EvacuationSecondsRemaining { get; }
         public int CargoStocksRemaining => System.Math.Max(0, 3 - CargoDestructions);
         public bool UsesFuel => FuelCapacity > 0f;
         public bool IsOutOfFuel => UsesFuel && FuelRemaining <= .001f;

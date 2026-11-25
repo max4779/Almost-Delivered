@@ -27,6 +27,50 @@ namespace AlmostDelivered.Editor.Frontend
         private const string MaterialRoot = "Assets/AlmostDelivered/Art/Materials/Frontend";
         private const string WeaponAudioRoot = "Assets/AlmostDelivered/Art/Audio/Weapons";
 
+        [MenuItem("Almost Delivered/Frontend/Refresh mission cargo HUD")]
+        public static void RefreshCargoHudOnly()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            var canvas = GameObject.Find("Mission HUD")?.transform;
+            if (canvas == null) throw new InvalidOperationException("Mission HUD is missing.");
+            foreach (var name in new[] { "Cargo Stock Blueprint", "Cargo Game Over", "Commander Wave Debug", "Cargo Health" })
+            {
+                var previous = canvas.Find(name);
+                if (previous != null) UnityEngine.Object.DestroyImmediate(previous.gameObject);
+            }
+            var previousDebug = canvas.GetComponent<CommanderWaveDebugHud>();
+            if (previousDebug != null) UnityEngine.Object.DestroyImmediate(previousDebug);
+
+            PositionHudText(canvas, "Controls", new Vector2(24f, -670f), 21);
+            PositionHudText(canvas, "Player Health", new Vector2(24f, -258f));
+            PositionHudText(canvas, "Target Count", new Vector2(24f, -308f));
+            PositionHudText(canvas, "Checkpoint", new Vector2(24f, -364f));
+            PositionHudText(canvas, "Escort State", new Vector2(24f, -408f));
+            PositionHudText(canvas, "Elapsed Time", new Vector2(24f, -452f));
+            PositionHudText(canvas, "Cargo Fuel", new Vector2(24f, -496f));
+            PositionHudText(canvas, "Side Mission 1", new Vector2(24f, -541f));
+            PositionHudText(canvas, "Side Mission 2", new Vector2(24f, -579f));
+            PositionHudText(canvas, "Scout Signal", new Vector2(24f, -623f));
+
+            var mission = UnityEngine.Object.FindObjectOfType<PayloadMissionController>();
+            var waves = UnityEngine.Object.FindObjectOfType<PayloadWaveSpawner>();
+            if (mission == null || waves == null)
+                throw new InvalidOperationException("Mission controller or wave spawner is missing.");
+            BuildCargoStockHud(canvas, mission);
+            BuildCommanderWaveDebugHud(canvas, waves);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+        }
+
+        private static void PositionHudText(Transform canvas, string name, Vector2 position,
+            int fontSize = 0)
+        {
+            var element = canvas.Find(name);
+            if (element == null) throw new InvalidOperationException($"HUD element {name} is missing.");
+            element.GetComponent<RectTransform>().anchoredPosition = position;
+            if (fontSize > 0) element.GetComponent<Text>().fontSize = fontSize;
+        }
+
         [MenuItem("Almost Delivered/Frontend/Build mission prototype")]
         public static void BuildOrUpdate()
         {
@@ -583,23 +627,22 @@ namespace AlmostDelivered.Editor.Frontend
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
-            var controls = HudText("Controls", canvasObject.transform, new Vector2(24f, -22f), new Vector2(1480f, 54f), 23, TextAnchor.UpperLeft);
-            var playerHealth = HudText("Player Health", canvasObject.transform, new Vector2(24f, -82f), new Vector2(420f, 48f), 28, TextAnchor.UpperLeft);
-            var targetCount = HudText("Target Count", canvasObject.transform, new Vector2(24f, -132f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
+            var controls = HudText("Controls", canvasObject.transform, new Vector2(24f, -670f), new Vector2(1480f, 54f), 21, TextAnchor.UpperLeft);
+            var playerHealth = HudText("Player Health", canvasObject.transform, new Vector2(24f, -258f), new Vector2(420f, 48f), 28, TextAnchor.UpperLeft);
+            var targetCount = HudText("Target Count", canvasObject.transform, new Vector2(24f, -308f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var phase = HudText("Mission Phase", canvasObject.transform, new Vector2(0f, -22f), new Vector2(620f, 52f), 30, TextAnchor.UpperCenter, false, true);
             var progress = HudText("Payload Progress", canvasObject.transform, new Vector2(0f, -72f), new Vector2(420f, 42f), 26, TextAnchor.UpperCenter, false, true);
-            var checkpoint = HudText("Checkpoint", canvasObject.transform, new Vector2(24f, -190f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
-            var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -234f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
-            var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -278f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
-            var cargoHealth = HudText("Cargo Health", canvasObject.transform, new Vector2(24f, -322f), new Vector2(760f, 42f), 24, TextAnchor.UpperLeft);
+            var checkpoint = HudText("Checkpoint", canvasObject.transform, new Vector2(24f, -364f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
+            var escort = HudText("Escort State", canvasObject.transform, new Vector2(24f, -408f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
+            var elapsed = HudText("Elapsed Time", canvasObject.transform, new Vector2(24f, -452f), new Vector2(420f, 42f), 24, TextAnchor.UpperLeft);
             var cargoFuel = HudText("Cargo Fuel", canvasObject.transform,
-                new Vector2(24f, -365f), new Vector2(850f, 38f), 22, TextAnchor.UpperLeft);
+                new Vector2(24f, -496f), new Vector2(850f, 38f), 22, TextAnchor.UpperLeft);
             var sideMissionOne = HudText("Side Mission 1", canvasObject.transform,
-                new Vector2(24f, -410f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
+                new Vector2(24f, -541f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
             var sideMissionTwo = HudText("Side Mission 2", canvasObject.transform,
-                new Vector2(24f, -448f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
+                new Vector2(24f, -579f), new Vector2(850f, 38f), 21, TextAnchor.UpperLeft);
             var commanderSignal = HudText("Scout Signal", canvasObject.transform,
-                new Vector2(24f, -492f), new Vector2(920f, 38f), 21, TextAnchor.UpperLeft);
+                new Vector2(24f, -623f), new Vector2(920f, 38f), 21, TextAnchor.UpperLeft);
             var activationCountdown = HudText(
                 "Activation Countdown",
                 canvasObject.transform,
@@ -629,7 +672,6 @@ namespace AlmostDelivered.Editor.Frontend
             hud.Configure(health, Array.Empty<PrototypeBossController>());
             hud.ConfigurePayload(mission, phase, progress, checkpoint, escort, elapsed);
             hud.BindActivationCountdown(activationCountdown);
-            hud.BindCargoHealth(cargoHealth);
             hud.BindFuel(cargoFuel, fuelDepots);
             hud.BindCommander(commanderNetwork, commanderSignal);
             hud.BindSideMissions(sideMissions, new[] { sideMissionOne, sideMissionTwo });
@@ -656,6 +698,33 @@ namespace AlmostDelivered.Editor.Frontend
                 health,
                 damageFlashObject.GetComponent<Image>());
             BuildCargoStockHud(canvasObject.transform, mission);
+            BuildCommanderWaveDebugHud(canvasObject.transform, waves);
+        }
+
+        private static void BuildCommanderWaveDebugHud(Transform canvas, PayloadWaveSpawner waves)
+        {
+            var panel = new GameObject("Commander Wave Debug", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(Image));
+            panel.transform.SetParent(canvas, false);
+            var rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(-24f, -382f);
+            rect.sizeDelta = new Vector2(360f, 264f);
+            var background = panel.GetComponent<Image>();
+            background.color = new Color(.015f, .035f, .055f, .9f);
+            background.raycastTarget = false;
+
+            BlueprintRect(panel.transform, "Commander Debug Top Rule", Vector2.zero,
+                new Vector2(360f, 2f), new Color(.8f, .62f, .24f));
+            var title = HudText("Commander Debug Title", panel.transform,
+                new Vector2(12f, -10f), new Vector2(336f, 28f), 18, TextAnchor.UpperLeft);
+            title.text = "COMMANDER WAVES  [F8]";
+            title.fontStyle = FontStyle.Bold;
+            title.color = new Color(1f, .8f, .42f);
+            var details = HudText("Commander Debug Details", panel.transform,
+                new Vector2(12f, -42f), new Vector2(336f, 210f), 17, TextAnchor.UpperLeft);
+            details.color = new Color(.85f, .94f, .95f);
+            canvas.gameObject.AddComponent<CommanderWaveDebugHud>().Configure(waves, panel, details);
         }
 
         private static void BuildCargoStockHud(Transform canvas, PayloadMissionController mission)
@@ -664,63 +733,52 @@ namespace AlmostDelivered.Editor.Frontend
                 typeof(CanvasRenderer), typeof(Image), typeof(CargoStockHud));
             card.transform.SetParent(canvas, false);
             var cardRect = card.GetComponent<RectTransform>();
-            cardRect.anchorMin = cardRect.anchorMax = cardRect.pivot = Vector2.one;
-            cardRect.anchoredPosition = new Vector2(-24f, -382f);
-            cardRect.sizeDelta = new Vector2(300f, 178f);
+            cardRect.anchorMin = cardRect.anchorMax = cardRect.pivot = new Vector2(0f, 1f);
+            cardRect.anchoredPosition = new Vector2(24f, -24f);
+            cardRect.sizeDelta = new Vector2(316f, 244f);
             var background = card.GetComponent<Image>();
-            background.color = new Color(.015f, .035f, .055f, .88f);
+            background.color = new Color(.015f, .035f, .055f, .91f);
             background.raycastTarget = false;
 
-            var stock = HudText("Cargo Stocks", card.transform, new Vector2(12f, -8f),
-                new Vector2(276f, 30f), 22, TextAnchor.MiddleLeft);
-            stock.fontStyle = FontStyle.Bold;
-            stock.color = new Color(.72f, .96f, 1f);
+            var blueprintLine = new Color(.32f, .77f, .84f, .88f);
+            BlueprintRect(card.transform, "Schematic Top Rule", new Vector2(0f, 0f),
+                new Vector2(316f, 2f), blueprintLine);
+            BlueprintRect(card.transform, "Schematic Bottom Rule", new Vector2(0f, -242f),
+                new Vector2(316f, 2f), blueprintLine);
+            BlueprintRect(card.transform, "Schematic Left Rule", new Vector2(0f, 0f),
+                new Vector2(2f, 244f), blueprintLine);
+            BlueprintRect(card.transform, "Schematic Right Rule", new Vector2(314f, 0f),
+                new Vector2(2f, 244f), blueprintLine);
+            var heading = HudText("Cargo Schematic Title", card.transform, new Vector2(12f, -8f),
+                new Vector2(290f, 28f), 17, TextAnchor.UpperLeft);
+            heading.text = "PAYLOAD  /  INTEGRITY";
+            heading.fontStyle = FontStyle.Bold;
+            heading.color = new Color(.71f, .93f, .96f);
 
-            var modules = new Image[3];
-            for (var index = 0; index < modules.Length; index++)
-            {
-                var frame = new GameObject($"Blueprint Module {index} Frame", typeof(RectTransform),
-                    typeof(CanvasRenderer), typeof(Image));
-                frame.transform.SetParent(card.transform, false);
-                var frameRect = frame.GetComponent<RectTransform>();
-                frameRect.anchorMin = frameRect.anchorMax = frameRect.pivot = new Vector2(0f, 1f);
-                frameRect.anchoredPosition = new Vector2(12f + index * 92f, -48f);
-                frameRect.sizeDelta = new Vector2(86f, 66f);
-                var frameImage = frame.GetComponent<Image>();
-                frameImage.color = new Color(.5f, .8f, .85f, .8f);
-                frameImage.raycastTarget = false;
+            var schematicObject = new GameObject("Payload Top View", typeof(RectTransform),
+                typeof(CanvasRenderer), typeof(CargoBlueprintGraphic));
+            schematicObject.transform.SetParent(card.transform, false);
+            var schematicRect = schematicObject.GetComponent<RectTransform>();
+            schematicRect.anchorMin = schematicRect.anchorMax = schematicRect.pivot =
+                new Vector2(0f, 1f);
+            schematicRect.anchoredPosition = new Vector2(12f, -38f);
+            schematicRect.sizeDelta = new Vector2(292f, 146f);
+            var schematic = schematicObject.GetComponent<CargoBlueprintGraphic>();
+            schematic.color = Color.white;
+            schematic.raycastTarget = false;
 
-                var module = new GameObject($"Blueprint Module {index}", typeof(RectTransform),
-                    typeof(CanvasRenderer), typeof(Image));
-                module.transform.SetParent(frame.transform, false);
-                var moduleRect = module.GetComponent<RectTransform>();
-                moduleRect.anchorMin = Vector2.zero;
-                moduleRect.anchorMax = Vector2.one;
-                moduleRect.offsetMin = new Vector2(3f, 3f);
-                moduleRect.offsetMax = new Vector2(-3f, -3f);
-                modules[index] = module.GetComponent<Image>();
-                modules[index].raycastTarget = false;
-
-                var mark = HudText($"Module {index} Mark", module.transform,
-                    new Vector2(0f, 0f), new Vector2(80f, 60f), 25,
-                    TextAnchor.MiddleCenter);
-                mark.text = index == 0 ? "L" : index == 1 ? "C" : "R";
-                mark.color = new Color(.03f, .15f, .2f, .9f);
-                mark.raycastTarget = false;
-            }
-
-            var health = HudText("Cargo Stock Health", card.transform, new Vector2(12f, -119f),
-                new Vector2(276f, 26f), 20, TextAnchor.MiddleLeft);
-            health.color = Color.white;
             var healthTrack = new GameObject("Cargo Stock Health Track", typeof(RectTransform),
                 typeof(CanvasRenderer), typeof(Image));
             healthTrack.transform.SetParent(card.transform, false);
             var trackRect = healthTrack.GetComponent<RectTransform>();
             trackRect.anchorMin = trackRect.anchorMax = trackRect.pivot = new Vector2(0f, 1f);
-            trackRect.anchoredPosition = new Vector2(12f, -150f);
-            trackRect.sizeDelta = new Vector2(276f, 12f);
-            healthTrack.GetComponent<Image>().color = new Color(.12f, .18f, .2f, .95f);
+            trackRect.anchoredPosition = new Vector2(12f, -194f);
+            trackRect.sizeDelta = new Vector2(292f, 28f);
+            healthTrack.GetComponent<Image>().color = new Color(.07f, .13f, .17f, .98f);
             healthTrack.GetComponent<Image>().raycastTarget = false;
+            var trackOutline = healthTrack.AddComponent<Outline>();
+            trackOutline.effectColor = new Color(.32f, .77f, .84f, .74f);
+            trackOutline.effectDistance = new Vector2(1f, -1f);
             var fill = new GameObject("Cargo Stock Health Fill", typeof(RectTransform),
                 typeof(CanvasRenderer), typeof(Image));
             fill.transform.SetParent(healthTrack.transform, false);
@@ -729,9 +787,16 @@ namespace AlmostDelivered.Editor.Frontend
             fillRect.anchorMax = Vector2.one;
             fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
             var fillImage = fill.GetComponent<Image>();
-            fillImage.type = Image.Type.Filled;
-            fillImage.fillMethod = Image.FillMethod.Horizontal;
+            fillImage.type = Image.Type.Simple;
             fillImage.raycastTarget = false;
+            var health = HudText("Cargo Stock Health", card.transform, new Vector2(12f, -194f),
+                new Vector2(292f, 28f), 18, TextAnchor.MiddleCenter);
+            health.fontStyle = FontStyle.Bold;
+            health.color = Color.white;
+            health.raycastTarget = false;
+            var textOutline = health.gameObject.AddComponent<Outline>();
+            textOutline.effectColor = new Color(.01f, .03f, .05f, .92f);
+            textOutline.effectDistance = new Vector2(1f, -1f);
 
             var gameOver = new GameObject("Cargo Game Over", typeof(RectTransform),
                 typeof(CanvasRenderer), typeof(Image));
@@ -745,17 +810,40 @@ namespace AlmostDelivered.Editor.Frontend
             veil.raycastTarget = false;
             var title = HudText("Game Over Title", gameOver.transform, Vector2.zero,
                 new Vector2(900f, 110f), 74, TextAnchor.MiddleCenter, false, true);
-            title.text = "GAME OVER";
+            title.text = "MISSION FAILED";
             title.fontStyle = FontStyle.Bold;
             title.color = new Color(1f, .24f, .2f);
             title.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -420f);
             var detail = HudText("Game Over Detail", gameOver.transform, Vector2.zero,
                 new Vector2(900f, 56f), 27, TextAnchor.MiddleCenter, false, true);
-            detail.text = "CARGO DESTROYED THREE TIMES  ·  ESC TO RETURN TO BASE";
+            detail.text = "CARGO LOST  ·  ESC TO RETURN TO BASE";
             detail.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, -535f);
             gameOver.SetActive(false);
 
-            card.GetComponent<CargoStockHud>().Configure(mission, modules, stock, health, fillImage, gameOver);
+            card.GetComponent<CargoStockHud>().Configure(mission, schematic, health, fillImage, gameOver);
+            // Show the undamaged cargo in the editor before a mission snapshot exists.
+            if (!Application.isPlaying && mission.CargoHealth != null)
+            {
+                health.text = "100%";
+                fillImage.rectTransform.anchorMax = Vector2.one;
+                fillImage.fillAmount = 1f;
+                fillImage.color = new Color(.18f, .78f, .87f, .95f);
+            }
+        }
+
+        private static Image BlueprintRect(Transform parent, string name, Vector2 position,
+            Vector2 size, Color color)
+        {
+            var part = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            part.transform.SetParent(parent, false);
+            var rect = part.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            var image = part.GetComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
         }
 
         private static void BuildPlayerHealthBar(Transform canvas, ActorHealth health)

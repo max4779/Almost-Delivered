@@ -122,6 +122,7 @@ namespace AlmostDelivered.Gameplay.Payload
         private bool suppressDamageAlert;
         private GameObject alertIndicator;
         private bool assaultingCargo;
+        private bool assaultingExtraction;
         private readonly RaycastHit[] navigationHits = new RaycastHit[24];
         private Collider detourObstacle;
         private Vector3 detourNear;
@@ -141,6 +142,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool IsGuardPostEngaged => guardPostEngaged;
         public bool IsAlerted => alertTimeRemaining > 0f && alertIndicator != null && alertIndicator.activeSelf;
         public bool IsCargoSaboteur => Definition.Archetype == MissionMobArchetype.CargoSaboteur;
+        public bool IsAssaultingExtraction => assaultingExtraction;
         public bool IsPursuingPlayer => !IsCargoSaboteur && awarenessState != MissionMobAwarenessState.Unaware;
         public MissionMobAwarenessState AwarenessState => awarenessState;
         public Vector3 LastKnownPlayerPosition => lastKnownPlayerPosition;
@@ -221,6 +223,7 @@ namespace AlmostDelivered.Gameplay.Payload
             guardPostEnabled = false;
             guardPostEngaged = false;
             assaultingCargo = false;
+            assaultingExtraction = false;
             cargoTarget = null;
             alertTimeRemaining = 0f;
             vigilanceRemaining = soundMemoryDuration;
@@ -264,12 +267,21 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             cargoTarget = cargo;
             assaultingCargo = cargo != null;
+            assaultingExtraction = false;
             guardAwarenessRadius = 13f;
             awarenessState = MissionMobAwarenessState.Unaware;
             hasLastKnownPlayerPosition = false;
             hasSeenPlayer = false;
             hasShownAlert = false;
             pursuingFromNoise = false;
+        }
+
+        public void ConfigureExtractionAssault(Transform site)
+        {
+            guardPostEnabled = false;
+            guardPostEngaged = false;
+            ConfigureCargoAssault(site);
+            assaultingExtraction = true;
         }
 
         public void ReleaseGuardPostToCargo(Transform cargo)

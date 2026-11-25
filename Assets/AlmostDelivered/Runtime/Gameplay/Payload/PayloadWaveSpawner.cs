@@ -6,6 +6,30 @@ using UnityEngine;
 
 namespace AlmostDelivered.Gameplay.Payload
 {
+    public enum CommanderWaveKind { Travel, Checkpoint, Recon, Random }
+
+    public sealed class CommanderWaveDebugSnapshot
+    {
+        public CommanderWaveKind Kind { get; }
+        public int SequenceId { get; }
+        public int Budget { get; }
+        public int Spent { get; }
+        public int ScoutCount { get; }
+        public IReadOnlyList<MissionMobArchetype> Units { get; }
+
+        public CommanderWaveDebugSnapshot(CommanderWaveKind kind, int sequenceId,
+            int budget, int spent, MissionMobArchetype[] units, int scoutCount = 0)
+        {
+            Kind = kind;
+            SequenceId = sequenceId;
+            Budget = budget;
+            Spent = spent;
+            ScoutCount = scoutCount;
+            Units = Array.AsReadOnly((MissionMobArchetype[])(units ??
+                Array.Empty<MissionMobArchetype>()).Clone());
+        }
+    }
+
     public sealed class PayloadWaveSpawner : MonoBehaviour
     {
         public const int RecoveryWaveId = 0;
@@ -35,8 +59,11 @@ namespace AlmostDelivered.Gameplay.Payload
         private readonly HashSet<int> checkpointEnemyIds = new HashSet<int>();
         private readonly HashSet<int> recoveryEnemyIds = new HashSet<int>();
         private readonly HashSet<int> preplacedSentryIds = new HashSet<int>();
+        private readonly List<CommanderWaveDebugSnapshot> commanderWaveHistory =
+            new List<CommanderWaveDebugSnapshot>();
         private int activeCheckpointWaveId = -1;
         private bool shuttingDown;
+        private Transform extractionRallyTarget;
 
         public IReadOnlyCollection<MissionMobController> LivingEnemies => living.Values;
         public int ActiveCount => living.Count;
@@ -57,6 +84,9 @@ namespace AlmostDelivered.Gameplay.Payload
         public int PendingCount => pending.Count;
         public int ActiveCap => activeCap;
         public float EnemyHealthMultiplier => enemyHealthMultiplier;
+        public IReadOnlyList<CommanderWaveDebugSnapshot> RecentCommanderWaves => commanderWaveHistory;
+        public CommanderWaveDebugSnapshot LastCommanderWave => commanderWaveHistory.Count > 0
+            ? commanderWaveHistory[commanderWaveHistory.Count - 1] : null;
 
         public MissionMobController FindEnemy(int id) => living.TryGetValue(id, out var enemy) ? enemy : null;
 
@@ -89,6 +119,14 @@ namespace AlmostDelivered.Gameplay.Payload
             cargoTarget = cargo;
         }
 
+        public void RallyToExtraction(Transform site)
+        {
+            if (site == null) return;
+            extractionRallyTarget = site;
+            foreach (var enemy in living.Values)
+                if (enemy != null && !enemy.IsDefeated) enemy.ConfigureExtractionAssault(site);
+        }
+
         public void Configure(
             Transform target,
             GameObject projectile,
@@ -114,7 +152,9 @@ namespace AlmostDelivered.Gameplay.Payload
             missionSeed = seed;
             activeCap = Mathf.Max(1, maximumActiveEnemies);
             enemyHealthMultiplier = 1f;
+            extractionRallyTarget = null;
             shuttingDown = false;
+            commanderWaveHistory.Clear();
         }
 
         public void SpawnWave(int waveId, int checkpointIndex, bool finalWave)
@@ -131,11 +171,13 @@ namespace AlmostDelivered.Gameplay.Payload
             var random = new System.Random(unchecked(missionSeed * 486187739 + waveId * 397 + checkpointIndex * 31));
             var anchor = ResolveAnchor(checkpointIndex);
             var identifiers = new int[count];
+            var deployedTypes = new MissionMobArchetype[count];
 
             for (var index = 0; index < count; index++)
             {
                 var archetype = hasCommanderPlan ? commanderPlan[index] :
                     SelectArchetype(random, finalWave, index);
+                deployedTypes[index] = archetype;
                 var enemyId = unchecked(waveId * 1000 + index + 1);
                 identifiers[index] = enemyId;
                 checkpointEnemyIds.Add(enemyId);
@@ -147,6 +189,11 @@ namespace AlmostDelivered.Gameplay.Payload
             }
 
             activeCheckpointWaveId = waveId;
+            RecordCommanderWave(hasCommanderPlan ? CommanderWaveKind.Checkpoint : CommanderWaveKind.Random,
+                waveId, hasCommanderPlan ? Mathf.Max(1, commander.WaveBudget.tokensPerWave) : 0,
+                hasCommanderPlan
+                    ? MissionCommanderAssaultPlanner.SpentTokens(deployedTypes, commander.WaveBudget) : 0,
+                deployedTypes);
             WaveStarted?.Invoke(waveId, Array.AsReadOnly(identifiers));
             SpawnUntilCap();
         }
@@ -273,7 +320,13 @@ namespace AlmostDelivered.Gameplay.Payload
 
             if (allowRecon && commander != null &&
                 commander.TryDeployRecon(encounter.SequenceId, payloadPosition, forceCargoSaboteur))
+            {
+                RecordCommanderWave(CommanderWaveKind.Recon, encounter.SequenceId,
+                    Mathf.Max(1, commander.WaveBudget.tokensPerWave),
+                    commander.LastReconDeployedCount * Mathf.Max(1, commander.WaveBudget.scoutCost),
+                    null, commander.LastReconDeployedCount);
                 return true;
+            }
 
             var forward = HorizontalDirection(routeDirection, Vector3.forward);
             var right = new Vector3(forward.z, 0f, -forward.x);
@@ -291,6 +344,7 @@ namespace AlmostDelivered.Gameplay.Payload
                                        out plannedArchetypes);
             var groupSize = hasCommanderPlan ? plannedArchetypes.Length : encounter.GroupSize;
             var travelGroup = new List<PendingEnemy>(groupSize);
+            var deployedTypes = new MissionMobArchetype[groupSize];
 
             for (var index = 0; index < groupSize; index++)
             {
@@ -317,6 +371,7 @@ namespace AlmostDelivered.Gameplay.Payload
                     : index == 0 && includeCargoSaboteur
                         ? MissionMobArchetype.CargoSaboteur
                         : standardArchetype;
+                deployedTypes[index] = archetype;
                 travelGroup.Add(new PendingEnemy(
                     -(encounter.SequenceId + 1),
                     enemyId,
@@ -332,8 +387,22 @@ namespace AlmostDelivered.Gameplay.Payload
                 pending.Enqueue(enemy);
             }
 
+            RecordCommanderWave(hasCommanderPlan ? CommanderWaveKind.Travel : CommanderWaveKind.Random,
+                encounter.SequenceId,
+                hasCommanderPlan ? Mathf.Max(1, commander.WaveBudget.tokensPerWave) + Mathf.Max(0, bonusTokens) : 0,
+                hasCommanderPlan
+                    ? MissionCommanderAssaultPlanner.SpentTokens(deployedTypes, commander.WaveBudget) : 0,
+                deployedTypes);
             SpawnUntilCap();
             return true;
+        }
+
+        private void RecordCommanderWave(CommanderWaveKind kind, int sequenceId, int budget,
+            int spent, MissionMobArchetype[] units, int scoutCount = 0)
+        {
+            commanderWaveHistory.Add(new CommanderWaveDebugSnapshot(kind, sequenceId,
+                budget, spent, units, scoutCount));
+            if (commanderWaveHistory.Count > 3) commanderWaveHistory.RemoveAt(0);
         }
 
         public bool SpawnActivationResponseWave(
@@ -356,6 +425,33 @@ namespace AlmostDelivered.Gameplay.Payload
                 missionBounds,
                 exclusionRadius,
                 null, false, false, 0, 3);
+        }
+
+        public bool SpawnEvacuationWave(int waveIndex, Vector3 site, Rect bounds)
+        {
+            if (waveIndex < 0 || !IsFinite(site) || pending.Count >= 12) return false;
+            var random = new System.Random(unchecked(missionSeed * 486187739 + waveIndex * 1129 + 7079));
+            var count = Mathf.Min(10, 4 + waveIndex);
+            var types = new MissionMobArchetype[count];
+            for (var index = 0; index < count; index++)
+            {
+                var angle = (index + (float)random.NextDouble() * .35f) * Mathf.PI * 2f / count;
+                var radius = 18f + (float)random.NextDouble() * 3f;
+                var point = new Vector3(
+                    Mathf.Clamp(site.x + Mathf.Cos(angle) * radius, bounds.xMin + 2f, bounds.xMax - 2f),
+                    site.y,
+                    Mathf.Clamp(site.z + Mathf.Sin(angle) * radius, bounds.yMin + 2f, bounds.yMax - 2f));
+                var archetype = index % 4 == 0 ? MissionMobArchetype.Ranged
+                    : index % 4 == 1 ? MissionMobArchetype.Shield : MissionMobArchetype.Melee;
+                types[index] = archetype;
+                pending.Enqueue(new PendingEnemy(-5000 - waveIndex,
+                    -500000 - waveIndex * 100 - index,
+                    MissionMobDefinition.For(archetype), point,
+                    false, default, site - point, true, site));
+            }
+            RecordCommanderWave(CommanderWaveKind.Random, 5000 + waveIndex, 0, 0, types);
+            SpawnUntilCap();
+            return true;
         }
 
         private void OnDisable()
@@ -444,7 +540,15 @@ namespace AlmostDelivered.Gameplay.Payload
                     definition.ContactRange, definition.ContactDamage,
                     definition.ContactCooldown, definition.StandOffRange);
             controller.Configure(definition, playerTarget, rangedAttack);
-            if (pendingEnemy.HasGuardPost)
+            if (extractionRallyTarget != null)
+            {
+                controller.ConfigureExtractionAssault(extractionRallyTarget);
+            }
+            else if (pendingEnemy.AssaultExtraction)
+            {
+                controller.ConfigureGuardPost(pendingEnemy.ExtractionTarget, 13f);
+            }
+            else if (pendingEnemy.HasGuardPost)
             {
                 controller.ConfigureGuardPost(pendingEnemy.GuardPost, 13f);
             }
@@ -792,7 +896,9 @@ namespace AlmostDelivered.Gameplay.Payload
                 Vector3 position,
                 bool hasGuardPost = false,
                 Vector3 guardPost = default,
-                Vector3 facingDirection = default)
+                Vector3 facingDirection = default,
+                bool assaultExtraction = false,
+                Vector3 extractionTarget = default)
             {
                 WaveId = waveId;
                 EnemyId = enemyId;
@@ -801,6 +907,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 HasGuardPost = hasGuardPost;
                 GuardPost = guardPost;
                 FacingDirection = facingDirection;
+                AssaultExtraction = assaultExtraction;
+                ExtractionTarget = extractionTarget;
             }
 
             public int WaveId { get; }
@@ -810,6 +918,8 @@ namespace AlmostDelivered.Gameplay.Payload
             public bool HasGuardPost { get; }
             public Vector3 GuardPost { get; }
             public Vector3 FacingDirection { get; }
+            public bool AssaultExtraction { get; }
+            public Vector3 ExtractionTarget { get; }
         }
     }
 }

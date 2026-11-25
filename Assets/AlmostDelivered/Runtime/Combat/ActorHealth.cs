@@ -11,7 +11,9 @@ namespace AlmostDelivered.Combat
         public float CurrentHealth { get; private set; } = 100f;
         public bool IsDead => CurrentHealth <= 0f;
         public bool IsInvulnerable { get; private set; }
+        public float CurrentShield { get; private set; }
         public event Action<float, float> HealthChanged;
+        public event Action<float> ShieldChanged;
         public event Action Died;
 
         private void Awake()
@@ -20,6 +22,14 @@ namespace AlmostDelivered.Combat
         }
 
         public void SetInvulnerable(bool value) => IsInvulnerable = value;
+
+        public void SetShield(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value) || value < 0f)
+                throw new ArgumentOutOfRangeException(nameof(value));
+            CurrentShield = value;
+            ShieldChanged?.Invoke(CurrentShield);
+        }
 
         public void ConfigureMaximum(float maximum, bool refill = true, bool preserveRatio = false)
         {
@@ -45,6 +55,15 @@ namespace AlmostDelivered.Combat
             if (IsDead || IsInvulnerable)
             {
                 return;
+            }
+
+            if (CurrentShield > 0f)
+            {
+                var absorbed = Mathf.Min(CurrentShield, damage);
+                CurrentShield -= absorbed;
+                damage -= absorbed;
+                ShieldChanged?.Invoke(CurrentShield);
+                if (damage <= 0f) return;
             }
 
             CurrentHealth = Mathf.Max(0f, CurrentHealth - damage);

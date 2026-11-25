@@ -47,7 +47,10 @@ namespace AlmostDelivered.Gameplay.Payload
             var phase = mission.Snapshot.Phase;
             if (phase == PayloadMissionPhase.Deploying || phase == PayloadMissionPhase.Recovering ||
                 phase == PayloadMissionPhase.Activating || phase == PayloadMissionPhase.Completed ||
-                phase == PayloadMissionPhase.Failed) return;
+                phase == PayloadMissionPhase.Failed ||
+                phase == PayloadMissionPhase.EvacuationTravel ||
+                phase == PayloadMissionPhase.EvacuationDefense ||
+                phase == PayloadMissionPhase.Escaped) return;
             var health = player.GetComponent<ActorHealth>();
             if (health != null && health.IsDead) return;
 

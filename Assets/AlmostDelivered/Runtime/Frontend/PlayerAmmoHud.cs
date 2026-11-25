@@ -98,6 +98,7 @@ namespace AlmostDelivered.Frontend
             var graphic = item.GetComponent<Image>();
             if (graphic == null) graphic = item.AddComponent<Image>();
             graphic.color = color;
+            graphic.raycastTarget = false;
             var rect = item.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, .5f);
             rect.anchoredPosition = new Vector2(x, y);

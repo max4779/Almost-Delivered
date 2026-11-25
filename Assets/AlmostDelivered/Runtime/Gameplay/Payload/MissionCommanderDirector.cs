@@ -60,6 +60,7 @@ namespace AlmostDelivered.Gameplay.Payload
                                       commanderHealth != null && !commanderHealth.IsDead;
         public bool CanCommand => initialized && commanderHealth != null && !commanderHealth.IsDead;
         public CommanderWaveBudget WaveBudget => waveBudget ?? (waveBudget = new CommanderWaveBudget());
+        public int LastReconDeployedCount { get; private set; }
 
         public bool TryGetCombatProfile(int actorId, out MissionScoutCombatProfile profile) =>
             combatProfiles.TryGetValue(actorId, out profile);
@@ -103,6 +104,7 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public bool TryDeployRecon(int sequenceId, Vector3 cargoPosition, bool forcedAssault)
         {
+            LastReconDeployedCount = 0;
             if (!CanCommand || forcedAssault ||
                 Time.time - LastScoutObservationTime <= WaveBudget.freshIntelSeconds) return false;
             var livingScouts = 0;
@@ -112,6 +114,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 Mathf.Max(0, WaveBudget.maximumLivingScouts - livingScouts),
                 Mathf.Max(1, WaveBudget.tokensPerWave) / Mathf.Max(1, WaveBudget.scoutCost));
             if (count <= 0) return false;
+            LastReconDeployedCount = count;
 
             for (var index = 0; index < count; index++)
             {

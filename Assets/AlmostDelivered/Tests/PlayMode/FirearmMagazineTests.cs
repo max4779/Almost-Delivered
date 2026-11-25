@@ -71,6 +71,22 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [Test]
+        public void RifleKeepsItsCadenceAcrossUnevenFramesAndCloseAim()
+        {
+            var attack = CreateAttack();
+            PlayerWeaponLoadout.ConfigureFirearm(attack, PlayerWeaponType.AutomaticRifle);
+            var aim = Vector3.forward * 10f;
+            Assert.That(attack.TryFire(aim, 0f), Is.True);
+            Assert.That(attack.TryFire(aim, .117f), Is.False);
+            Assert.That(attack.TryFire(aim, .133f), Is.True);
+            Assert.That(attack.TryFire(aim, .25f), Is.True,
+                "A late frame must not restart the whole firing interval.");
+            Assert.That(attack.TryFire(attack.Muzzle.position, .37f), Is.True,
+                "The muzzle crossing the cursor must not interrupt held fire.");
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(16));
+        }
+
+        [Test]
         public void ReapplyingSameFirearmKeepsAmmoReloadAndFireCooldown()
         {
             var attack = CreateAttack();

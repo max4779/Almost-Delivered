@@ -132,9 +132,74 @@ namespace AlmostDelivered.Tests.PlayMode
             minimap.Refresh();
             var panelRect = minimap.GetComponent<RectTransform>().rect;
 
-            Assert.That(minimap.PlayerIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(player.position, bounds, panelRect)));
-            Assert.That(minimap.PayloadIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, bounds, panelRect)));
-            Assert.That(minimap.GetEnemyIcon(enemy.EnemyId).anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(enemy.transform.position, bounds, panelRect)));
+            var viewBounds = minimap.CurrentViewBounds;
+            Assert.That(viewBounds.width, Is.LessThan(bounds.width + .001f));
+            Assert.That(viewBounds.height, Is.LessThan(bounds.height));
+            Assert.That(minimap.PlayerIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(player.position, viewBounds, panelRect)));
+            Assert.That(minimap.PayloadIcon.anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, viewBounds, panelRect)));
+            Assert.That(minimap.GetEnemyIcon(enemy.EnemyId).anchoredPosition, Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(enemy.transform.position, viewBounds, panelRect)));
+        }
+
+        [Test]
+        public void FullMapShowsWholeWorldAndRestoresCompactLayout()
+        {
+            var panel = minimap.GetComponent<RectTransform>();
+            var compactSize = panel.sizeDelta;
+            var compactPosition = panel.anchoredPosition;
+            var compactColor = panel.GetComponent<Image>().color;
+            var farEnemy = waves.LivingEnemies.First();
+            farEnemy.transform.position = new Vector3(20f, 0f, -45f);
+            player.position = new Vector3(0f, 0f, 40f);
+            minimap.Refresh();
+            Assert.That(minimap.GetEnemyIcon(farEnemy.EnemyId).gameObject.activeSelf, Is.False);
+
+            minimap.SetFullMapOpen(true);
+            Assert.That(minimap.IsFullMapOpen, Is.True);
+            Assert.That(minimap.CurrentViewBounds, Is.EqualTo(bounds));
+            Assert.That(minimap.GetEnemyIcon(farEnemy.EnemyId).gameObject.activeSelf, Is.True);
+            Assert.That(panel.rect.height, Is.GreaterThan(compactSize.y));
+            Assert.That(panel.GetComponent<Image>().color.a, Is.EqualTo(.97f).Within(.001f));
+
+            minimap.SetFullMapOpen(false);
+            Assert.That(minimap.IsFullMapOpen, Is.False);
+            Assert.That(panel.sizeDelta, Is.EqualTo(compactSize));
+            Assert.That(panel.anchoredPosition, Is.EqualTo(compactPosition));
+            Assert.That(panel.GetComponent<Image>().color, Is.EqualTo(compactColor));
+            Assert.That(minimap.GetEnemyIcon(farEnemy.EnemyId).gameObject.activeSelf, Is.False);
+        }
+
+        [Test]
+        public void OffscreenExtractionShowsEdgeDirectionUntilItEntersView()
+        {
+            player.position = new Vector3(0f, 0f, -40f);
+            var target = new Vector3(0f, 0f, 40f);
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.EvacuationTravel, 20f, 0f, 0f, 0, -1, 0, 1, 0,
+                false, false, evacuationTarget: target));
+            minimap.Refresh();
+
+            var marker = minimap.transform.Find("Evacuation Site") as RectTransform;
+            Assert.That(marker.gameObject.activeSelf, Is.True);
+            Assert.That(minimap.EvacuationArrow.gameObject.activeSelf, Is.True);
+            Assert.That(marker.anchoredPosition.y, Is.GreaterThan(minimap.PlayerIcon.anchoredPosition.y));
+            Assert.That(minimap.GetComponent<RectTransform>().rect.Contains(marker.anchoredPosition), Is.True);
+
+            player.position = new Vector3(26f, 0f, -40f);
+            target = new Vector3(27f, 0f, 40f);
+            mission.ApplySnapshot(new PayloadMissionSnapshot(
+                PayloadMissionPhase.EvacuationTravel, 20f, 0f, 0f, 0, -1, 0, 1, 0,
+                false, false, evacuationTarget: target));
+            minimap.Refresh();
+            Assert.That(marker.anchoredPosition.x,
+                Is.LessThanOrEqualTo(minimap.GetComponent<RectTransform>().rect.xMax -
+                    MissionMinimap.ContentPadding - 12f + .001f));
+
+            player.position = target;
+            minimap.Refresh();
+            Assert.That(minimap.EvacuationArrow.gameObject.activeSelf, Is.False);
+            Assert.That(marker.anchoredPosition,
+                Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(target, minimap.CurrentViewBounds,
+                    minimap.GetComponent<RectTransform>().rect)));
         }
 
         [Test]
@@ -159,7 +224,7 @@ namespace AlmostDelivered.Tests.PlayMode
             var panelRect = minimap.GetComponent<RectTransform>().rect;
             Assert.That(minimap.PayloadIcon.gameObject.activeSelf, Is.True);
             Assert.That(minimap.PayloadIcon.anchoredPosition,
-                Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, bounds, panelRect)));
+                Is.EqualTo(MissionMinimap.ProjectWorldInsidePanel(payload.position, minimap.CurrentViewBounds, panelRect)));
             Assert.That(minimap.EnemyIconCount, Is.EqualTo(10));
             Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.False);
             Assert.That(minimap.transform.Find("Checkpoint 1").gameObject.activeSelf, Is.False);
@@ -197,7 +262,6 @@ namespace AlmostDelivered.Tests.PlayMode
             minimap.Refresh();
 
             Assert.That(minimap.transform.Find("Route Segment 1").gameObject.activeSelf, Is.True);
-            Assert.That(minimap.transform.Find("Checkpoint 1").gameObject.activeSelf, Is.True);
         }
 
         [Test]

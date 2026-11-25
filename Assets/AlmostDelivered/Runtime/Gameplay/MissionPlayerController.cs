@@ -2,8 +2,8 @@ using System;
 using AlmostDelivered.Combat;
 using AlmostDelivered.Frontend;
 using AlmostDelivered.Gameplay.Payload;
+using AlmostDelivered.Gameplay.Support;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace AlmostDelivered.Gameplay
 {
@@ -59,6 +59,10 @@ namespace AlmostDelivered.Gameplay
             if (traitMission == null) return;
             traitMission.RegisterEscortPlayer(traits);
             traitMission.PhaseChanged += OnTraitMissionPhaseChanged;
+            var support = GetComponent<PlayerSupportController>() ??
+                gameObject.AddComponent<PlayerSupportController>();
+            support.Configure(traits, traitMission, FindObjectOfType<SideMissionDirector>(),
+                FindObjectOfType<PayloadWaveSpawner>());
         }
 
         private void OnDestroy()
@@ -108,8 +112,11 @@ namespace AlmostDelivered.Gameplay
 
             if (TryGetMouseAim(out var aimPoint))
             {
+                // Informational mission HUD elements may be created after the
+                // initial canvas setup. Only the route-choice overlay should
+                // prevent combat input while it is visible.
                 if (Input.GetMouseButton(0) &&
-                    (EventSystem.current == null || !EventSystem.current.IsPointerOverGameObject()))
+                    (traitMission == null || !traitMission.Snapshot.IsRelayChoicePending))
                     AimAndFire(aimPoint, Time.time, Time.deltaTime);
                 else
                     AimAt(aimPoint, Time.deltaTime);
@@ -235,7 +242,9 @@ namespace AlmostDelivered.Gameplay
         }
 
         private bool CanAct() => enabled && (health == null || !health.IsDead) &&
-            (traitMission == null || traitMission.Snapshot.Phase != PayloadMissionPhase.Failed);
+            (traitMission == null ||
+             (traitMission.Snapshot.Phase != PayloadMissionPhase.Failed &&
+              traitMission.Snapshot.Phase != PayloadMissionPhase.Escaped));
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 

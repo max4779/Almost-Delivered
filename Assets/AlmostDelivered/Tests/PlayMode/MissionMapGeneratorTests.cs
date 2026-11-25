@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using AlmostDelivered.MapGeneration;
+using AlmostDelivered.Gameplay.Payload;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -58,6 +59,34 @@ namespace AlmostDelivered.Tests.PlayMode
 
             Assert.That(generator.LastSeed, Is.EqualTo(1117));
             Assert.That(second, Is.EqualTo(first));
+        }
+
+        [UnityTest]
+        public IEnumerator ExtractionSiteAlternatesBetweenFortAndGraveyardAndKeepsCoverClear()
+        {
+            var bounds = Rect.MinMaxRect(-80f, -80f, 80f, 80f);
+            generator.Configure(theme, new Vector2(80f, 80f), 0, 0, 24, 0,
+                System.Array.Empty<MissionMapProtectedZone>(), false);
+            foreach (var seed in new[] { 42, 43 })
+            {
+                var route = PayloadRoutePlanner.Generate(seed, bounds, 5, 3f);
+                generator.ConfigureExtractionSite(seed, bounds, route);
+                generator.Generate(seed, route.CorridorExclusions);
+                yield return null;
+                Assert.That(generator.ExtractionSite, Is.Not.Null);
+                Assert.That(generator.ExtractionSite.Find("Weathered Extraction Ground")
+                    .GetComponent<Renderer>().bounds.size.x, Is.GreaterThan(10f));
+                Assert.That(generator.ExtractionTheme,
+                    Is.EqualTo(seed % 2 == 0 ? ExtractionSiteTheme.RuinedFort : ExtractionSiteTheme.Graveyard));
+                Assert.That(generator.ExtractionSite.GetComponentsInChildren<BoxCollider>().Length,
+                    Is.GreaterThan(4));
+                var center = new Vector2(generator.ExtractionPosition.x, generator.ExtractionPosition.z);
+                foreach (var piece in generator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>())
+                    if (piece.Category == MissionMapPieceCategory.BlockingObstacle)
+                        Assert.That(Overlaps(piece.Position, piece.Footprint, center,
+                            Vector2.one * MissionMapGenerator.ExtractionExclusionSize),
+                            Is.False, piece.name);
+            }
         }
 
         [UnityTest]

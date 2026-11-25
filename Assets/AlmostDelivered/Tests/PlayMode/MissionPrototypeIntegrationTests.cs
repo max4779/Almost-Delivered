@@ -51,35 +51,207 @@ namespace AlmostDelivered.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator CargoBlueprintLosesRightLeftCenterThenShowsGameOver()
+        public IEnumerator MissionHudDoesNotBlockHeldFireUnderTheCursor()
+        {
+            yield return LoadMission();
+            var hud = Object.FindObjectOfType<MissionHud>();
+            Assert.That(hud.transform.Find("Mission Phase").GetComponent<Text>().raycastTarget, Is.False);
+            Assert.That(hud.transform.Find("Mission Minimap").GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(hud.transform.Find("Player Health Bar").GetComponent<Image>().raycastTarget, Is.False);
+            Assert.That(hud.GetComponent<GraphicRaycaster>().enabled, Is.True,
+                "Interactive relay choices still need the HUD raycaster.");
+        }
+
+        [UnityTest]
+        public IEnumerator AutomaticRifleMaintainsFireAgainstAnActualCargoGuard()
+        {
+            yield return LoadMission();
+            var waves = Object.FindObjectOfType<PayloadWaveSpawner>();
+            var guard = waves.LivingEnemies.First(enemy => enemy.WaveId == PayloadWaveSpawner.RecoveryWaveId);
+            guard.enabled = false;
+            var health = guard.GetComponent<ActorHealth>();
+            var startingHealth = health.CurrentHealth;
+            var player = GameObject.Find("Player");
+            var guardCharacter = guard.GetComponent<CharacterController>();
+            guardCharacter.enabled = false;
+            guard.transform.position = player.transform.position + Vector3.forward * 7f;
+            player.transform.forward = Vector3.forward;
+            guardCharacter.enabled = true;
+            Physics.SyncTransforms();
+            player.GetComponent<MissionPlayerController>().SetWeaponType(PlayerWeaponType.AutomaticRifle);
+            var attack = player.GetComponent<RangedAttackController>();
+            var start = Time.time;
+            for (var shot = 0; shot < 5; shot++)
+                Assert.That(attack.TryFire(guard.transform.position + Vector3.up, start + shot * .125f),
+                    Is.True, $"Shot {shot + 1} stopped while aiming at a real guard.");
+            Assert.That(attack.RoundsRemaining, Is.EqualTo(15));
+            yield return new WaitForSeconds(.6f);
+            Assert.That(health.CurrentHealth, Is.LessThan(startingHealth),
+                "The rifle must damage the mission's actual guard hurtbox.");
+        }
+
+        [UnityTest]
+        public IEnumerator CargoBlueprintLightsLeftRightCenterThenStartsEvacuation()
         {
             yield return LoadMission();
             var mission = Object.FindObjectOfType<PayloadMissionController>();
             var integrity = GameObject.Find("Payload").GetComponent<CargoIntegrity>();
             var card = GameObject.Find("Cargo Stock Blueprint").transform;
-            var stocks = card.Find("Cargo Stocks").GetComponent<Text>();
-            var left = card.Find("Blueprint Module 0 Frame/Blueprint Module 0").GetComponent<Image>();
-            var center = card.Find("Blueprint Module 1 Frame/Blueprint Module 1").GetComponent<Image>();
-            var right = card.Find("Blueprint Module 2 Frame/Blueprint Module 2").GetComponent<Image>();
+            Assert.That(card.parent.Find("Cargo Health"), Is.Null);
+            var schematic = card.Find("Payload Top View").GetComponent<CargoBlueprintGraphic>();
+            var healthText = card.Find("Cargo Stock Health").GetComponent<Text>();
+            var healthFill = card.Find("Cargo Stock Health Track/Cargo Stock Health Fill").GetComponent<Image>();
+            Assert.That(card.Find("Cargo Front Label"), Is.Null);
+            Assert.That(card.Find("Cargo Rear Label"), Is.Null);
             var gameOver = card.parent.Find("Cargo Game Over").gameObject;
 
-            Assert.That(stocks.text, Does.Contain("3 / 3"));
+            var cardRect = card.GetComponent<RectTransform>();
+            Assert.That(cardRect.anchorMin, Is.EqualTo(new Vector2(0f, 1f)));
+            Assert.That(cardRect.anchoredPosition.x, Is.LessThan(100f));
+            Assert.That(cardRect.anchoredPosition.y, Is.GreaterThan(-100f));
+            Assert.That(card.Find("Cargo Stocks"), Is.Null);
+            Assert.That(card.Find("Blueprint Module 0 Frame"), Is.Null);
+            Assert.That(card.GetComponentsInChildren<Text>().Any(text =>
+                text.text == "L" || text.text == "R" || text.text == "C"), Is.False);
+            Assert.That(schematic.Destructions, Is.Zero);
+            Assert.That(healthText.text, Is.EqualTo("100%"));
+            Assert.That(healthFill.type, Is.EqualTo(Image.Type.Simple));
+            Assert.That(healthFill.fillAmount, Is.EqualTo(1f).Within(.001f));
+            Assert.That(healthFill.rectTransform.anchorMax.x, Is.EqualTo(1f).Within(.001f));
             Assert.That(mission.IsAuthority, Is.True);
             Assert.That(mission.CargoHealth, Is.SameAs(integrity));
+            var damageVfx = integrity.GetComponent<CargoDamageVfx>();
+            Assert.That(damageVfx, Is.Not.Null);
+            Assert.That(damageVfx.DestructionCueCount, Is.Zero);
+            Assert.That(integrity.transform.Find("Cargo Destruction Smoke Burst"), Is.Not.Null);
+            Assert.That(integrity.transform.Find("Cargo Destruction Sparks"), Is.Not.Null);
             for (var loss = 1; loss <= 3; loss++)
             {
+                integrity.ApplyDamage(integrity.MaximumHealth * .25f);
+                Assert.That(healthText.text, Is.EqualTo("75%"));
+                Assert.That(healthFill.fillAmount, Is.EqualTo(.75f).Within(.001f));
+                Assert.That(healthFill.rectTransform.anchorMax.x, Is.EqualTo(.75f).Within(.001f));
+                Assert.That(healthFill.color.b, Is.GreaterThan(.7f));
+                integrity.ApplyDamage(integrity.MaximumHealth * .15f);
+                Assert.That(healthText.text, Is.EqualTo("60%"));
+                Assert.That(healthFill.rectTransform.anchorMax.x, Is.EqualTo(.6f).Within(.001f));
+                Assert.That(healthFill.color.r, Is.GreaterThan(.9f));
+                Assert.That(healthFill.color.g, Is.GreaterThan(.5f));
+                integrity.ApplyDamage(integrity.MaximumHealth * .3f);
+                Assert.That(healthText.text, Is.EqualTo("30%"));
+                Assert.That(healthFill.rectTransform.anchorMax.x, Is.EqualTo(.3f).Within(.001f));
+                Assert.That(healthFill.color.g, Is.LessThan(.3f));
+                Assert.That(schematic.Destructions, Is.EqualTo(loss - 1));
+                Assert.That(damageVfx.DestructionCueCount, Is.EqualTo(loss - 1));
                 integrity.ApplyDamage(integrity.MaximumHealth);
-                Assert.That(integrity.CurrentHealth, Is.Zero);
                 Assert.That(mission.Snapshot.CargoDestructions, Is.EqualTo(loss));
-                Assert.That(stocks.text, Does.Contain($"{3 - loss} / 3"));
-                Assert.That(right.color.r > right.color.b, Is.True);
-                Assert.That(left.color.r > left.color.b, Is.EqualTo(loss >= 2));
-                Assert.That(center.color.r > center.color.b, Is.EqualTo(loss >= 3));
-                if (loss < 3) integrity.Repair(integrity.MaximumHealth);
+                Assert.That(schematic.Destructions, Is.EqualTo(loss));
+                Assert.That(damageVfx.ActiveDamageStage, Is.EqualTo(loss));
+                Assert.That(damageVfx.DestructionCueCount, Is.EqualTo(loss));
+                Assert.That(integrity.transform.Find("Cargo Destruction Smoke Burst").GetComponent<ParticleSystem>().particleCount,
+                    Is.GreaterThan(0));
+                Assert.That(integrity.GetComponent<AudioSource>().isPlaying, Is.True);
+                Assert.That(integrity.transform.Find("Cargo Damage Smoke Left").GetComponent<ParticleSystem>().isPlaying,
+                    Is.True);
+                Assert.That(integrity.transform.Find("Cargo Damage Smoke Right").GetComponent<ParticleSystem>().isPlaying,
+                    Is.EqualTo(loss >= 2));
+                Assert.That(integrity.transform.Find("Cargo Damage Flame Left").GetComponent<ParticleSystem>().isPlaying,
+                    Is.EqualTo(loss >= 2));
+                Assert.That(schematic.IsDamaged(0), Is.True);
+                Assert.That(schematic.IsDamaged(2), Is.EqualTo(loss >= 2));
+                Assert.That(schematic.IsDamaged(1), Is.EqualTo(loss >= 3));
+                if (loss < 3)
+                {
+                    Assert.That(integrity.IsBroken, Is.False);
+                    Assert.That(integrity.CurrentHealth, Is.EqualTo(integrity.MaximumHealth));
+                    Assert.That(healthText.text, Is.EqualTo("100%"));
+                    Assert.That(healthFill.fillAmount, Is.EqualTo(1f).Within(.001f));
+                    Assert.That(healthFill.rectTransform.anchorMax.x, Is.EqualTo(1f).Within(.001f));
+                    Assert.That(gameOver.activeSelf, Is.False);
+                }
             }
 
-            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Failed));
+            Assert.That(integrity.CurrentHealth, Is.Zero);
+            Assert.That(healthText.text, Is.EqualTo("0%"));
+            Assert.That(healthFill.fillAmount, Is.Zero);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationTravel));
+            Assert.That(gameOver.activeSelf, Is.False);
+            var map = Object.FindObjectOfType<MissionMapGenerator>();
+            Assert.That(map.ExtractionSite, Is.Not.Null);
+            Assert.That(mission.EvacuationTarget, Is.EqualTo(map.ExtractionPosition));
+            var minimap = Object.FindObjectOfType<MissionMinimap>();
+            Assert.That(minimap, Is.Not.Null);
+            minimap.Refresh();
+            Assert.That(minimap.transform.Find("Evacuation Site").gameObject.activeSelf, Is.True);
+
+            var player = GameObject.Find("Player");
+            var controller = player.GetComponent<CharacterController>();
+            controller.enabled = false;
+            player.transform.position = mission.EvacuationTarget;
+            controller.enabled = true;
+            mission.Tick(.1f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationTravel));
+            Assert.That(mission.CanActivateEvacuationSignal, Is.True);
+            mission.Tick(.1f, true);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationDefense));
+            Assert.That(mission.Snapshot.EvacuationSecondsRemaining, Is.GreaterThan(80f));
+            var signal = map.ExtractionSite.GetComponent<EvacuationSignalView>();
+            Assert.That(signal, Is.Not.Null);
+            Assert.That(signal.IsSignalVisible, Is.True);
+            Assert.That(signal.SignalIntensity, Is.GreaterThan(0f));
+            var evacuationWaves = Object.FindObjectOfType<PayloadWaveSpawner>();
+            Assert.That(evacuationWaves.LivingEnemies.Any(enemy => enemy.IsAssaultingExtraction), Is.True);
+            var hud = Object.FindObjectOfType<MissionHud>();
+            hud.Refresh();
+            var evacuationTimer = hud.ActivationCountdownText;
+            Assert.That(evacuationTimer.gameObject.activeSelf, Is.True);
+            Assert.That(evacuationTimer.text, Is.EqualTo("EXTRACTION IN\n01:30"));
+            mission.Tick(1f);
+            hud.Refresh();
+            Assert.That(evacuationTimer.text, Is.EqualTo("EXTRACTION IN\n01:29"));
+            controller.enabled = false;
+            player.transform.position = mission.EvacuationTarget + Vector3.right * 14f;
+            controller.enabled = true;
+            mission.Tick(1f);
+            hud.Refresh();
+            Assert.That(evacuationTimer.text, Is.EqualTo("EXTRACTION IN\n01:28"));
+            mission.Tick(95f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationDefense));
+            Assert.That(mission.Snapshot.EvacuationSecondsRemaining, Is.Zero);
+            hud.Refresh();
+            Assert.That(evacuationTimer.text, Is.EqualTo("EXTRACTION READY\nRETURN TO EVAC SITE"));
+            controller.enabled = false;
+            player.transform.position = mission.EvacuationTarget;
+            controller.enabled = true;
+            mission.Tick(.1f);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escaped));
             Assert.That(gameOver.activeSelf, Is.True);
+            Assert.That(gameOver.transform.Find("Game Over Title").GetComponent<Text>().text,
+                Is.EqualTo("EXTRACTION SUCCESS"));
+        }
+
+        [UnityTest]
+        public IEnumerator CommanderDebugPanelShowsTheCheckpointTokenBudgetAndActualComposition()
+        {
+            yield return LoadMission();
+            var waves = Object.FindObjectOfType<PayloadWaveSpawner>();
+            var debug = Object.FindObjectOfType<CommanderWaveDebugHud>();
+            var panel = GameObject.Find("Commander Wave Debug");
+            var details = panel.transform.Find("Commander Debug Details").GetComponent<Text>();
+
+            Assert.That(debug, Is.Not.Null);
+            Assert.That(details.text, Does.Contain("최초 화물 경비병: 랜덤"));
+            waves.SpawnWave(71, 0, false);
+            yield return null;
+
+            var plan = waves.LastCommanderWave;
+            Assert.That(plan, Is.Not.Null);
+            Assert.That(plan.Kind, Is.EqualTo(CommanderWaveKind.Checkpoint));
+            Assert.That(plan.Budget, Is.EqualTo(10));
+            Assert.That(plan.Spent, Is.GreaterThan(0).And.LessThanOrEqualTo(plan.Budget));
+            Assert.That(plan.Units.Count, Is.GreaterThan(0));
+            Assert.That(details.text, Does.Contain($"토큰 {plan.Spent}/{plan.Budget}"));
+            Assert.That(details.text, Does.Contain("거점 웨이브"));
         }
 
         [UnityTest]

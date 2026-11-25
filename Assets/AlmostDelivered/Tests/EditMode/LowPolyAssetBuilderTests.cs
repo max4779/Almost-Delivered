@@ -70,6 +70,18 @@ namespace AlmostDelivered.Tests.EditMode
             foreach (var thruster in before)
                 CollectionAssert.AreEqual(thruster.Value, after[thruster.Key], "Thruster at " + thruster.Key + " lost its serialized object/component identities");
         }
+        [Test] public void PayloadHasTaperedSensorProwAndFlatExhaustRear() {
+            LowPolyAssetFactory.CreateOrUpdateAll();
+            var body = LowPolyAssetFactory.LoadPrefab(VisualArchetype.Payload).transform.Find("BodyPivot");
+            var prow = body.Find("ProwArmor").GetComponent<MeshFilter>().sharedMesh;
+            var frontThruster = body.Find("ThrusterFrontLeft");
+            var hull = body.Find("CargoHull");
+            Assert.That(AssetDatabase.Contains(prow), Is.True);
+            Assert.That(prow.bounds.max.z, Is.GreaterThan(frontThruster.localPosition.z + frontThruster.localScale.x * .5f));
+            Assert.That(prow.bounds.max.z, Is.GreaterThan(hull.localPosition.z + hull.localScale.z * .5f));
+            Assert.That(body.Find("ForwardSensor").localPosition.z, Is.GreaterThan(frontThruster.localPosition.z));
+            Assert.That(body.Find("RearExhaust0").localPosition.z, Is.LessThan(hull.localPosition.z - hull.localScale.z * .5f));
+        }
         [Test] public void InstantiateVisual_ReplacesExistingVisualOnlyAndPreservesRootComponents() {
             LowPolyAssetFactory.CreateOrUpdateAll(); var root = GameObject.CreatePrimitive(PrimitiveType.Cube); try { var collider = root.GetComponent<Collider>(); var renderer = root.GetComponent<Renderer>(); var other = new GameObject("Other"); other.transform.SetParent(root.transform); LowPolyAssetFactory.InstantiateVisual(root, VisualArchetype.Player); var visual = LowPolyAssetFactory.InstantiateVisual(root, VisualArchetype.Shield); Assert.AreEqual(1, root.transform.Cast<Transform>().Count(t=>t.name == "VisualRoot")); Assert.AreSame(collider,root.GetComponent<Collider>()); Assert.AreSame(renderer,root.GetComponent<Renderer>()); Assert.NotNull(root.transform.Find("Other")); Assert.AreEqual(VisualArchetype.Shield, visual.Archetype); } finally { UnityEngine.Object.DestroyImmediate(root); }
         }

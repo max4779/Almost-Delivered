@@ -49,11 +49,21 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Refresh()
         {
+            if (mission != null && mission.Snapshot.Phase == PayloadMissionPhase.EvacuationTravel)
+            {
+                ActiveTarget = mission.EvacuationSiteTransform;
+                SetChildrenActive(ActiveTarget != null);
+                PointAtActiveTarget();
+                return;
+            }
             if (mission == null || relayTargets.Count == 0 ||
                 mission.Snapshot.Phase == PayloadMissionPhase.Deploying ||
                 mission.Snapshot.Phase == PayloadMissionPhase.Recovering ||
                 mission.Snapshot.Phase == PayloadMissionPhase.Activating ||
-                mission.Snapshot.Phase == PayloadMissionPhase.Completed)
+                mission.Snapshot.Phase == PayloadMissionPhase.Completed ||
+                mission.Snapshot.Phase == PayloadMissionPhase.EvacuationDefense ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Escaped ||
+                mission.Snapshot.Phase == PayloadMissionPhase.Failed)
             {
                 ActiveTarget = null;
                 SetChildrenActive(false);

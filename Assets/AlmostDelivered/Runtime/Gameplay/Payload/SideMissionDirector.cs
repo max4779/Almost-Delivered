@@ -24,6 +24,7 @@ namespace AlmostDelivered.Gameplay.Payload
         public int Count => placements?.Length ?? 0;
         public int BonusCargoCount => bonusCargoCount;
         public bool SurgeTriggered => surgeTriggered;
+        public event Action<int, SideMissionKind> ObjectiveCompleted;
 
         public void Configure(PayloadMissionController missionController, PayloadWaveSpawner waveSpawner,
             Transform playerTarget, Transform cargoTarget, Rect bounds,
@@ -82,7 +83,10 @@ namespace AlmostDelivered.Gameplay.Payload
         {
             if (mission == null || !mission.IsAuthority || player == null || payload == null) return;
             var phase = mission.Snapshot.Phase;
-            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed)
+            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed ||
+                phase == PayloadMissionPhase.EvacuationTravel ||
+                phase == PayloadMissionPhase.EvacuationDefense ||
+                phase == PayloadMissionPhase.Escaped)
             {
                 for (var index = 0; index < states.Length; index++)
                     if (states[index] != SideMissionState.Completed) states[index] = SideMissionState.Missed;
@@ -116,6 +120,7 @@ namespace AlmostDelivered.Gameplay.Payload
                 {
                     states[index] = SideMissionState.Completed;
                     bonusCargoCount++;
+                    ObjectiveCompleted?.Invoke(index, placements[index].kind);
                     if (index < objectiveViews.Length && objectiveViews[index] != null)
                     {
                         objectiveViews[index].transform.SetParent(payload, false);
@@ -137,6 +142,7 @@ namespace AlmostDelivered.Gameplay.Payload
                     states[index] == SideMissionState.Available)
                 {
                     states[index] = SideMissionState.Completed;
+                    ObjectiveCompleted?.Invoke(index, placements[index].kind);
                     surgePending = true;
                     if (index < siteMarkers.Length && siteMarkers[index] != null)
                         siteMarkers[index].SetActive(false);

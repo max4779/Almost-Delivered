@@ -57,13 +57,42 @@ namespace AlmostDelivered.Gameplay.Payload
 
         public void Fail()
         {
-            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed) return;
+            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Escaped ||
+                phase == PayloadMissionPhase.Failed) return;
             phase = PayloadMissionPhase.Failed;
             isEscortActive = false;
             isActivationInputHeld = false;
             remainingEnemies.Clear();
             isWaveRegistered = false;
             activeWaveId = -1;
+        }
+
+        public bool BeginEvacuation()
+        {
+            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Escaped ||
+                phase == PayloadMissionPhase.Failed || phase == PayloadMissionPhase.EvacuationTravel ||
+                phase == PayloadMissionPhase.EvacuationDefense) return false;
+            phase = PayloadMissionPhase.EvacuationTravel;
+            isEscortActive = false;
+            isActivationInputHeld = false;
+            remainingEnemies.Clear();
+            isWaveRegistered = false;
+            activeWaveId = -1;
+            return true;
+        }
+
+        public bool BeginEvacuationDefense()
+        {
+            if (phase != PayloadMissionPhase.EvacuationTravel) return false;
+            phase = PayloadMissionPhase.EvacuationDefense;
+            return true;
+        }
+
+        public bool CompleteEvacuation()
+        {
+            if (phase != PayloadMissionPhase.EvacuationDefense) return false;
+            phase = PayloadMissionPhase.Escaped;
+            return true;
         }
 
         public void SetEscortSpeedMultiplier(float value)
@@ -86,7 +115,9 @@ namespace AlmostDelivered.Gameplay.Payload
         public float AddFuel(float seconds)
         {
             if (!IsFinite(seconds) || seconds < 0f) throw new ArgumentOutOfRangeException(nameof(seconds));
-            if (!fuelDriven || phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed)
+            if (!fuelDriven || phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed ||
+                phase == PayloadMissionPhase.EvacuationTravel || phase == PayloadMissionPhase.EvacuationDefense ||
+                phase == PayloadMissionPhase.Escaped)
                 return 0f;
             var before = fuelRemaining;
             fuelRemaining = Mathf.Min(fuelCapacity, fuelRemaining + seconds);
@@ -121,7 +152,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 throw new ArgumentOutOfRangeException(nameof(deltaTime), "Delta time must be finite and non-negative.");
             }
 
-            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed)
+            if (phase == PayloadMissionPhase.Completed || phase == PayloadMissionPhase.Failed ||
+                phase == PayloadMissionPhase.Escaped)
             {
                 return;
             }
@@ -132,6 +164,9 @@ namespace AlmostDelivered.Gameplay.Payload
                                     (phase == PayloadMissionPhase.Recovering || phase == PayloadMissionPhase.Activating);
             elapsedTime += deltaTime;
             isEscortActive = false;
+
+            if (phase == PayloadMissionPhase.EvacuationTravel ||
+                phase == PayloadMissionPhase.EvacuationDefense) return;
 
             if (phase == PayloadMissionPhase.Deploying)
             {

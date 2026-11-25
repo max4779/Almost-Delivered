@@ -163,6 +163,8 @@ namespace AlmostDelivered.Combat
 
             var planarDirection = Vector3.ProjectOnPlane(aimPoint - muzzle.position, Vector3.up);
             if (planarDirection.sqrMagnitude < 0.0001f)
+                planarDirection = Vector3.ProjectOnPlane(transform.forward, Vector3.up);
+            if (planarDirection.sqrMagnitude < 0.0001f)
                 return false;
 
             planarDirection.Normalize();
@@ -179,7 +181,11 @@ namespace AlmostDelivered.Combat
                 projectileLifetime,
                 pierceEnemies);
             clone.SetActive(true);
-            nextFireTime = now + EffectiveCooldown;
+            // Keep the intended automatic cadence across uneven frame times.
+            var interval = EffectiveCooldown;
+            nextFireTime = interval > 0f && nextFireTime > 0f && now - nextFireTime < interval
+                ? nextFireTime + interval
+                : now + interval;
             if (magazineSize > 0) roundsRemaining--;
             CombatNoiseSystem.Emit(muzzle.position, shotNoiseRadius, ownerTeam.Team);
             ShotFired?.Invoke();

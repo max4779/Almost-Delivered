@@ -35,6 +35,11 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField, Min(0f)] private float configuredCargoNoiseRadius = 26f;
         [SerializeField, Min(.1f)] private float configuredCargoNoiseInterval = .65f;
         [SerializeField] private bool relayChoicesEnabled;
+        [SerializeField, Min(1f)] private float evacuationDefenseSeconds = 90f;
+        [SerializeField, Min(1f)] private float evacuationArrivalRadius = 5f;
+        [SerializeField, Min(1f)] private float evacuationHoldRadius = 12f;
+        [SerializeField, Min(1f)] private float evacuationWaveInterval = 12f;
+        [SerializeField, Min(0f)] private float evacuationReturnDelay = 5f;
         [SerializeField] private RelayRouteOptionDefinition[] routeOptions = RelayRouteOptionDefinition.CreateDefaults();
         private static readonly RelayRouteOptionDefinition[] DefaultRouteOptions = RelayRouteOptionDefinition.CreateDefaults();
         private PayloadMissionStateMachine stateMachine;
@@ -50,6 +55,12 @@ namespace AlmostDelivered.Gameplay.Payload
         private float shockPulseCooldown;
         private int cargoDestructionCount;
         private bool wasCargoBroken;
+        private Vector3 evacuationTarget;
+        private float evacuationRemaining;
+        private float evacuationWaveCooldown;
+        private int evacuationWaveIndex;
+        private float evacuationReturnRemaining;
+        private Transform evacuationRallyTarget;
 
         public bool IsAuthority => authority;
         public PayloadRoutePlan RoutePlan { get; private set; }
@@ -70,6 +81,17 @@ namespace AlmostDelivered.Gameplay.Payload
         public float FuelCapacitySeconds => fuelCapacitySeconds;
         public float StartingFuelSeconds => startingFuelSeconds;
         public bool HasActivatedCargo => cargoActivated;
+        public Vector3 EvacuationTarget => evacuationTarget;
+        public float EvacuationDistance => playerTransform != null
+            ? Vector3.ProjectOnPlane(playerTransform.position - evacuationTarget, Vector3.up).magnitude : 0f;
+        public bool IsPlayerInEvacuationHoldArea => playerTransform != null &&
+            EvacuationDistance <= evacuationHoldRadius;
+        public bool CanActivateEvacuationSignal => authority && snapshot.Phase == PayloadMissionPhase.EvacuationTravel &&
+            playerTransform != null && EvacuationDistance <= evacuationArrivalRadius &&
+            (playerTransform.GetComponent<ActorHealth>() == null ||
+             !playerTransform.GetComponent<ActorHealth>().IsDead);
+        public Transform EvacuationSiteTransform => configuredMapGenerator != null
+            ? configuredMapGenerator.ExtractionSite : null;
         public bool CanInteractWithCargo
         {
             get
@@ -196,6 +218,10 @@ namespace AlmostDelivered.Gameplay.Payload
             if (cargoIntegrity == null && payloadTransform != null)
                 cargoIntegrity = payloadTransform.GetComponent<CargoIntegrity>();
             cargoDestructionCount = 0;
+            evacuationRemaining = 0f;
+            evacuationWaveCooldown = 0f;
+            evacuationWaveIndex = 0;
+            evacuationReturnRemaining = -1f;
             wasCargoBroken = cargoIntegrity != null && cargoIntegrity.IsBroken;
             if (cargoIntegrity != null) cargoIntegrity.Changed += HandleCargoHealthChanged;
             RoutePlan = PayloadRoutePlanner.Generate(configuredSeed, configuredBounds, configuredInteriorPointCount, configuredCorridorWidth);
@@ -222,11 +248,37 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 payloadTransform.position = RoutePlan.Points[0];
                 payloadTransform.rotation = Quaternion.LookRotation(RoutePlan.EvaluateDirection(0f), Vector3.up);
+                if (Application.isPlaying)
+                {
+                    var damageVfx = payloadTransform.GetComponent<CargoDamageVfx>();
+                    if (damageVfx == null) damageVfx = payloadTransform.gameObject.AddComponent<CargoDamageVfx>();
+                    damageVfx.Configure(this);
+                }
             }
 
             if (configuredMapGenerator != null)
             {
+                configuredMapGenerator.ConfigureExtractionSite(configuredSeed, configuredBounds, RoutePlan);
                 configuredMapGenerator.Generate(configuredSeed, RoutePlan.CorridorExclusions);
+                evacuationTarget = configuredMapGenerator.HasExtractionSite
+                    ? configuredMapGenerator.ExtractionPosition
+                    : RoutePlan.EvaluateDistance(RoutePlan.TotalLength * .58f);
+            }
+            else evacuationTarget = RoutePlan.EvaluateDistance(RoutePlan.TotalLength * .58f);
+
+            evacuationRallyTarget = EvacuationSiteTransform;
+            if (evacuationRallyTarget == null)
+            {
+                var rally = new GameObject("Evacuation Rally Target").transform;
+                rally.SetParent(transform, false);
+                rally.position = evacuationTarget;
+                evacuationRallyTarget = rally;
+            }
+            else if (Application.isPlaying)
+            {
+                var signal = evacuationRallyTarget.GetComponent<EvacuationSignalView>();
+                if (signal == null) signal = evacuationRallyTarget.gameObject.AddComponent<EvacuationSignalView>();
+                signal.Configure(this);
             }
 
             BindWaveSpawner();
@@ -288,7 +340,27 @@ namespace AlmostDelivered.Gameplay.Payload
                 return;
             }
 
-            if (stateMachine.Snapshot.Phase == PayloadMissionPhase.Failed) return;
+            var phase = stateMachine.Snapshot.Phase;
+            if (phase == PayloadMissionPhase.Failed) return;
+            if (phase == PayloadMissionPhase.Escaped)
+            {
+                if (evacuationReturnRemaining >= 0f)
+                {
+                    evacuationReturnRemaining -= deltaTime;
+                    if (evacuationReturnRemaining <= 0f && Application.isPlaying)
+                    {
+                        evacuationReturnRemaining = -1f;
+                        GameSceneFlow.LoadDepartureHub();
+                    }
+                }
+                return;
+            }
+            if (phase == PayloadMissionPhase.EvacuationTravel ||
+                phase == PayloadMissionPhase.EvacuationDefense)
+            {
+                TickEvacuation(deltaTime, activationInputHeld);
+                return;
+            }
 
             presenceSensor.Sample(payloadTransform.position, escortRadius, out var players, out var enemies);
             var canInteract = CanInteractWithCargo;
@@ -322,6 +394,42 @@ namespace AlmostDelivered.Gameplay.Payload
             PublishSnapshot(previousPhase);
             TickActivationNoise(deltaTime);
             TickEscortDirector(deltaTime);
+        }
+
+        private void TickEvacuation(float deltaTime, bool activationInputHeld)
+        {
+            var previous = snapshot.Phase;
+            stateMachine.Tick(deltaTime, 0, 0);
+            var playerHealth = playerTransform.GetComponent<ActorHealth>();
+            if (playerHealth != null && playerHealth.IsDead)
+            {
+                stateMachine.Fail();
+                PublishSnapshot(previous);
+                return;
+            }
+            if (stateMachine.Snapshot.Phase == PayloadMissionPhase.EvacuationTravel &&
+                activationInputHeld && CanActivateEvacuationSignal)
+            {
+                stateMachine.BeginEvacuationDefense();
+                evacuationRemaining = evacuationDefenseSeconds;
+                evacuationWaveCooldown = 0f;
+                waveSpawner?.RallyToExtraction(evacuationRallyTarget);
+            }
+            if (stateMachine.Snapshot.Phase == PayloadMissionPhase.EvacuationDefense)
+            {
+                evacuationWaveCooldown -= deltaTime;
+                if (evacuationWaveCooldown <= 0f && waveSpawner != null &&
+                    waveSpawner.SpawnEvacuationWave(evacuationWaveIndex, evacuationTarget, configuredBounds))
+                {
+                    evacuationWaveIndex++;
+                    evacuationWaveCooldown = evacuationWaveInterval;
+                }
+                evacuationRemaining = Mathf.Max(0f, evacuationRemaining - deltaTime);
+                if (evacuationRemaining <= 0f && IsPlayerInEvacuationHoldArea &&
+                    stateMachine.CompleteEvacuation())
+                    evacuationReturnRemaining = evacuationReturnDelay;
+            }
+            PublishSnapshot(previous);
         }
 
         public bool ChooseRelayOption(string optionId)
@@ -364,6 +472,8 @@ namespace AlmostDelivered.Gameplay.Payload
             wasCargoBroken = value.IsCargoBroken;
             relayChoicePending = value.IsRelayChoicePending;
             activeRouteOptionId = value.ActiveRouteOptionId;
+            evacuationTarget = value.EvacuationTarget;
+            evacuationRemaining = value.EvacuationSecondsRemaining;
             if (cargoIntegrity != null && value.CargoMaximumHealth > 0f && value.CargoHealth >= 0f)
                 cargoIntegrity.ApplySnapshot(value.CargoHealth, value.CargoMaximumHealth, value.IsCargoBroken);
             if (payloadTransform != null)
@@ -501,8 +611,14 @@ namespace AlmostDelivered.Gameplay.Payload
                 objectives.Add(side.position);
             foreach (var depot in FuelDepotPlanner.Generate(configuredSeed, configuredBounds, RoutePlan, 8))
                 objectives.Add(depot.position);
+            if (configuredMapGenerator != null && configuredMapGenerator.HasExtractionSite)
+                objectives.Add(evacuationTarget);
 
             var blockers = new List<MapExclusionZone>();
+            if (configuredMapGenerator != null && configuredMapGenerator.HasExtractionSite)
+                blockers.Add(new MapExclusionZone(
+                    new Vector2(evacuationTarget.x, evacuationTarget.z),
+                    Vector2.one * MissionMapGenerator.ExtractionExclusionSize));
             if (configuredMapGenerator != null && configuredMapGenerator.GeneratedRoot != null)
             {
                 foreach (var piece in configuredMapGenerator.GeneratedRoot.GetComponentsInChildren<MissionMapPieceInstance>(true))
@@ -658,7 +774,20 @@ namespace AlmostDelivered.Gameplay.Payload
                 stateMachine.Snapshot.Phase != PayloadMissionPhase.Failed)
             {
                 cargoDestructionCount = Mathf.Min(3, cargoDestructionCount + 1);
-                if (cargoDestructionCount >= 3) stateMachine.Fail();
+                if (cargoDestructionCount >= 3)
+                {
+                    stateMachine.BeginEvacuation();
+                    relayChoicePending = false;
+                    pendingEscortEncounter = null;
+                }
+                else
+                {
+                    // The next intact section takes over immediately. Its Changed event
+                    // publishes one snapshot with the new destruction count and full health.
+                    wasCargoBroken = true;
+                    cargoIntegrity.Repair(maximum);
+                    return;
+                }
             }
             wasCargoBroken = broken;
             PublishSnapshot(snapshot.Phase);
@@ -676,7 +805,8 @@ namespace AlmostDelivered.Gameplay.Payload
                 cargoIntegrity != null ? cargoIntegrity.MaximumHealth : -1f,
                 cargoIntegrity != null && cargoIntegrity.IsBroken,
                 relayChoicePending, activeRouteOptionId,
-                state.FuelRemaining, state.FuelCapacity, cargoDestructionCount);
+                state.FuelRemaining, state.FuelCapacity, cargoDestructionCount,
+                evacuationTarget, evacuationRemaining);
         }
 
         private RelayRouteOptionDefinition FindRouteOption(string optionId)

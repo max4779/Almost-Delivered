@@ -8,6 +8,28 @@ namespace AlmostDelivered.Tests.EditMode
     public sealed class PayloadMissionStateMachineTests
     {
         [Test]
+        public void DestroyedCargoStartsEvacuationAndOnlySurvivalCountsAsEscape()
+        {
+            var mission = CreateMission();
+            Assert.That(mission.BeginEvacuation(), Is.True);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationTravel));
+            mission.Tick(5f, 0, 0);
+            Assert.That(mission.Snapshot.RouteDistance, Is.Zero);
+            Assert.That(mission.BeginEvacuationDefense(), Is.True);
+            mission.Tick(90f, 0, 0);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.EvacuationDefense));
+            Assert.That(mission.CompleteEvacuation(), Is.True);
+            Assert.That(mission.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Escaped));
+            Assert.That(mission.Snapshot.Phase, Is.Not.EqualTo(PayloadMissionPhase.Completed));
+
+            var fallenCrew = CreateMission();
+            fallenCrew.BeginEvacuation();
+            fallenCrew.BeginEvacuationDefense();
+            fallenCrew.Fail();
+            Assert.That(fallenCrew.Snapshot.Phase, Is.EqualTo(PayloadMissionPhase.Failed));
+        }
+
+        [Test]
         public void DeploymentLocksMovementUntilAFollowingEscortTick()
         {
             var mission = CreateMission(deploymentDuration: 2f);

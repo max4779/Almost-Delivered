@@ -9,9 +9,31 @@ namespace AlmostDelivered.Presentation.Editor
     public static class LowPolyAssetFactory
     {
         const string Materials = "Assets/AlmostDelivered/Art/Materials/Generated";
+        const string PayloadProwPath = "Assets/AlmostDelivered/Art/Meshes/Generated/PayloadProw.asset";
         const string Prefabs = "Assets/AlmostDelivered/Prefabs/Generated";
         public static string GetPrefabPath(VisualArchetype type) => Prefabs + (type == VisualArchetype.Payload || type == VisualArchetype.ObjectiveBeacon ? "/Objectives/" : "/Characters/") + type + "/VisualRoot.prefab";
         public static GameObject LoadPrefab(VisualArchetype type) => AssetDatabase.LoadAssetAtPath<GameObject>(GetPrefabPath(type));
+
+        [MenuItem("Almost Delivered/Art/Refresh payload visual")]
+        public static void RefreshPayloadOnly()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(PayloadProwPath));
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            var color = AssetDatabase.LoadAssetAtPath<Material>(Materials + "/Payload.mat");
+            var rust = AssetDatabase.LoadAssetAtPath<Material>(Materials + "/EnemyRust.mat");
+            var gold = AssetDatabase.LoadAssetAtPath<Material>(Materials + "/Gold.mat");
+            var glow = AssetDatabase.LoadAssetAtPath<Material>(Materials + "/Rune.mat");
+            if (color == null || rust == null || gold == null || glow == null)
+                throw new InvalidOperationException("Payload materials must exist before refreshing its visual.");
+            AssetDatabase.StartAssetEditing();
+            try {
+                Build(VisualArchetype.Payload, color, rust, gold, glow, CreateOrUpdatePayloadProw());
+                AssetDatabase.SaveAssets();
+            } finally {
+                AssetDatabase.StopAssetEditing();
+                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            }
+        }
 
         public static void CreateOrUpdateAll(Func<string, Shader> shaderResolver = null)
         {
@@ -20,6 +42,7 @@ namespace AlmostDelivered.Presentation.Editor
             var unlit = resolve("Unlit/Color");
             if (lit == null || unlit == null) throw new InvalidOperationException("Both Standard and Unlit/Color shaders are required.");
             Directory.CreateDirectory(Materials);
+            Directory.CreateDirectory(Path.GetDirectoryName(PayloadProwPath));
             Directory.CreateDirectory(Prefabs + "/Characters");
             Directory.CreateDirectory(Prefabs + "/Objectives");
             foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype)))
@@ -28,11 +51,12 @@ namespace AlmostDelivered.Presentation.Editor
 
             AssetDatabase.StartAssetEditing();
             try {
+                var payloadProw = CreateOrUpdatePayloadProw();
                 var palette = new[] { Mat("Player", lit, new Color(.05f,.55f,.62f)), Mat("Dummy",lit,Color.gray), Mat("Shield",lit,new Color(.22f,.48f,.23f)), Mat("Ranged",lit,new Color(.95f,.43f,.12f)), Mat("Charger",lit,new Color(.68f,.12f,.1f)), Mat("Support",lit,new Color(.56f,.78f,.18f)), Mat("Commander",lit,new Color(.38f,.2f,.52f)), Mat("Payload",lit,new Color(.18f,.28f,.38f)), Mat("Beacon",lit,new Color(.04f,.52f,.49f)) };
                 var rust = Mat("EnemyRust",lit,new Color(.45f,.23f,.14f));
                 var gold = Mat("Gold",lit,new Color(.94f,.69f,.2f));
                 var glow = Mat("Rune",unlit,new Color(.15f,.9f,.8f));
-                foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype))) Build(type, palette[(int)type], rust, gold, glow);
+                foreach (VisualArchetype type in Enum.GetValues(typeof(VisualArchetype))) Build(type, palette[(int)type], rust, gold, glow, payloadProw);
                 AssetDatabase.SaveAssets();
             } finally {
                 AssetDatabase.StopAssetEditing();
@@ -46,7 +70,44 @@ namespace AlmostDelivered.Presentation.Editor
             if (mat == null) { mat = new Material(shader); AssetDatabase.CreateAsset(mat,path); }
             mat.shader = shader; mat.color = color; EditorUtility.SetDirty(mat); return mat;
         }
-        static void Build(VisualArchetype type, Material color, Material rust, Material gold, Material glow)
+        static Mesh CreateOrUpdatePayloadProw()
+        {
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(PayloadProwPath);
+            if (mesh == null) {
+                mesh = new Mesh { name = "PayloadProw" };
+                AssetDatabase.CreateAsset(mesh, PayloadProwPath);
+            }
+            var outline = new[] {
+                new Vector2(-.95f, .72f), new Vector2(.95f, .72f),
+                new Vector2(.48f, 1.25f), new Vector2(.15f, 1.65f),
+                new Vector2(0f, 1.73f), new Vector2(-.15f, 1.65f),
+                new Vector2(-.48f, 1.25f)
+            };
+            var count = outline.Length;
+            var vertices = new Vector3[count * 2];
+            for (var i = 0; i < count; i++) {
+                vertices[i] = new Vector3(outline[i].x, 1.42f, outline[i].y);
+                vertices[i + count] = new Vector3(outline[i].x, .93f, outline[i].y);
+            }
+            var triangles = new System.Collections.Generic.List<int>();
+            for (var i = 1; i < count - 1; i++) {
+                triangles.Add(0); triangles.Add(i + 1); triangles.Add(i);
+                triangles.Add(count); triangles.Add(count + i); triangles.Add(count + i + 1);
+            }
+            for (var i = 0; i < count; i++) {
+                var next = (i + 1) % count;
+                triangles.Add(i); triangles.Add(next); triangles.Add(next + count);
+                triangles.Add(i); triangles.Add(next + count); triangles.Add(i + count);
+            }
+            mesh.Clear();
+            mesh.vertices = vertices;
+            mesh.triangles = triangles.ToArray();
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            EditorUtility.SetDirty(mesh);
+            return mesh;
+        }
+        static void Build(VisualArchetype type, Material color, Material rust, Material gold, Material glow, Mesh payloadProw)
         {
             var root = new GameObject("VisualRoot");
             try {
@@ -54,9 +115,14 @@ namespace AlmostDelivered.Presentation.Editor
                 Transform left = null, right = null, leftLeg = null, rightLeg = null;
                 if (type == VisualArchetype.Payload) {
                     Part(root.transform,"HoverShadow",PrimitiveType.Cylinder,new Vector3(0,.035f,0),new Vector3(1.35f,.015f,1.65f),rust);
-                    Part(body,"CargoHull",PrimitiveType.Cube,new Vector3(0,1.1f,0),new Vector3(1.9f,.55f,2.4f),color);
-                    Part(body,"CargoCanister",PrimitiveType.Cube,new Vector3(0,1.55f,-.1f),new Vector3(1.5f,.42f,1.7f),color);
-                    Part(body,"ForwardSensor",PrimitiveType.Cube,new Vector3(0,1.28f,1.25f),new Vector3(.65f,.22f,.16f),glow);
+                    Part(body,"CargoHull",PrimitiveType.Cube,new Vector3(0,1.1f,-.18f),new Vector3(1.9f,.55f,2.1f),color);
+                    MeshPart(body,"ProwArmor",payloadProw,color);
+                    Part(body,"CargoCanister",PrimitiveType.Cube,new Vector3(0,1.55f,-.2f),new Vector3(1.5f,.42f,1.45f),color);
+                    Part(body,"ProwRailLeft",PrimitiveType.Cube,new Vector3(-.38f,1.46f,1.13f),new Vector3(.08f,.05f,.65f),gold,Quaternion.Euler(0f,-35f,0f));
+                    Part(body,"ProwRailRight",PrimitiveType.Cube,new Vector3(.38f,1.46f,1.13f),new Vector3(.08f,.05f,.65f),gold,Quaternion.Euler(0f,35f,0f));
+                    Part(body,"ForwardSensor",PrimitiveType.Cube,new Vector3(0,1.48f,1.43f),new Vector3(.62f,.08f,.16f),glow);
+                    for (var exhaust = -1; exhaust <= 1; exhaust++)
+                        Part(body,"RearExhaust"+exhaust,PrimitiveType.Cube,new Vector3(exhaust*.44f,1.16f,-1.28f),new Vector3(.29f,.13f,.1f),rust);
                     Part(body,"EnergyCore",PrimitiveType.Sphere,new Vector3(0,1.83f,-.1f),new Vector3(.58f,.16f,.58f),glow);
                     foreach (var side in new[]{-1f,1f}) foreach (var end in new[]{-1f,1f}) {
                         var suffix=(end<0f?"Rear":"Front")+(side<0f?"Left":"Right");
@@ -139,6 +205,13 @@ namespace AlmostDelivered.Presentation.Editor
             } finally { UnityEngine.Object.DestroyImmediate(root); }
         }
         static Transform Child(Transform parent,string name) { var t = new GameObject(name).transform; t.SetParent(parent,false); return t; }
+        static void MeshPart(Transform parent, string name, Mesh mesh, Material material)
+        {
+            var part = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
+            part.transform.SetParent(parent, false);
+            part.GetComponent<MeshFilter>().sharedMesh = mesh;
+            part.GetComponent<MeshRenderer>().sharedMaterial = material;
+        }
         static void Part(Transform parent,string name,PrimitiveType primitive,Vector3 position,Vector3 scale,Material material,Quaternion rotation = default)
         {
             var part = GameObject.CreatePrimitive(primitive); UnityEngine.Object.DestroyImmediate(part.GetComponent<Collider>()); part.name=name; var t=part.transform; t.SetParent(parent,false); t.localPosition=position; t.localScale=scale; t.localRotation=rotation == default ? Quaternion.identity : rotation; part.GetComponent<Renderer>().sharedMaterial=material;

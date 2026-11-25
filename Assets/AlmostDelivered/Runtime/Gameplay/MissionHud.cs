@@ -9,6 +9,15 @@ namespace AlmostDelivered.Gameplay
 {
     public sealed class MissionHud : MonoBehaviour
     {
+        private void Awake()
+        {
+            // The mission's existing HUD is informational. Its Text and Image
+            // components must not interrupt held fire when the cursor crosses them.
+            // Interactive route choices are added after this HUD is initialized.
+            foreach (var graphic in GetComponentsInChildren<Graphic>(true))
+                graphic.raycastTarget = false;
+        }
+
         [SerializeField] private Text controlsText;
         [SerializeField] private Text playerHealthText;
         [SerializeField] private Text bossCountText;
@@ -21,7 +30,6 @@ namespace AlmostDelivered.Gameplay
         [SerializeField] private Text payloadEscortText;
         [SerializeField] private Text payloadElapsedText;
         [SerializeField] private Text payloadActivationCountdownText;
-        [SerializeField] private Text cargoHealthText;
         [SerializeField] private Text cargoFuelText;
         [SerializeField] private FuelDepotDirector fuelDepots;
         [SerializeField] private MissionCommanderDirector fieldCommander;
@@ -68,12 +76,6 @@ namespace AlmostDelivered.Gameplay
         public void BindActivationCountdown(Text countdown)
         {
             payloadActivationCountdownText = countdown;
-            Refresh();
-        }
-
-        public void BindCargoHealth(Text healthText)
-        {
-            cargoHealthText = healthText;
             Refresh();
         }
 
@@ -156,16 +158,36 @@ namespace AlmostDelivered.Gameplay
                 return;
 
             var state = payloadMission.Snapshot;
+            var evacuating = state.Phase == PayloadMissionPhase.EvacuationTravel ||
+                             state.Phase == PayloadMissionPhase.EvacuationDefense;
             if (payloadPhaseText != null)
                 payloadPhaseText.text = state.IsRelayChoicePending
                     ? "MISSION  SELECT ROUTE PROTOCOL"
                     : $"MISSION  {PhaseLabel(state.Phase)}";
             if (payloadProgressText != null)
-                payloadProgressText.text = $"PAYLOAD  {Mathf.RoundToInt(state.NormalizedProgress * 100f)}%";
+                payloadProgressText.text = evacuating || state.Phase == PayloadMissionPhase.Escaped
+                    ? "CARGO OBJECTIVE FAILED"
+                    : $"PAYLOAD  {Mathf.RoundToInt(state.NormalizedProgress * 100f)}%";
             if (payloadCheckpointText != null)
-                payloadCheckpointText.text = $"CHECKPOINT  {Mathf.Clamp(state.NextCheckpointIndex + 1, 1, 3)} / 3";
+                payloadCheckpointText.text = state.Phase == PayloadMissionPhase.EvacuationTravel
+                    ? $"EVAC SITE  {Mathf.CeilToInt(payloadMission.EvacuationDistance)}m"
+                    : state.Phase == PayloadMissionPhase.EvacuationDefense
+                        ? $"EXTRACTION  {Mathf.CeilToInt(state.EvacuationSecondsRemaining)}s"
+                        : state.Phase == PayloadMissionPhase.Escaped
+                            ? "EXTRACTION COMPLETE"
+                            : $"CHECKPOINT  {Mathf.Clamp(state.NextCheckpointIndex + 1, 1, 3)} / 3";
             if (payloadEscortText != null)
-                payloadEscortText.text = state.IsRelayChoicePending
+                payloadEscortText.text = state.Phase == PayloadMissionPhase.EvacuationTravel
+                    ? payloadMission.CanActivateEvacuationSignal
+                        ? "OBJECTIVE  PRESS E TO SEND EXTRACTION SIGNAL"
+                        : "OBJECTIVE  REACH THE MARKED EVACUATION SITE"
+                    : state.Phase == PayloadMissionPhase.EvacuationDefense
+                        ? state.EvacuationSecondsRemaining <= 0f
+                            ? "EXTRACTION READY  ·  RETURN TO THE SITE"
+                            : "OBJECTIVE  DEFEND THE SIGNAL SITE"
+                    : state.Phase == PayloadMissionPhase.Escaped
+                        ? "CARGO LOST  ·  CREW EVACUATED"
+                    : state.IsRelayChoicePending
                     ? "ESCORT  WAITING FOR ROUTE CHOICE"
                     : payloadMission.CargoHealth != null && payloadMission.CargoHealth.IsBroken
                     ? "ESCORT  CARGO BROKEN"
@@ -179,21 +201,19 @@ namespace AlmostDelivered.Gameplay
                 payloadElapsedText.text = $"TIME  {totalSeconds / 60:00}:{totalSeconds % 60:00}";
             }
 
-            if (cargoHealthText != null && payloadMission.CargoHealth != null)
-            {
-                var cargo = payloadMission.CargoHealth;
-                cargoHealthText.text = cargo.IsBroken
-                    ? $"CARGO BROKEN  {Mathf.CeilToInt(cargo.CurrentHealth)} / {Mathf.CeilToInt(cargo.MaximumHealth)}  ·  HOLD E TO REPAIR"
-                    : $"CARGO HP  {Mathf.CeilToInt(cargo.CurrentHealth)} / {Mathf.CeilToInt(cargo.MaximumHealth)}";
-                cargoHealthText.color = cargo.IsBroken
-                    ? new Color(1f, .22f, .18f, 1f)
-                    : cargo.CurrentHealth <= cargo.MaximumHealth * .3f
-                        ? new Color(1f, .65f, .12f, 1f)
-                        : Color.white;
-            }
-
             if (cargoFuelText != null && state.UsesFuel)
             {
+                if (evacuating || state.Phase == PayloadMissionPhase.Escaped)
+                {
+                    cargoFuelText.text = state.Phase == PayloadMissionPhase.EvacuationTravel
+                        ? "EVACUATION SIGNAL  ·  FOLLOW THE VIOLET BEACON AND PRESS E"
+                        : state.Phase == PayloadMissionPhase.EvacuationDefense
+                            ? $"EVAC INBOUND  {Mathf.CeilToInt(state.EvacuationSecondsRemaining)}s  ·  DEFEND THE SITE"
+                            : "EVACUATED  ·  CARGO DELIVERY FAILED";
+                    cargoFuelText.color = new Color(1f, .55f, .3f);
+                    RefreshActivationCountdown(state);
+                    return;
+                }
                 var remaining = Mathf.CeilToInt(state.FuelRemaining);
                 var capacity = Mathf.CeilToInt(state.FuelCapacity);
                 cargoFuelText.text = state.Phase == PayloadMissionPhase.Recovering ||
@@ -222,7 +242,8 @@ namespace AlmostDelivered.Gameplay
                                state.RemainingEnemyCount == 0 &&
                                state.PlayersInRange > 0;
             var activating = state.Phase == PayloadMissionPhase.Activating;
-            var visible = readyToStart || activating;
+            var defending = state.Phase == PayloadMissionPhase.EvacuationDefense;
+            var visible = readyToStart || activating || defending;
             if (payloadActivationCountdownText.gameObject.activeSelf != visible)
             {
                 payloadActivationCountdownText.gameObject.SetActive(visible);
@@ -230,6 +251,19 @@ namespace AlmostDelivered.Gameplay
 
             if (!visible)
             {
+                return;
+            }
+
+            if (defending)
+            {
+                var seconds = Mathf.Max(0, Mathf.CeilToInt(state.EvacuationSecondsRemaining));
+                payloadActivationCountdownText.text = seconds <= 0 && !payloadMission.IsPlayerInEvacuationHoldArea
+                    ? "EXTRACTION READY\nRETURN TO EVAC SITE"
+                    : $"EXTRACTION IN\n{seconds / 60:00}:{seconds % 60:00}";
+                payloadActivationCountdownText.color = !payloadMission.IsPlayerInEvacuationHoldArea
+                    ? new Color(1f, .55f, .3f, 1f)
+                    : seconds <= 15 ? new Color(1f, .75f, .26f, 1f)
+                    : new Color(.12f, .95f, 1f, 1f);
                 return;
             }
 
@@ -262,6 +296,12 @@ namespace AlmostDelivered.Gameplay
                     return "STARTING CARGO";
                 case PayloadMissionPhase.Failed:
                     return "FAILED";
+                case PayloadMissionPhase.EvacuationTravel:
+                    return "FAILED  ·  REACH EVAC SITE";
+                case PayloadMissionPhase.EvacuationDefense:
+                    return "FAILED  ·  HOLD FOR EVAC";
+                case PayloadMissionPhase.Escaped:
+                    return "EVACUATED  ·  CARGO LOST";
                 default:
                     return "ESCORTING";
             }

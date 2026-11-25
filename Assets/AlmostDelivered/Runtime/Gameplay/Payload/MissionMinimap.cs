@@ -29,7 +29,18 @@ namespace AlmostDelivered.Gameplay.Payload
         [SerializeField] private RectTransform panel;
         [SerializeField] private RectTransform playerIcon;
         [SerializeField] private RectTransform payloadIcon;
+        private RectTransform evacuationIcon;
+        private RectTransform evacuationArrow;
+        private Text mapHint;
         private PayloadRoutePlan routePlan;
+        private Vector2 compactAnchor;
+        private Vector2 compactPosition;
+        private Vector2 compactSize;
+        private int compactSiblingIndex;
+        private Color compactBackgroundColor;
+        private bool layoutSaved;
+        private bool fullMapOpen;
+        private const float LocalMapWidth = 100f;
 
         private static readonly Color CurrentRouteColor = new Color(.2f, .85f, 1f, .95f);
         private static readonly Color FutureRouteColor = new Color(.15f, .38f, .48f, .28f);
@@ -45,6 +56,48 @@ namespace AlmostDelivered.Gameplay.Payload
         public bool ShowScoutsForDevelopment => showScoutsForDevelopment;
         public RectTransform PlayerIcon => playerIcon;
         public RectTransform PayloadIcon => payloadIcon;
+        public bool IsFullMapOpen => fullMapOpen;
+        public Rect CurrentViewBounds => GetViewBounds();
+        public RectTransform EvacuationArrow => evacuationArrow;
+
+        public void SetFullMapOpen(bool open)
+        {
+            if (panel == null || fullMapOpen == open) return;
+            SaveCompactLayout();
+            fullMapOpen = open;
+            if (open)
+            {
+                var canvasRect = panel.parent as RectTransform;
+                var availableHeight = canvasRect != null && canvasRect.rect.height > 0f
+                    ? canvasRect.rect.height * .78f : 780f;
+                var availableWidth = canvasRect != null && canvasRect.rect.width > 0f
+                    ? canvasRect.rect.width * .78f : 780f;
+                var height = Mathf.Min(availableHeight, availableWidth * worldBounds.height /
+                    Mathf.Max(1f, worldBounds.width));
+                var width = height * worldBounds.width / Mathf.Max(1f, worldBounds.height);
+                panel.anchorMin = panel.anchorMax = new Vector2(.5f, .5f);
+                panel.sizeDelta = new Vector2(width, height);
+                panel.anchoredPosition = new Vector2(width * .5f, height * .5f);
+                panel.SetAsLastSibling();
+            }
+            else
+            {
+                panel.anchorMin = panel.anchorMax = compactAnchor;
+                panel.sizeDelta = compactSize;
+                panel.anchoredPosition = compactPosition;
+                panel.SetSiblingIndex(compactSiblingIndex);
+            }
+            var background = panel.GetComponent<Image>();
+            if (background != null)
+            {
+                background.color = open
+                    ? new Color(compactBackgroundColor.r, compactBackgroundColor.g,
+                        compactBackgroundColor.b, .97f)
+                    : compactBackgroundColor;
+            }
+            if (mapHint != null) mapHint.text = open ? "M CLOSE" : "M MAP";
+            Refresh();
+        }
 
         public void BindSideMissions(SideMissionDirector director)
         {
@@ -129,6 +182,7 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 gameObject.AddComponent<RectMask2D>();
             }
+            SaveCompactLayout();
 
             if (route != null)
             {
@@ -137,11 +191,14 @@ namespace AlmostDelivered.Gameplay.Payload
 
             playerIcon = CreateIcon("Player Icon", new Color(.25f, .9f, 1f, 1f), 10f);
             payloadIcon = CreateIcon("Payload Icon", new Color(1f, .75f, .15f, 1f), 12f);
+            evacuationIcon = CreateIcon("Evacuation Site", new Color(1f, .25f, .72f, 1f), 15f);
+            EnsureMapHint();
             Refresh();
         }
 
         private void Update()
         {
+            if (Input.GetKeyDown(KeyCode.M)) SetFullMapOpen(!fullMapOpen);
             Refresh();
         }
 
@@ -151,34 +208,44 @@ namespace AlmostDelivered.Gameplay.Payload
             {
                 return;
             }
+            EnsureRoutePlan();
+            EnsureMapHint();
+
+            // Existing generated scenes may predate the extraction marker. The field is
+            // runtime-only, so recover an existing child or create one when needed.
+            if (evacuationIcon == null)
+                evacuationIcon = transform.Find("Evacuation Site") as RectTransform ??
+                    CreateIcon("Evacuation Site", new Color(1f, .25f, .72f, 1f), 15f);
 
             var mapRect = panel.rect;
-            RefreshRouteVisibility();
+            var viewBounds = GetViewBounds();
+            RefreshRouteVisibility(mapRect, viewBounds);
             RefreshRouteColors();
-            UpdateIcon(playerIcon, player, mapRect);
-            UpdateIcon(payloadIcon, payload, mapRect);
+            UpdateIcon(playerIcon, player, mapRect, viewBounds);
+            UpdateIcon(payloadIcon, payload, mapRect, viewBounds);
             RefreshPayloadIcon();
-            RefreshEnemyIcons(mapRect);
-            RefreshScoutIcons(mapRect);
+            RefreshEvacuationIcon(mapRect, viewBounds);
+            RefreshEnemyIcons(mapRect, viewBounds);
+            RefreshScoutIcons(mapRect, viewBounds);
             for (var index = 0; index < sideMissionIcons.Count; index++)
             {
                 var icon = sideMissionIcons[index];
                 if (icon == null) continue;
                 var placement = sideMissions.PlacementAt(index);
                 var state = sideMissions.StateAt(index);
-                icon.gameObject.SetActive(state == SideMissionState.Available || state == SideMissionState.Carrying);
-                icon.anchoredPosition = ProjectWorldInsidePanel(
-                    state == SideMissionState.Carrying && player != null ? player.position : placement.position,
-                    worldBounds, mapRect);
+                var position = state == SideMissionState.Carrying && player != null ? player.position : placement.position;
+                icon.gameObject.SetActive((state == SideMissionState.Available || state == SideMissionState.Carrying) &&
+                    IsInside(position, viewBounds));
+                icon.anchoredPosition = ProjectWorldInsidePanel(position, viewBounds, mapRect);
             }
             for (var index = 0; index < fuelIcons.Count; index++)
             {
                 var icon = fuelIcons[index];
                 if (icon == null || fuelDepots == null) continue;
-                icon.gameObject.SetActive(!fuelDepots.IsCollected(index));
                 var position = fuelDepots.CarryingIndex == index && player != null
                     ? player.position : fuelDepots.PlacementAt(index).position;
-                icon.anchoredPosition = ProjectWorldInsidePanel(position, worldBounds, mapRect);
+                icon.gameObject.SetActive(!fuelDepots.IsCollected(index) && IsInside(position, viewBounds));
+                icon.anchoredPosition = ProjectWorldInsidePanel(position, viewBounds, mapRect);
             }
         }
 
@@ -215,6 +282,19 @@ namespace AlmostDelivered.Gameplay.Payload
             var destination = CreateIcon("Destination", new Color(1f, .35f, .2f, 1f), 9f);
             destination.anchoredPosition = ProjectWorldInsidePanel(route.Destination, worldBounds, mapRect);
             checkpointMarkers.Add(destination);
+        }
+
+        private void EnsureRoutePlan()
+        {
+            if (routePlan == null && mission != null) routePlan = mission.RoutePlan;
+            if (routePlan == null || routeSegmentEndDistances.Count == routeSegments.Count) return;
+            routeSegmentEndDistances.Clear();
+            var distance = 0f;
+            for (var index = 1; index < routePlan.Points.Count; index++)
+            {
+                distance += Vector3.Distance(routePlan.Points[index - 1], routePlan.Points[index]);
+                routeSegmentEndDistances.Add(distance);
+            }
         }
 
         private void RefreshRouteColors()
@@ -266,27 +346,192 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
-        private void RefreshRouteVisibility()
+        private void RefreshRouteVisibility(Rect mapRect, Rect viewBounds)
         {
-            var revealRoute = mission == null ||
-                              (mission.Snapshot.Phase != PayloadMissionPhase.Deploying &&
+            var revealRoute = routePlan != null && (mission == null ||
+                              (mission.Snapshot.Phase != PayloadMissionPhase.EvacuationTravel &&
+                               mission.Snapshot.Phase != PayloadMissionPhase.EvacuationDefense &&
+                               mission.Snapshot.Phase != PayloadMissionPhase.Escaped &&
+                               mission.Snapshot.Phase != PayloadMissionPhase.Deploying &&
                                mission.Snapshot.Phase != PayloadMissionPhase.Recovering &&
-                               mission.Snapshot.Phase != PayloadMissionPhase.Activating);
-            foreach (var segment in routeSegments)
+                               mission.Snapshot.Phase != PayloadMissionPhase.Activating));
+            if (routePlan == null) return;
+            for (var index = 0; index < routeSegments.Count; index++)
             {
-                if (segment != null && segment.gameObject.activeSelf != revealRoute)
+                var segment = routeSegments[index];
+                if (segment == null) continue;
+                var start = routePlan.Points[index];
+                var end = routePlan.Points[index + 1];
+                var visible = revealRoute && ClipSegment(viewBounds, ref start, ref end);
+                if (visible)
                 {
-                    segment.gameObject.SetActive(revealRoute);
+                    var from = ProjectWorldInsidePanel(start, viewBounds, mapRect);
+                    var to = ProjectWorldInsidePanel(end, viewBounds, mapRect);
+                    var delta = to - from;
+                    segment.anchoredPosition = (from + to) * .5f;
+                    segment.sizeDelta = new Vector2(delta.magnitude, 3f);
+                    segment.localRotation = Quaternion.Euler(0f, 0f,
+                        Mathf.Atan2(delta.y, delta.x) * Mathf.Rad2Deg);
                 }
+                segment.gameObject.SetActive(visible);
             }
 
-            foreach (var marker in checkpointMarkers)
+            for (var index = 0; index < checkpointMarkers.Count; index++)
             {
-                if (marker != null && marker.gameObject.activeSelf != revealRoute)
-                {
-                    marker.gameObject.SetActive(revealRoute);
-                }
+                var marker = checkpointMarkers[index];
+                if (marker == null) continue;
+                var position = index < routePlan.CheckpointDistances.Count
+                    ? routePlan.EvaluateDistance(routePlan.CheckpointDistances[index])
+                    : routePlan.Destination;
+                var visible = revealRoute && IsInside(position, viewBounds);
+                if (visible) marker.anchoredPosition = ProjectWorldInsidePanel(position, viewBounds, mapRect);
+                marker.gameObject.SetActive(visible);
             }
+        }
+
+        private void RefreshEvacuationIcon(Rect mapRect, Rect viewBounds)
+        {
+            if (evacuationIcon == null) return;
+            var phase = mission != null ? mission.Snapshot.Phase : PayloadMissionPhase.Deploying;
+            var visible = phase == PayloadMissionPhase.EvacuationTravel ||
+                          phase == PayloadMissionPhase.EvacuationDefense;
+            evacuationIcon.gameObject.SetActive(visible);
+            if (!visible) return;
+
+            EnsureEvacuationArrow();
+            var target = mission.EvacuationTarget;
+            var inView = IsInside(target, viewBounds);
+            var image = evacuationIcon.GetComponent<Image>();
+            image.color = inView ? new Color(1f, .25f, .72f, 1f) : Color.clear;
+            evacuationArrow.gameObject.SetActive(!inView);
+            if (inView)
+            {
+                evacuationIcon.anchoredPosition = ProjectWorldInsidePanel(target, viewBounds, mapRect);
+                return;
+            }
+
+            var origin = player != null ? player.position : Vector3.zero;
+            var direction = new Vector2(target.x - origin.x, target.z - origin.z);
+            if (direction.sqrMagnitude < .001f) direction = Vector2.up;
+            var edge = Inset(mapRect, ContentPadding + 12f);
+            var center = ProjectWorldInsidePanel(origin, viewBounds, mapRect);
+            center.x = Mathf.Clamp(center.x, edge.xMin, edge.xMax);
+            center.y = Mathf.Clamp(center.y, edge.yMin, edge.yMax);
+            var maxX = direction.x > 0f ? (edge.xMax - center.x) / direction.x :
+                direction.x < 0f ? (edge.xMin - center.x) / direction.x : float.PositiveInfinity;
+            var maxY = direction.y > 0f ? (edge.yMax - center.y) / direction.y :
+                direction.y < 0f ? (edge.yMin - center.y) / direction.y : float.PositiveInfinity;
+            var distance = Mathf.Max(0f, Mathf.Min(maxX, maxY));
+            evacuationIcon.anchoredPosition = center + direction * distance;
+            evacuationArrow.localRotation = Quaternion.Euler(0f, 0f,
+                Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg - 90f);
+        }
+
+        private void EnsureEvacuationArrow()
+        {
+            if (evacuationArrow != null) return;
+            evacuationArrow = evacuationIcon.Find("Direction Arrow") as RectTransform;
+            if (evacuationArrow != null) return;
+            var arrowObject = new GameObject("Direction Arrow", typeof(RectTransform));
+            evacuationArrow = arrowObject.GetComponent<RectTransform>();
+            evacuationArrow.SetParent(evacuationIcon, false);
+            evacuationArrow.anchorMin = evacuationArrow.anchorMax = evacuationArrow.pivot =
+                new Vector2(.5f, .5f);
+            evacuationArrow.sizeDelta = new Vector2(20f, 20f);
+            CreateArrowBar("Arrow Stem", new Vector2(0f, -2f), new Vector2(3f, 14f), 0f);
+            CreateArrowBar("Arrow Left", new Vector2(-4f, 5f), new Vector2(3f, 11f), -45f);
+            CreateArrowBar("Arrow Right", new Vector2(4f, 5f), new Vector2(3f, 11f), 45f);
+        }
+
+        private void CreateArrowBar(string label, Vector2 position, Vector2 size, float angle)
+        {
+            var bar = new GameObject(label, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            var rect = bar.GetComponent<RectTransform>();
+            rect.SetParent(evacuationArrow, false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, .5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+            rect.localRotation = Quaternion.Euler(0f, 0f, angle);
+            var image = bar.GetComponent<Image>();
+            image.color = new Color(1f, .3f, .72f, 1f);
+            image.raycastTarget = false;
+        }
+
+        private void EnsureMapHint()
+        {
+            if (mapHint != null) return;
+            var existing = transform.Find("Map Toggle Hint");
+            if (existing != null) mapHint = existing.GetComponent<Text>();
+            if (mapHint != null) return;
+            var hint = new GameObject("Map Toggle Hint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            var rect = hint.GetComponent<RectTransform>();
+            rect.SetParent(transform, false);
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(-14f, -9f);
+            rect.sizeDelta = new Vector2(100f, 20f);
+            mapHint = hint.GetComponent<Text>();
+            mapHint.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            mapHint.fontSize = 14;
+            mapHint.alignment = TextAnchor.UpperRight;
+            mapHint.color = new Color(.8f, .9f, 1f, .9f);
+            mapHint.raycastTarget = false;
+            mapHint.text = fullMapOpen ? "M CLOSE" : "M MAP";
+        }
+
+        private void SaveCompactLayout()
+        {
+            if (layoutSaved || panel == null) return;
+            compactAnchor = panel.anchorMin;
+            compactPosition = panel.anchoredPosition;
+            compactSize = panel.sizeDelta;
+            compactSiblingIndex = panel.GetSiblingIndex();
+            var background = panel.GetComponent<Image>();
+            if (background != null) compactBackgroundColor = background.color;
+            layoutSaved = true;
+        }
+
+        private Rect GetViewBounds()
+        {
+            if (fullMapOpen || player == null || panel == null ||
+                !IsFinitePositive(worldBounds.width) || !IsFinitePositive(worldBounds.height))
+                return worldBounds;
+            var width = Mathf.Min(LocalMapWidth, worldBounds.width);
+            var height = Mathf.Min(worldBounds.height,
+                width * Mathf.Max(1f, panel.rect.height) / Mathf.Max(1f, panel.rect.width));
+            var centerX = Mathf.Clamp(player.position.x, worldBounds.xMin + width * .5f,
+                worldBounds.xMax - width * .5f);
+            var centerY = Mathf.Clamp(player.position.z, worldBounds.yMin + height * .5f,
+                worldBounds.yMax - height * .5f);
+            return new Rect(centerX - width * .5f, centerY - height * .5f, width, height);
+        }
+
+        private static bool IsInside(Vector3 position, Rect bounds)
+        {
+            return bounds.Contains(new Vector2(position.x, position.z));
+        }
+
+        private static bool ClipSegment(Rect bounds, ref Vector3 start, ref Vector3 end)
+        {
+            var delta = end - start;
+            var first = 0f;
+            var last = 1f;
+            if (!ClipAxis(-delta.x, start.x - bounds.xMin, ref first, ref last) ||
+                !ClipAxis(delta.x, bounds.xMax - start.x, ref first, ref last) ||
+                !ClipAxis(-delta.z, start.z - bounds.yMin, ref first, ref last) ||
+                !ClipAxis(delta.z, bounds.yMax - start.z, ref first, ref last)) return false;
+            var original = start;
+            start = original + delta * first;
+            end = original + delta * last;
+            return true;
+        }
+
+        private static bool ClipAxis(float direction, float offset, ref float first, ref float last)
+        {
+            if (Mathf.Abs(direction) < .0001f) return offset >= 0f;
+            var boundary = offset / direction;
+            if (direction < 0f) first = Mathf.Max(first, boundary);
+            else last = Mathf.Min(last, boundary);
+            return first <= last;
         }
 
         private void RefreshPayloadIcon()
@@ -310,7 +555,7 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
-        private void RefreshEnemyIcons(Rect mapRect)
+        private void RefreshEnemyIcons(Rect mapRect, Rect viewBounds)
         {
             staleEnemyIds.Clear();
             foreach (var pair in enemyIcons)
@@ -334,7 +579,8 @@ namespace AlmostDelivered.Gameplay.Payload
                         enemyIcons.Add(enemy.EnemyId, icon);
                     }
 
-                    icon.anchoredPosition = ProjectWorldInsidePanel(enemy.transform.position, worldBounds, mapRect);
+                    icon.gameObject.SetActive(IsInside(enemy.transform.position, viewBounds));
+                    icon.anchoredPosition = ProjectWorldInsidePanel(enemy.transform.position, viewBounds, mapRect);
                 }
             }
 
@@ -346,7 +592,7 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
-        private void RefreshScoutIcons(Rect mapRect)
+        private void RefreshScoutIcons(Rect mapRect, Rect viewBounds)
         {
             staleScoutIds.Clear();
             foreach (var pair in scoutIcons) staleScoutIds.Add(pair.Key);
@@ -362,8 +608,9 @@ namespace AlmostDelivered.Gameplay.Payload
                             new Color(.92f, .38f, 1f, 1f), 9f);
                         scoutIcons.Add(scout.ReporterId, icon);
                     }
+                    icon.gameObject.SetActive(IsInside(scout.transform.position, viewBounds));
                     icon.anchoredPosition = ProjectWorldInsidePanel(
-                        scout.transform.position, worldBounds, mapRect);
+                        scout.transform.position, viewBounds, mapRect);
                 }
             }
             foreach (var reporterId in staleScoutIds)
@@ -374,7 +621,7 @@ namespace AlmostDelivered.Gameplay.Payload
             }
         }
 
-        private void UpdateIcon(RectTransform icon, Transform target, Rect mapRect)
+        private void UpdateIcon(RectTransform icon, Transform target, Rect mapRect, Rect viewBounds)
         {
             if (icon == null)
             {
@@ -384,7 +631,7 @@ namespace AlmostDelivered.Gameplay.Payload
             icon.gameObject.SetActive(target != null);
             if (target != null)
             {
-                icon.anchoredPosition = ProjectWorldInsidePanel(target.position, worldBounds, mapRect);
+                icon.anchoredPosition = ProjectWorldInsidePanel(target.position, viewBounds, mapRect);
             }
         }
 
@@ -428,6 +675,8 @@ namespace AlmostDelivered.Gameplay.Payload
 
             DestroyView(playerIcon);
             DestroyView(payloadIcon);
+            DestroyView(evacuationIcon);
+            DestroyView(mapHint != null ? mapHint.rectTransform : null);
             routeSegments.Clear();
             checkpointMarkers.Clear();
             routeSegmentEndDistances.Clear();
@@ -437,6 +686,9 @@ namespace AlmostDelivered.Gameplay.Payload
             fuelIcons.Clear();
             playerIcon = null;
             payloadIcon = null;
+            evacuationIcon = null;
+            evacuationArrow = null;
+            mapHint = null;
         }
 
         private static void DestroyView(RectTransform view)
